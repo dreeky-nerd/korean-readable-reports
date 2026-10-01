@@ -1,0 +1,21 @@
+{
+  "name": "dreeky-nerd",
+  "owner": {
+    "name": "dreeky-nerd"
+  },
+  "metadata": {
+    "description": "Agent skills by dreeky-nerd",
+    "version": "1.0.0"
+  },
+  "plugins": [
+    {
+      "name": "korean-readable-reports",
+      "description": "Korean adaptation of human-readable-reports: analysis and status reports people actually read, with native Korean phrasing rules, diagrams where the shape is the content, and a one-command md to HTML renderer with lint",
+      "source": "./",
+      "strict": false,
+      "skills": [
+        "./skills/human-readable-reports"
+      ]
+    }
+  ]
+}
