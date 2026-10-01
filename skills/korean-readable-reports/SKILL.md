@@ -1,5 +1,5 @@
 ---
-name: human-readable-reports
+name: korean-readable-reports
 description: >-
   Use when writing an analysis, report, findings, or status doc for humans to
   read and share — not a spec an agent executes. Fights AI verbosity/slop and
@@ -7,7 +7,7 @@ description: >-
 license: MIT (see LICENSE)
 ---
 
-# Human-Readable Reports
+# Korean Readable Reports
 
 An AI report defaults to **verbosity and slop**: dense jargon, fragment bullets,
 `file:line` dumps in the prose, coined term-of-art, caveats nobody asked for.
@@ -69,7 +69,7 @@ easy.
 
     `<skill-dir>` is this skill's own folder — the "Base directory for this
     skill" path shown when the skill loads (a manual install is
-    `~/.claude/skills/human-readable-reports`; a plugin install lives in the
+    `~/.claude/skills/korean-readable-reports`; a plugin install lives in the
     plugin cache). Scripts and references below are relative to it; never
     resolve them against the project's working directory.
 
