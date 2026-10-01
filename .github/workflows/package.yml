@@ -30,5 +30,9 @@ jobs:
         run: |
           gh release view latest >/dev/null 2>&1 || gh release create latest \
             --title "claude.ai 업로드용 스킬 묶음" \
-            --notes "human-readable-reports.zip을 claude.ai 스킬 설정에서 업로드하세요. main의 스킬이 바뀔 때마다 자동으로 다시 만듭니다."
-          gh release upload latest dist/human-readable-reports.zip --clobber
+            --notes "korean-readable-reports.zip을 claude.ai 스킬 설정에서 업로드하세요. main의 스킬이 바뀔 때마다 자동으로 다시 만듭니다."
+          gh release upload latest dist/korean-readable-reports.zip --clobber
+          # 이름이 바뀐 옛 zip 등 지금 만든 것 말고는 지운다
+          for a in $(gh release view latest --json assets -q '.assets[].name'); do
+            [ "$a" = "korean-readable-reports.zip" ] || gh release delete-asset latest "$a" -y
+          done
