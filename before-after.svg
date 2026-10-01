@@ -1,21 +1,21 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="900" height="440" viewBox="0 0 900 440" font-family="ui-monospace,SFMono-Regular,Menlo,monospace">
-  <rect width="900" height="440" rx="16" fill="#14171a"/>
-  <text x="32" y="46" fill="#8b95a0" font-size="13" letter-spacing="2">HUMAN-READABLE-REPORTS</text>
-  <text x="32" y="78" fill="#eceef0" font-size="24" font-weight="700" font-family="system-ui,-apple-system,Segoe UI,sans-serif">Same finding. One your team will actually read.</text>
+<svg xmlns="http://www.w3.org/2000/svg" width="900" height="460" viewBox="0 0 900 460" font-family="Pretendard,'Apple SD Gothic Neo','Malgun Gothic','Noto Sans KR',system-ui,sans-serif">
+  <rect width="900" height="460" rx="16" fill="#14171a"/>
+  <text x="32" y="46" fill="#8b95a0" font-size="13" letter-spacing="2" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace">KOREAN-READABLE-REPORTS</text>
+  <text x="32" y="80" fill="#eceef0" font-size="24" font-weight="700">같은 내용, 팀이 끝까지 읽는 보고서.</text>
 
   <!-- BEFORE -->
-  <rect x="32" y="108" width="836" height="128" rx="10" fill="#1c1416" stroke="#c23b3b" stroke-opacity="0.5"/>
-  <text x="48" y="134" fill="#e06a6a" font-size="12" font-weight="700" letter-spacing="1">✗ BEFORE — what an agent writes by default</text>
-  <text x="48" y="166" fill="#c9d1d9" font-size="14">parseInput() is O(n²) due to nested scan (utils.js:88);</text>
-  <text x="48" y="190" fill="#c9d1d9" font-size="14">latency scales quadratically with list size → UI jank at scale.</text>
-  <text x="48" y="220" fill="#6b7480" font-size="12.5" font-style="italic">jargon · code location in the prose · reader bottleneck</text>
+  <rect x="32" y="108" width="836" height="132" rx="10" fill="#1c1416" stroke="#c23b3b" stroke-opacity="0.5"/>
+  <text x="48" y="134" fill="#e06a6a" font-size="12.5" font-weight="700" letter-spacing="1">✗ BEFORE — 에이전트가 기본으로 쓰는 문장</text>
+  <text x="48" y="168" fill="#c9d1d9" font-size="14.5">parseInput()이 중첩 스캔으로 인해 O(n²)임 (utils.js:88).</text>
+  <text x="48" y="193" fill="#c9d1d9" font-size="14.5">리스트 크기에 따라 지연 증가 → UI 버벅임.</text>
+  <text x="48" y="224" fill="#6b7480" font-size="12.5" font-style="italic">풀지 않은 용어 · 본문 속 코드 위치 · 번역투 · 서술어 없는 단편</text>
 
   <!-- AFTER -->
-  <rect x="32" y="252" width="836" height="132" rx="10" fill="#101f17" stroke="#2f8f5b" stroke-opacity="0.55"/>
-  <text x="48" y="278" fill="#5cc08a" font-size="12" font-weight="700" letter-spacing="1">✓ AFTER — same facts, with the skill</text>
-  <text x="48" y="312" fill="#eceef0" font-size="15.5" font-weight="600" font-family="system-ui,-apple-system,Segoe UI,sans-serif">The input parser gets slow as the list grows.</text>
-  <text x="48" y="338" fill="#c9d1d9" font-size="14.5" font-family="system-ui,-apple-system,Segoe UI,sans-serif">It re-scans the whole list for each item, so a long list makes the</text>
-  <text x="48" y="360" fill="#c9d1d9" font-size="14.5" font-family="system-ui,-apple-system,Segoe UI,sans-serif">screen stutter. <tspan fill="#6b7480" font-style="italic" font-size="13">(code location in the notes below)</tspan></text>
+  <rect x="32" y="256" width="836" height="148" rx="10" fill="#101f17" stroke="#2f8f5b" stroke-opacity="0.55"/>
+  <text x="48" y="282" fill="#5cc08a" font-size="12.5" font-weight="700" letter-spacing="1">✓ AFTER — 같은 사실, 이 스킬 적용</text>
+  <text x="48" y="318" fill="#eceef0" font-size="16" font-weight="700">목록이 길어질수록 입력 처리가 느려집니다.</text>
+  <text x="48" y="346" fill="#c9d1d9" font-size="15">항목 하나마다 목록 전체를 다시 훑어서, 긴 목록에서는 화면이 끊깁니다.</text>
+  <text x="48" y="380" fill="#6b7480" font-size="13" font-style="italic">(코드 위치는 아래 근거에)</text>
 
-  <text x="32" y="418" fill="#8b95a0" font-size="12.5" font-family="system-ui,-apple-system,Segoe UI,sans-serif">Deep content, easy reading — an agent skill that fights AI verbosity &amp; slop.</text>
+  <text x="32" y="438" fill="#8b95a0" font-size="13">내용은 깊게, 읽기는 쉽게 — 한국어 보고서를 위한 에이전트 스킬.</text>
 </svg>
