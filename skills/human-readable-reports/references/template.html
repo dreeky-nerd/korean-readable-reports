@@ -1,0 +1,760 @@
+<!DOCTYPE html>
+<html lang="ko" data-theme-default="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{{TITLE}}</title>
+<script>
+  // 테마: 문서 기본은 라이트 고정(운영체제가 다크여도). 보는 사람이 상단 토글로 바꾸면 그 선택을 기억한다.
+  // 기본값은 <html data-theme-default="light|dark|auto"> — render.js가 frontmatter theme: 으로 채운다. auto = 보는 사람 OS 설정 따름.
+  // 본문 그리기 전에 실행해야 라이트→다크 깜빡임이 없다.
+  (function () {
+    var d = document.documentElement, pref = d.getAttribute('data-theme-default') || 'light', t = null;
+    try { t = localStorage.getItem('hrr-theme'); } catch (e) {}
+    if (t !== 'light' && t !== 'dark') {
+      t = pref === 'auto'
+        ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+        : (pref === 'dark' ? 'dark' : 'light');
+    }
+    d.setAttribute('data-theme', t);
+  })();
+</script>
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css" />
+<style>
+  /* ── 팔레트(design-guide.md §1, Urban Institute 8색) ─────────────────────── */
+  :root {
+    --blue: #1696d2;   --blue-1: #cfe8f3;   --blue-7: #0a4c6a;
+    --green: #55b748;  --green-1: #dcedd9;  --green-7: #2c5c2d;
+    --yellow: #fdbf11; --yellow-1: #fff2cf; --yellow-7: #843215;
+    --red: #db2b27;    --red-1: #f8d5d4;    --red-7: #6e1614;
+    --gray: #d2d2d2;   --gray-1: #f5f5f5;   --gray-6: #9d9d9d; --gray-7: #696969;
+    --orange: #e66600; --orange-1: #fde6d3; --orange-7: #a34700;
+    --ink: #332d2f;
+    --code-bg: #17171c; --code-text: #e4e4e7; --code-muted: #9d9da6;
+
+    /* 표면·테두리·그림자 — 라이트 = "흰 종이" (토스 개발자문서·우아한형제들/토스 기술블로그 관찰, design-guide §6·§7)
+       읽는 문서라 회색 배경+흰 카드(대시보드 톤) 대신 흰 바탕 + 얇은 선 구분. 옅은 회색은 근거·캡처·표 머리에만. */
+    color-scheme: light;
+    --bg: #ffffff;
+    --surface: #ffffff;
+    --surface-2: #f7f8fa;
+    --line: #d1d5db;
+    --muted: var(--gray-7);
+    --shadow-sm: 0 1px 2px rgba(20, 20, 30, .03);
+    --shadow-md: 0 4px 14px rgba(20, 20, 30, .06);
+    --radius: 14px;
+    --radius-sm: 8px;
+    --mono: "Cascadia Mono", "JetBrains Mono", Consolas, ui-monospace, monospace;
+    --content-w: 860px;
+    /* 역할 색(```flow 카드·Mermaid 역할 클래스 공통): 상태 색(초록·빨강·주황·노랑)과 겹치지 않게 */
+    --role-ext: #f8d9ea; --role-entry: #e4e0f7; --role-logic: #cfe8f3; --role-data: #cfeeea;
+    --flow-shadow: var(--ink);
+  }
+  /* 다크는 선택 사항 — head 스크립트가 data-theme="dark"를 붙였을 때만 (토글·theme: dark|auto) */
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --bg: #0f1115; --surface: #171a20; --surface-2: #1d2129; --line: #2a2f3a;
+    --ink: #e7e9ee; --muted: #a2a8b4; --gray-1: #1d2129; --gray: #2a2f3a; --gray-6: #6b7280; --gray-7: #a2a8b4;
+    --blue-1: #123a4f; --green-1: #173322; --yellow-1: #3a2f10; --red-1: #3d1a1a; --orange-1: #3a2410;
+    --blue-7: #9fd3ee; --green-7: #a9dc9c; --yellow-7: #fbd97a; --red-7: #f4a3a0; --orange-7: #f6b27a;
+    --shadow-sm: 0 1px 2px rgba(0,0,0,.4); --shadow-md: 0 6px 16px rgba(0,0,0,.45);
+    --role-ext: #3d1a2e; --role-entry: #28253f; --role-logic: #123a4f; --role-data: #123633;
+    --flow-shadow: #05060a;
+  }
+
+  /* ── 기본 ───────────────────────────────────────────────────────────────── */
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; scroll-padding-top: 72px; }
+  body {
+    margin: 0;
+    font-family: 'Pretendard', -apple-system, BlinkMacSystemFont, system-ui, "Malgun Gothic", sans-serif;
+    color: var(--ink);
+    background: var(--bg);
+    line-height: 1.7;
+    -webkit-font-smoothing: antialiased;
+    letter-spacing: -0.005em;
+  }
+  a { color: var(--blue); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-1); padding: 1px 6px; border-radius: 6px; }
+  p { margin: 0.6em 0 1em; }
+  strong { font-weight: 700; }
+
+  /* ── 상단 스티키 바 ───────────────────────────────────────────────────────── */
+  .topbar {
+    position: sticky; top: 0; z-index: 20;
+    background: color-mix(in srgb, var(--surface) 84%, transparent);
+    backdrop-filter: saturate(180%) blur(12px);
+    -webkit-backdrop-filter: saturate(180%) blur(12px);
+    border-bottom: 1px solid var(--line);
+  }
+  .topbar-inner { max-width: 1200px; margin: 0 auto; padding: 10px 24px; display: flex; align-items: center; gap: 14px; }
+  .topbar-title { font-weight: 700; font-size: 0.95em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+  .topbar-kicker { font-family: var(--mono); font-size: 0.72em; font-weight: 700; letter-spacing: .06em; color: var(--blue); padding: 3px 8px; border-radius: 6px; background: var(--blue-1); }
+  .progress { position: absolute; left: 0; bottom: -1px; height: 2px; width: 0; background: linear-gradient(90deg, var(--blue), var(--green)); transition: width .1s linear; }
+
+  /* ── 히어로(제목·메타·BLUF) ─────────────────────────────────────────────────── */
+  .hero { position: relative; overflow: hidden; border-bottom: 1px solid var(--line); background: var(--surface); }
+  .hero::before {
+    content: ""; position: absolute; inset: 0; pointer-events: none;
+    background:
+      radial-gradient(600px 240px at 12% 0%, color-mix(in srgb, var(--blue) 14%, transparent), transparent 70%),
+      radial-gradient(500px 220px at 88% 10%, color-mix(in srgb, var(--green) 10%, transparent), transparent 70%);
+  }
+  .hero-inner { position: relative; max-width: var(--content-w); margin: 0 auto; padding: 56px 24px 40px; }
+  .eyebrow { font-family: var(--mono); font-size: 0.78em; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--blue); margin-bottom: 10px; }
+  h1 { font-size: clamp(1.7em, 3.6vw, 2.4em); line-height: 1.25; letter-spacing: -0.02em; margin: 0 0 16px; font-weight: 800; }
+  .meta-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 22px; }
+  .pill {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 12px; border-radius: 999px;
+    font-size: 0.82em; font-weight: 600; color: var(--muted);
+    background: var(--surface); border: 1px solid var(--line); box-shadow: var(--shadow-sm);
+  }
+  .pill b { color: var(--ink); font-weight: 700; }
+  /* BLUF 요약박스(report-writer.md "문서 상단 요약 박스") — 클래스명 유지 */
+  /* 흰 종이 위에서 묻히지 않게: 옅은 파랑 바탕 + 굵은 파랑 왼쪽 선 + 채운 "요약" 배지 + 본문보다 큰 글자.
+     (주의: border 단축속성을 border-left 뒤에 쓰면 왼쪽 선 색이 회색으로 덮인다 — 순서 유지) */
+  .callout {
+    position: relative; margin: 0;
+    background: color-mix(in srgb, var(--blue-1) 60%, var(--surface));
+    border: 1px solid color-mix(in srgb, var(--blue) 22%, var(--line));
+    border-left: 5px solid var(--blue);
+    border-radius: var(--radius); padding: 20px 24px 20px 26px;
+    font-size: 1.08em; font-weight: 500; line-height: 1.8; color: var(--ink);
+  }
+  .callout::before {
+    content: "요약"; display: block; width: fit-content; margin-bottom: 10px;
+    padding: 2px 11px; border-radius: 999px;
+    background: var(--blue-7); color: var(--surface);
+    font-size: 0.72em; font-weight: 700; letter-spacing: .04em; line-height: 1.7;
+  }
+
+  /* ── 본문 레이아웃(넓은 화면에서 우측 목차) ──────────────────────────────── */
+  .layout { max-width: 1200px; margin: 0 auto; padding: 32px 24px 96px; display: grid; grid-template-columns: minmax(0, var(--content-w)) 1fr; gap: 40px; justify-content: center; }
+  main { min-width: 0; counter-reset: sec; }
+  .toc { position: sticky; top: 76px; align-self: start; font-size: 0.86em; display: none; }
+  @media (min-width: 1100px) { .toc { display: block; } }
+  .toc-title { font-family: var(--mono); font-size: 0.75em; font-weight: 700; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; }
+  .toc ol { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--line); }
+  .toc li a { display: block; padding: 5px 12px; color: var(--muted); border-left: 2px solid transparent; margin-left: -2px; }
+  .toc li a:hover { color: var(--ink); text-decoration: none; }
+  .toc li a.active { color: var(--blue); border-left-color: var(--blue); font-weight: 700; }
+
+  /* ── 섹션·제목 ─────────────────────────────────────────────────────────────── */
+  section.sec { margin: 0 0 40px; }
+  h2 { font-size: 1.35em; letter-spacing: -0.015em; margin: 0 0 14px; padding-top: 8px; display: flex; align-items: center; gap: 10px; font-weight: 800; }
+  h2::before { content: counter(sec, decimal-leading-zero); counter-increment: sec; font-family: var(--mono); font-size: 0.7em; font-weight: 700; color: var(--blue); background: var(--blue-1); padding: 2px 8px; border-radius: 6px; }
+  h3 { font-size: 1.08em; margin: 1.2em 0 0.4em; font-weight: 700; }
+  .note { color: var(--muted); font-size: 0.9em; }
+  .sources { margin-top: 14px; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px dashed var(--line); font-size: 0.86em; color: var(--muted); }
+  .sources code { background: transparent; padding: 0; }
+
+  /* ── 표: 격자 대신 가로 구분선 + 둥근 컨테이너 ───────────────────────────── */
+  .table-wrap { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); margin: 1em 0; }
+  table { border-collapse: collapse; width: 100%; font-size: 0.94em; }
+  th, td { padding: 11px 14px; text-align: left; vertical-align: top; border-bottom: 1px solid var(--line); }
+  thead th { background: var(--surface-2); font-weight: 700; font-size: 0.86em; letter-spacing: .02em; color: var(--muted); position: sticky; top: 0; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover td { background: color-mix(in srgb, var(--blue-1) 35%, transparent); }
+  td.num, th.num { text-align: right; font-variant-numeric: tabular-nums; }
+  /* 짧은 라벨/상태 칸이 넓은 옆 칸에 밀려 글자 단위로 줄바꿈되는 것 방지(width:1%+nowrap 트릭) */
+  th.key, td.key { white-space: nowrap; width: 1%; font-weight: 600; }
+  th.status, td.status { white-space: nowrap; width: 1%; text-align: center; }
+  /* 컨테이너 없이 쓴 표도 최소한 정돈되게 */
+  main > table, section > table, details > table { border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+
+  /* ── 상태 태그: 점 + 텍스트(색만으로 구분 금지, §1) ──────────────────────── */
+  .tag { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 0.82em; font-weight: 700; line-height: 1.6; white-space: nowrap; }
+  .tag::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: .85; }
+  .tag-done       { background: var(--green-1);  color: var(--green-7); }
+  .tag-unverified { background: var(--yellow-1); color: var(--yellow-7); }
+  .tag-fail       { background: var(--red-1);    color: var(--red-7); }
+  .tag-preexisting{ background: var(--gray-1);   color: var(--gray-7); }
+  .tag-caution    { background: var(--orange-1); color: var(--orange-7); }
+  .tag-info       { background: var(--blue-1);   color: var(--blue-7); }
+  .tag-recommend  { background: var(--blue-7);   color: var(--surface); }
+  .tag-recommend::before { background: var(--surface); }
+
+  /* ── Task 블록(Toss 레퍼런스: 배지+필드리스트+다크코드패널) ────────────────── */
+  .block { border: 1px solid var(--line); border-radius: var(--radius); padding: 24px 26px; margin: 18px 0; background: var(--surface); box-shadow: var(--shadow-sm); transition: box-shadow .2s ease; }
+  .block:hover { box-shadow: var(--shadow-md); }
+  .block-badge { display: inline-block; font-family: var(--mono); font-size: 0.74em; font-weight: 700; letter-spacing: 0.06em; padding: 3px 10px; border-radius: 6px; background: var(--blue-1); color: var(--blue-7); margin-bottom: 10px; }
+  .block h3 { margin: 2px 0 6px; font-size: 1.12em; }
+  .block-desc { color: var(--muted); margin: 0 0 16px; }
+  .btn-pill { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 999px; background: var(--blue-1); color: var(--blue-7); font-weight: 700; font-size: 0.85em; text-decoration: none; margin-bottom: 14px; transition: filter .15s; }
+  .btn-pill:hover { filter: brightness(.96); text-decoration: none; }
+
+  .field-list { margin: 0; padding: 0; }
+  .field-row { border-bottom: 1px solid var(--line); padding: 12px 0; }
+  .field-row:last-child { border-bottom: none; }
+  .field-name { font-family: var(--mono); font-weight: 700; font-size: 0.95em; }
+  .field-tag-req { color: var(--orange); font-weight: 700; font-size: 0.82em; margin-left: 8px; }
+  .field-tag-type { color: var(--muted); font-size: 0.82em; margin-left: 4px; }
+  .field-row p { margin: 6px 0 0; color: var(--ink); }
+
+  /* ── 다크 코드 패널: 창 점 3개 + 라벨 + 복사 버튼 ───────────────────────── */
+  .code-dark { position: relative; background: var(--code-bg); color: var(--code-text); border-radius: 12px; padding: 14px 18px 16px; margin: 12px 0; overflow-x: auto; box-shadow: var(--shadow-sm); }
+  .code-dark .panel-label { display: flex; align-items: center; gap: 8px; color: var(--code-muted); font-family: var(--mono); font-size: 0.72em; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 12px; padding-right: 56px; }
+  .code-dark .panel-label::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: #ff5f57; box-shadow: 14px 0 0 #febc2e, 28px 0 0 #28c840; margin-right: 30px; flex: none; }
+  .code-dark pre, .code-dark code { font-family: var(--mono); font-size: 0.85em; white-space: pre-wrap; margin: 0; background: none; color: inherit; padding: 0; }
+  .code-dark .copy { position: absolute; top: 10px; right: 12px; border: 1px solid #2f3340; background: #1f232c; color: var(--code-muted); font-size: 0.72em; padding: 3px 9px; border-radius: 6px; cursor: pointer; font-family: inherit; }
+  .code-dark .copy:hover { color: var(--code-text); }
+
+  /* ── 접이식·다이어그램·근거 카드 ──────────────────────────────────────────── */
+  details { margin: 0.8em 0; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface); padding: 0 16px; }
+  details > summary { cursor: pointer; font-weight: 700; padding: 12px 0; list-style: none; display: flex; align-items: center; gap: 8px; }
+  details > summary::-webkit-details-marker { display: none; }
+  details > summary::before { content: "›"; display: inline-block; color: var(--muted); transition: transform .15s; font-size: 1.2em; line-height: 1; }
+  details[open] > summary::before { transform: rotate(90deg); }
+  details[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+  details > *:last-child { margin-bottom: 14px; }
+
+  pre.mermaid { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 20px; text-align: center; box-shadow: var(--shadow-sm); overflow-x: auto; }
+  pre.mermaid:not([data-processed]) { color: transparent; min-height: 60px; }
+  /* CDN 막힌 환경(VDI·폐쇄망): 4초 안에 렌더 안 되면 소스 텍스트라도 읽히게 */
+  pre.mermaid.fallback { color: var(--muted); text-align: left; font-family: var(--mono); font-size: 0.85em; white-space: pre; }
+  pre.mermaid.fallback::before { content: "다이어그램 (Mermaid 소스 — 렌더러를 불러오지 못함)"; display: block; font-family: 'Pretendard', sans-serif; font-size: 0.8em; font-weight: 700; margin-bottom: 8px; }
+
+  /* ```flow — 가지 없는 순서 흐름. 카드가 폭에 맞춰 줄바꿈되고, 아래 스크립트가 화살표를 그린다
+     (같은 줄은 가로 화살표, 줄이 바뀌면 곡선). Mermaid 노드와 같은 브루탈리스트 톤: 굵은 테두리 + 딱딱한 그림자 */
+  .flow { position: relative; margin: 1em 0; padding: 26px 24px 30px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); color: var(--ink); }
+  .flow-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 48px 56px; position: relative; z-index: 1; }
+  .flow-step {
+    flex: 0 1 180px; min-width: 150px; padding: 12px 14px 13px;
+    background: var(--blue-1); border: 2px solid var(--ink); border-radius: 10px; box-shadow: 4px 4px 0 var(--flow-shadow);
+    display: flex; flex-direction: column; gap: 3px;
+    /* 한글은 단어 단위로 줄바꿈, 긴 영문 식별자는 render.js가 넣은 <wbr>에서 — 그래도 안 들어가면 마지막 수단으로 아무 데서나 */
+    word-break: keep-all; overflow-wrap: anywhere;
+  }
+  .flow-step strong { font-size: 0.98em; line-height: 1.35; }
+  .flow-no { font-family: var(--mono); font-size: 0.7em; font-weight: 700; color: var(--muted); letter-spacing: .04em; }
+  .flow-desc { font-size: 0.84em; color: var(--muted); line-height: 1.45; }
+  .flow-step.role-ext { background: var(--role-ext); }
+  .flow-step.role-entry { background: var(--role-entry); }
+  .flow-step.role-logic { background: var(--role-logic); }
+  .flow-step.role-data { background: var(--role-data); }
+  .flow-step.role-done { background: var(--green-1); }
+  .flow-step.role-fail { background: var(--red-1); }
+  .flow-step.role-caution { background: var(--orange-1); }
+  .flow-step.role-info { background: var(--blue-1); }
+  .flow-step.role-neutral { background: var(--gray-1); border-color: var(--gray-6); box-shadow: none; }
+  .flow-lines { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 0; }
+  @media (max-width: 640px) { .flow-step { flex-basis: 100%; } }
+
+  /* ```stats — 핵심 수치 카드(Start Bootstrap SB Admin 2 숫자 카드 + HTML5 UP Stellar 숫자 띠 참고).
+     왼쪽 색 띠 = 상태(요약 박스와 같은 강조 문법). 숫자는 본문보다 크게, 자릿수 정렬 */
+  .stats { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 14px; margin: 1em 0; }
+  @media (max-width: 760px) { .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 420px) { .stats { grid-template-columns: 1fr; } }
+  .stat {
+    display: flex; flex-direction: column; gap: 3px; padding: 14px 16px 15px;
+    background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--blue);
+    border-radius: var(--radius-sm); box-shadow: var(--shadow-sm);
+  }
+  .stat-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+  .stat-label { font-size: 0.78em; font-weight: 700; letter-spacing: .02em; color: var(--blue-7); }
+  /* 상태는 색 띠 + 글자 배지 — 색만으로 구분하지 않는다(§1·§5) */
+  .stat-head .tag { flex: none; font-size: 0.7em; padding: 1px 8px; }
+  .stat-value { font-size: 1.85em; font-weight: 800; line-height: 1.15; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--ink); word-break: keep-all; overflow-wrap: anywhere; }
+  /* 값이 숫자가 아니라 긴 이름이면(render.js가 폭을 어림해 판단) 블록 전체를 작은 글자로 — 큰 숫자 크기로는 카드 폭을 넘는다 */
+  .stats.is-text .stat-value { font-size: 1.22em; line-height: 1.3; letter-spacing: -0.01em; }
+  /* 긴 이름 4개를 한 줄에 두면 본문이 좁아질 때(목차가 빠지는 폭) 이름이 _ 에서 두 줄로 꺾인다 → 2열로 먼저 넘긴다 */
+  @media (min-width: 421px) and (max-width: 900px) { .stats.is-text { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  .stat-note { font-size: 0.82em; color: var(--muted); line-height: 1.45; word-break: keep-all; overflow-wrap: anywhere; }
+  .stat.s-done { border-left-color: var(--green); }   .stat.s-done .stat-label { color: var(--green-7); }
+  .stat.s-fail { border-left-color: var(--red); }     .stat.s-fail .stat-label { color: var(--red-7); }
+  .stat.s-caution { border-left-color: var(--orange); } .stat.s-caution .stat-label { color: var(--orange-7); }
+  .stat.s-unverified { border-left-color: var(--yellow); } .stat.s-unverified .stat-label { color: var(--yellow-7); }
+  .stat.s-neutral { border-left-color: var(--gray-6); } .stat.s-neutral .stat-label { color: var(--muted); }
+
+  /* ```cards — 나란히 놓는 항목 카드(Bootstrap 카드의 머리·본문 구조 + 같은 높이 격자).
+     문서 본문 톤(얇은 선·옅은 그림자)을 따른다 — 굵은 테두리·딱딱한 그림자는 다이어그램 전용. [추천]은 파란 테두리로 강조 */
+  /* 배치는 render.js가 본문 길이로 고른다: is-grid(짧음, 3열) · is-half(중간, 2열) · is-wide(긺, 한 줄 하나 — 왼쪽 머리·오른쪽 본문).
+     긴 글을 좁은 칸에 넣으면 문장이 서너 줄로 쪼개지고 근거 파일명이 중간에서 잘린다(2026-09-23 실측) */
+  .cards { display: grid; gap: 16px; margin: 1em 0; }
+  /* 열 수(--cols)는 render.js가 카드 개수로 정한다 — 마지막 줄에 카드 하나만 남지 않게 */
+  .cards.is-grid, .cards.is-half { grid-template-columns: repeat(var(--cols, 3), minmax(0, 1fr)); }
+  @media (max-width: 760px) { .cards.is-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (max-width: 640px) { .cards.is-grid, .cards.is-half { grid-template-columns: 1fr; } }
+  .cards.is-wide { grid-template-columns: 1fr; gap: 12px; }
+  .card { display: flex; flex-direction: column; min-width: 0; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow: hidden; }
+  .card-head { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 13px 16px 12px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
+  .card-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+  .card-tags .tag { font-size: 0.74em; }
+  .card-no { font-family: var(--mono); font-size: 0.78em; font-weight: 700; color: var(--blue); letter-spacing: .04em; }
+  .card-title { margin: 0; font-size: 1em; font-weight: 800; line-height: 1.45; word-break: keep-all; overflow-wrap: break-word; }
+  .card-body { flex: 1; display: flex; flex-direction: column; padding: 13px 16px 14px; font-size: 0.95em; line-height: 1.7; word-break: keep-all; overflow-wrap: break-word; }
+  .card-body > * { margin: 0 0 0.55em; }
+  .card-body > *:last-child { margin-bottom: 0; }
+  .card-body ul, .card-body ol { padding-left: 1.2em; }
+  /* 근거는 상자 대신 카드 꼬리 줄(Bootstrap card-footer처럼) — 맨 아래에 붙여 빈 공간이 의도된 여백으로 보이게 */
+  .card-body > .sources {
+    margin: auto -16px -14px; padding: 9px 16px 10px; border: 0; border-top: 1px solid var(--line); border-radius: 0;
+    background: var(--surface-2); font-size: 0.8em; word-break: normal; overflow-wrap: anywhere;
+  }
+  /* wide: 한 줄에 카드 하나. 왼쪽 머리(번호·배지·제목) 30%, 오른쪽 본문 — 긴 설명이 문서 폭만큼 넓게 읽힌다 */
+  .cards.is-wide .card { flex-direction: row; }
+  .cards.is-wide .card-head { flex: 0 0 30%; border-bottom: 0; border-right: 1px solid var(--line); padding: 16px 18px; }
+  .cards.is-wide .card-body { padding: 15px 20px 16px; }
+  .cards.is-wide .card-body > .sources { margin: auto -20px -16px; padding: 9px 20px 10px; }
+  .card.is-recommended { border: 2px solid var(--blue); box-shadow: 0 0 0 4px color-mix(in srgb, var(--blue) 12%, transparent); }
+  .card.is-recommended .card-head { background: color-mix(in srgb, var(--blue-1) 70%, var(--surface)); }
+  @media (max-width: 640px) {
+    .cards.is-wide .card { flex-direction: column; }
+    .cards.is-wide .card-head { border-right: 0; border-bottom: 1px solid var(--line); }
+  }
+  @media print { .stat, .card { break-inside: avoid; } }
+
+  /* 우아한형제들·토스 실물 관찰(design-guide.md §7): 실제 화면·로그 캡처는 카드형으로 */
+  .evidence-card { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; margin: 16px 0; }
+  .evidence-card img { max-width: 100%; border-radius: var(--radius-sm); display: block; }
+  .evidence-card .tag-row { display: flex; gap: 6px; margin-bottom: 10px; }
+  .evidence-card figcaption { color: var(--muted); font-size: 0.86em; margin-top: 8px; }
+
+  /* ── 하단 ─────────────────────────────────────────────────────────────────── */
+  .footer { max-width: 1200px; margin: 0 auto; padding: 18px 24px 40px; color: var(--muted); font-size: 0.82em; border-top: 1px solid var(--line); }
+
+  @media (max-width: 640px) {
+    .hero-inner { padding: 36px 18px 28px; }
+    .layout { padding: 20px 16px 64px; }
+    .block { padding: 18px 16px; }
+    th, td { padding: 9px 10px; }
+  }
+  /* 테마 토글 버튼(상단 바): 라이트일 땐 달(누르면 다크), 다크일 땐 해(누르면 라이트). 뜻은 aria-label·title로 */
+  .theme-toggle {
+    display: inline-flex; align-items: center; justify-content: center; flex: none;
+    width: 32px; height: 32px; padding: 0; border-radius: 50%; cursor: pointer;
+    border: 1px solid var(--line); background: var(--surface); color: var(--muted);
+  }
+  .theme-toggle:hover { color: var(--ink); border-color: var(--gray-6); }
+  .theme-toggle svg { width: 16px; height: 16px; display: block; }
+  .theme-toggle .icon-sun { display: none; }
+  :root[data-theme="dark"] .theme-toggle .icon-sun { display: block; }
+  :root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
+
+  @media print {
+    .topbar, .toc, .code-dark .copy { display: none !important; }
+    /* 다크로 보고 있어도 인쇄는 항상 흰 종이 */
+    :root[data-theme] {
+      color-scheme: light;
+      --bg: #fff; --surface: #fff; --surface-2: #f7f8fa; --line: #d1d5db;
+      --ink: #332d2f; --muted: #696969; --gray-1: #f5f5f5; --gray: #d2d2d2; --gray-6: #9d9d9d; --gray-7: #696969;
+      --blue-1: #cfe8f3; --green-1: #dcedd9; --yellow-1: #fff2cf; --red-1: #f8d5d4; --orange-1: #fde6d3;
+      --blue-7: #0a4c6a; --green-7: #2c5c2d; --yellow-7: #843215; --red-7: #6e1614; --orange-7: #a34700;
+      --role-ext: #f8d9ea; --role-entry: #e4e0f7; --role-logic: #cfe8f3; --role-data: #cfeeea; --flow-shadow: #332d2f;
+    }
+    body { background: #fff; }
+    .block, .callout, .table-wrap { box-shadow: none; }
+  }
+</style>
+</head>
+<body>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <span class="topbar-kicker">REPORT</span>
+    <span class="topbar-title">{{TITLE}}</span>
+    <span class="note">{{작업일}}</span>
+    <button class="theme-toggle" id="theme-toggle" type="button" aria-label="다크 모드로 바꾸기" title="다크 모드로 바꾸기">
+      <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z"/></svg>
+      <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/></svg>
+    </button>
+  </div>
+  <div class="progress" id="progress"></div>
+</header>
+
+<div class="hero">
+  <div class="hero-inner">
+    <div class="eyebrow">{{문서 종류 — 예: 작업기록 · 이슈정리 · 핸드오프}}</div>
+    <h1>{{TITLE}}</h1>
+    <div class="meta-row">
+      <span class="pill">작업일 <b>{{작업일}}</b></span>
+      <span class="pill">대상 <b>{{프로젝트}}</b></span>
+      <span class="pill">브랜치 <b>{{브랜치}}</b></span>
+    </div>
+    <div class="callout">{{BLUF 요약 — 3문장 이내: 무엇을 왜 하는지 / 지금 상태 / 결정할 것}}</div>
+  </div>
+</div>
+
+<div class="layout">
+<main>
+
+<section class="sec" id="배경">
+  <h2>배경</h2>
+  {{배경}}
+</section>
+
+<section class="sec" id="구조">
+  <h2>구조 (다이어그램)</h2>
+  {{다이어그램_영역 — <pre class="mermaid">...</pre> 형태로 채운다}}
+</section>
+
+<section class="sec" id="본문">
+  <h2>{{본문_섹션들 — 각 항목은 .block 패턴으로}}</h2>
+  <!--
+    블록 예시 (Task/변경 단위 하나당 복제):
+    <div class="block">
+      <span class="block-badge">TASK N</span>
+      <h3>{{제목}}</h3>
+      <p class="block-desc">{{한 줄 설명}}</p>
+      <div class="field-list">
+        <div class="field-row">
+          <span class="field-name">{{파일 또는 파라미터명}}</span>
+          <span class="field-tag-req">{{필수/생성/수정}}</span>
+          <span class="field-tag-type">{{타입 또는 프로젝트}}</span>
+          <p>{{설명 문장}}</p>
+        </div>
+      </div>
+      <div class="code-dark">
+        <div class="panel-label">{{명령 또는 코드}}</div>
+        <pre>{{코드/명령 내용}}</pre>
+      </div>
+    </div>
+
+    표는 .table-wrap 으로 감싼다(가로 스크롤·둥근 테두리):
+    <div class="table-wrap"><table>…</table></div>
+
+    섹션 끝 근거 메모(코드 위치·출처는 본문이 아니라 여기로 — 스킬 규칙 6):
+    <div class="sources">근거: <code>src/foo.js:88</code>, <code>docs/adr-012.md</code></div>
+  -->
+</section>
+
+<section class="sec" id="잔여-리스크">
+  <h2>잔여·리스크</h2>
+  <details>
+  <summary>펼쳐서 보기</summary>
+  {{잔여미검증}}
+  </details>
+</section>
+
+<section class="sec" id="반영-절차">
+  <h2>반영 절차</h2>
+  {{반영절차}}
+</section>
+
+</main>
+
+<nav class="toc" aria-label="목차">
+  <div class="toc-title">목차</div>
+  <ol id="toc-list"></ol>
+</nav>
+</div>
+
+<div class="footer">{{작성자·생성 도구 한 줄 — 예: 작성 {{작업일}} · Claude Code report-writer}}</div>
+
+<script>
+  // 목차 자동 생성 + 현재 위치 강조 + 상단 진행바 + 코드 복사 버튼 (전부 선택 기능, 꺼져도 문서는 읽힘)
+  (function () {
+    var list = document.getElementById('toc-list');
+    var heads = Array.prototype.slice.call(document.querySelectorAll('main h2'));
+    var secs = heads.map(function (h, i) {
+      var sec = h.closest('section') || h;
+      if (!sec.id) sec.id = 'sec-' + (i + 1);
+      var li = document.createElement('li');
+      var a = document.createElement('a');
+      a.href = '#' + sec.id; a.textContent = h.textContent.trim();
+      li.appendChild(a); list.appendChild(li);
+      return sec;
+    });
+    var links = list.querySelectorAll('a');
+    var bar = document.getElementById('progress');
+    function onScroll() {
+      var cur = 0;   // getBoundingClientRect 기준 — offsetParent 가 body 가 아니어도 안 어긋남
+      secs.forEach(function (sec, i) { if (sec.getBoundingClientRect().top <= 90) cur = i; });
+      links.forEach(function (a, i) { a.classList.toggle('active', i === cur); });
+      var d = document.documentElement;
+      var p = d.scrollTop / (d.scrollHeight - d.clientHeight) * 100;
+      bar.style.width = (isFinite(p) ? p : 0) + '%';
+    }
+    window.addEventListener('scroll', onScroll, { passive: true }); onScroll();
+
+    document.querySelectorAll('.code-dark').forEach(function (box) {
+      var pre = box.querySelector('pre'); if (!pre) return;
+      var btn = document.createElement('button'); btn.className = 'copy'; btn.type = 'button'; btn.textContent = '복사';
+      btn.addEventListener('click', function () {
+        var text = pre.textContent;
+        var done = function () { btn.textContent = '복사됨'; setTimeout(function () { btn.textContent = '복사'; }, 1200); };
+        var fail = function () { btn.textContent = '실패'; setTimeout(function () { btn.textContent = '복사'; }, 1200); };
+        // file:// 처럼 비보안 컨텍스트엔 navigator.clipboard 가 없다 → execCommand 폴백
+        if (navigator.clipboard && window.isSecureContext) {
+          navigator.clipboard.writeText(text).then(done, function () { legacy() ? done() : fail(); });
+        } else { legacy() ? done() : fail(); }
+        function legacy() {
+          try {
+            var ta = document.createElement('textarea'); ta.value = text; ta.setAttribute('readonly', '');
+            ta.style.position = 'fixed'; ta.style.opacity = '0'; document.body.appendChild(ta); ta.select();
+            var ok = document.execCommand('copy'); document.body.removeChild(ta); return ok;
+          } catch (e) { return false; }
+        }
+      });
+      box.appendChild(btn);
+    });
+
+    // 링크는 새 창으로(보고서를 읽던 자리를 잃지 않게). 목차·섹션 이동(#…)만 같은 창
+    document.querySelectorAll('a[href]').forEach(function (a) {
+      if (a.getAttribute('href').charAt(0) === '#') return;
+      a.setAttribute('target', '_blank');
+      a.setAttribute('rel', 'noopener noreferrer');
+    });
+
+    // 테마 토글: 바꾸면 기억(모든 보고서 공통)하고, 다이어그램도 새 색으로 다시 그린다
+    var tbtn = document.getElementById('theme-toggle');
+    if (tbtn) {
+      var root = document.documentElement;
+      // 아이콘 전환은 CSS가 data-theme 보고 처리. 여기선 화면낭독기·툴팁용 문구만 맞춘다
+      var syncLabel = function () {
+        var t = root.getAttribute('data-theme') === 'dark' ? '라이트 모드로 바꾸기' : '다크 모드로 바꾸기';
+        tbtn.setAttribute('aria-label', t); tbtn.setAttribute('title', t);
+      };
+      syncLabel();
+      tbtn.addEventListener('click', function () {
+        var next = root.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+        root.setAttribute('data-theme', next);
+        try { localStorage.setItem('hrr-theme', next); } catch (e) {}
+        syncLabel();
+        if (window.hrrRenderDiagrams) window.hrrRenderDiagrams();
+      });
+    }
+  })();
+</script>
+
+<script>
+  // ```flow 카드 사이 화살표. 같은 줄이면 가로 화살표, 줄이 바뀌면 앞 카드 아래 → 다음 카드 위로 곡선(S자).
+  // 카드 위치는 화면 폭에 따라 바뀌므로 크기가 변할 때마다 다시 그린다. 색은 currentColor라 테마 전환에 자동으로 따라간다.
+  (function () {
+    var NS = 'http://www.w3.org/2000/svg';
+    function draw(flow, idx) {
+      var old = flow.querySelector('svg.flow-lines'); if (old) old.remove();
+      var steps = flow.querySelectorAll('.flow-step'); if (steps.length < 2) return;
+      var box = flow.getBoundingClientRect();
+      var svg = document.createElementNS(NS, 'svg');
+      svg.setAttribute('class', 'flow-lines'); svg.setAttribute('aria-hidden', 'true');
+      svg.setAttribute('width', box.width); svg.setAttribute('height', box.height);
+      var id = 'flow-arrow-' + idx;
+      svg.innerHTML = '<defs><marker id="' + id + '" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto">'
+        + '<path d="M0,0 L10,5 L0,10 z" fill="currentColor"/></marker></defs>';
+      for (var i = 0; i < steps.length - 1; i++) {
+        var a = steps[i].getBoundingClientRect(), b = steps[i + 1].getBoundingClientRect(), d;
+        if (Math.abs(a.top - b.top) < 8) {
+          // 같은 줄: 오른쪽 가운데 → 다음 카드 왼쪽 가운데 (앞 카드 그림자 4px 비켜서)
+          var y1 = a.top + a.height / 2 - box.top, y2 = b.top + b.height / 2 - box.top;
+          d = 'M' + (a.right - box.left + 6) + ',' + y1 + ' L' + (b.left - box.left - 4) + ',' + y2;
+        } else {
+          // 줄 바뀜: 앞 카드 아래 가운데 → 다음 카드 위 가운데, 줄 사이 틈에서 휘어지는 곡선
+          var ax = a.left + a.width / 2 - box.left, ay = a.bottom - box.top + 6;
+          var bx = b.left + b.width / 2 - box.left, by = b.top - box.top - 4;
+          var g = Math.max(16, (by - ay) * 0.85);
+          d = 'M' + ax + ',' + ay + ' C' + ax + ',' + (ay + g) + ' ' + bx + ',' + (by - g) + ' ' + bx + ',' + by;
+        }
+        var p = document.createElementNS(NS, 'path');
+        p.setAttribute('d', d); p.setAttribute('fill', 'none'); p.setAttribute('stroke', 'currentColor');
+        p.setAttribute('stroke-width', '2'); p.setAttribute('stroke-linecap', 'round'); p.setAttribute('marker-end', 'url(#' + id + ')');
+        svg.appendChild(p);
+      }
+      flow.appendChild(svg);
+    }
+    function drawAll() { document.querySelectorAll('.flow').forEach(draw); }
+    drawAll();
+    window.addEventListener('load', drawAll);
+    if (document.fonts && document.fonts.ready) document.fonts.ready.then(drawAll);
+    if (window.ResizeObserver) {
+      var ro = new ResizeObserver(function () { drawAll(); });
+      document.querySelectorAll('.flow').forEach(function (f) { ro.observe(f); });
+    } else window.addEventListener('resize', drawAll);
+  })();
+</script>
+<script>
+  // Mermaid CDN이 막혔거나 느릴 때: 4초 후에도 렌더 안 된 다이어그램은 소스 텍스트로 보여준다
+  setTimeout(function () {
+    document.querySelectorAll('pre.mermaid:not([data-processed]):not([data-pending])').forEach(function (p) { if (p.offsetParent) p.classList.add('fallback'); });
+  }, 4000);
+</script>
+<script type="module">
+  // 색 언어(design-guide.md §7): 초록=성공/정상, 빨강=실패, 파랑=진행중·현재값, 회색=중립·시작상태
+  // 다이어그램 소스에서는 classDef 없이  class 노드명 done|fail|caution|info|neutral  만 쓰면 아래 CSS가 라이트/다크 둘 다 맞춰 칠한다
+  // theme: 'default'는 themeVariables를 무시한다 — 'base'여야 커스텀 색·폰트가 실제로 적용됨(2026-09-22 실측 확인, 라벤더+trebuchet ms로 나오던 버그)
+  // 테마는 <html data-theme> 를 따른다(OS 설정 아님). 토글하면 window.hrrRenderDiagrams() 로 다시 그림
+  let mermaid = null;
+  // 종류별로 스타일을 다르게 입힌다(2026-09-23, 18종 실측 뒤 재구성). 종류 = 소스 첫 단어.
+  //  - BOXY(흐름도·상태·블록): 브루탈리스트 박스(굵은 테두리+딱딱한 그림자) + 역할/상태 색 강제 + 화살촉 채우기
+  //  - 나머지: 선·글자 색과 분류 색만 맞춘다. ER·클래스는 칸이 많아 칸마다 그림자가 붙으면 무거워지고,
+  //    마인드맵·칸반은 가지별 색이 사라진다. 클래스(빈 삼각형·마름모)·ER(o 표시) 화살촉은 속이 빈 모양이 곧 뜻이라 채우지 않는다.
+  const kindOf = function (src) { return ((src || '').trim().split(/\s/)[0] || '').toLowerCase(); };
+  const BOXY = /^(flowchart|graph|statediagram|statediagram-v2|block-beta)$/;
+
+  function palette(dark) {
+    return {
+      ink: dark ? '#e7e9ee' : '#332d2f',
+      shadow: dark ? '#05060a' : '#332d2f',
+      surface: dark ? '#171a20' : '#ffffff',
+      surface2: dark ? '#1d2129' : '#f7f8fa',
+      grid: dark ? '#2a2f3a' : '#e6e8ec',
+      muted: dark ? '#a2a8b4' : '#696969',
+      fill: dark
+        ? { done: '#173322', fail: '#3d1a1a', caution: '#3a2410', info: '#123a4f', neutral: '#1d2129', primary: '#123a4f', secondary: '#173322', tertiary: '#1d2129', edgeLabel: '#171a20', line: '#a2a8b4',
+            ext: '#3d1a2e', entry: '#28253f', logic: '#123a4f', data: '#123633' }
+        : { done: '#dcedd9', fail: '#f8d5d4', caution: '#fde6d3', info: '#cfe8f3', neutral: '#f5f5f5', primary: '#cfe8f3', secondary: '#dcedd9', tertiary: '#f5f5f5', edgeLabel: '#ffffff', line: '#9d9da6',
+            // 역할 색(흐름·구조도용): 상태 색(초록·빨강·주황·노랑)과 겹치지 않는 색만 — ext 분홍, entry 연보라, logic 하늘, data 청록
+            ext: '#f8d9ea', entry: '#e4e0f7', logic: '#cfe8f3', data: '#cfeeea' },
+      // 분류 색(마인드맵 가지·타임라인 구간·칸반 열): 역할 색 4개 + 모래·회색. 상태 색은 쓰지 않는다
+      cScale: dark ? ['#123a4f', '#123633', '#28253f', '#3d1a2e', '#33291a', '#2a2f3a'] : ['#cfe8f3', '#cfeeea', '#e4e0f7', '#f8d9ea', '#efe6d6', '#ececec'],
+      // 조각·막대·가지가 나란히 붙는 차트(원형·xy·깃)는 옅은 틴트로는 구분이 안 된다(실측: 원형 3번째 조각이 배경과 같은 흰색,
+      // xy 막대가 크림색이라 안 보임) → Urban 핵심색 중간 채도. 라이트·다크 공통
+      series: ['#1696d2', '#ec008b', '#55b748', '#e66600', '#9d9dcf', '#fdbf11', '#46b3a8', '#9d9d9d']
+    };
+  }
+
+  function configFor(kind, P) {
+    const ink = P.ink, shadow = P.shadow, fill = P.fill, boxy = BOXY.test(kind);
+    const tv = {
+      fontFamily: '"Pretendard", -apple-system, sans-serif',
+      primaryColor: fill.primary, primaryBorderColor: '#1696d2', primaryTextColor: ink,
+      lineColor: fill.line, secondaryColor: fill.secondary, tertiaryColor: fill.tertiary,
+      textColor: ink, noteTextColor: ink, actorTextColor: ink, signalTextColor: ink, labelTextColor: ink, titleColor: ink,
+      noteBkgColor: fill.caution, actorBkg: fill.primary, actorBorder: ink, signalColor: ink,
+      mainBkg: fill.primary, clusterBkg: fill.tertiary, edgeLabelBackground: fill.edgeLabel,
+      // 간트: 색 언어 그대로 — 예정=회색, 진행 중(active)=파랑, 완료(done)=초록, 긴급(crit)=빨강
+      taskBkgColor: fill.neutral, taskBorderColor: ink, taskTextColor: ink, taskTextDarkColor: ink, taskTextLightColor: ink, taskTextOutsideColor: ink,
+      activeTaskBkgColor: fill.info, activeTaskBorderColor: '#1696d2',
+      doneTaskBkgColor: fill.done, doneTaskBorderColor: '#55b748',
+      critBkgColor: fill.fail, critBorderColor: '#db2b27',
+      sectionBkgColor: P.surface2, altSectionBkgColor: P.surface, sectionBkgColor2: P.surface2,
+      gridColor: P.grid, todayLineColor: '#db2b27', excludeBkgColor: P.surface2,
+      pieStrokeColor: ink, pieOuterStrokeColor: ink, pieSectionTextColor: '#17171c', pieTitleTextColor: ink, pieLegendTextColor: ink, pieOpacity: '1',
+      xyChart: {
+        backgroundColor: P.surface, titleColor: ink,
+        xAxisLabelColor: ink, xAxisTitleColor: ink, xAxisTickColor: P.muted, xAxisLineColor: P.muted,
+        yAxisLabelColor: ink, yAxisTitleColor: ink, yAxisTickColor: P.muted, yAxisLineColor: P.muted,
+        plotColorPalette: P.series.slice(0, 4).join(', ')
+      },
+      commitLabelColor: ink, commitLabelBackground: P.surface, tagLabelColor: ink, tagLabelBackground: P.surface2, tagLabelBorder: ink
+    };
+    // cScaleInv(타임라인 항목 밑줄 등)는 mermaid가 분류 색을 뒤집어 만들어서 빨강·주황이 나온다 — "실패"로 읽히므로 중립 회색으로
+    P.cScale.forEach(function (c, i) {
+      [i, i + 6].forEach(function (k) { tv['cScale' + k] = c; tv['cScaleLabel' + k] = ink; tv['cScaleInv' + k] = fill.line; });
+    });
+    P.series.forEach(function (c, i) { tv['pie' + (i + 1)] = c; tv['git' + i] = c; tv['gitBranchLabel' + i] = i === 5 ? '#17171c' : '#ffffff'; });
+
+    // 모든 종류: 연결선은 진하고 굵게. v11은 흐름도 선이 .flowchart-link, 클래스 .relation, ER .relationshipLine
+    // (옛 셀렉터 .edgePath .path만 있어서 선이 가는 회색으로 나왔다 — 2026-09-23 실측)
+    let css = `
+      .flowchart-link, .edgePath .path, .transition, .relation, .relationshipLine { stroke: ${ink} !important; stroke-width: 2px !important; }
+      marker path { stroke: ${ink} !important; }
+      .edgeLabel { background-color: ${fill.edgeLabel} !important; font-weight: 700 !important; color: ${ink} !important; }
+      .edgeLabel rect, .labelBkg { fill: ${fill.edgeLabel} !important; }
+      /* 시퀀스 — actor/note는 rect로 태그를 좁힌다(bare .actor는 라벨 <text>에도 붙어 filter가 글자를 겹치게 함, 2026-09-22·23 실측) */
+      rect.actor { stroke: ${ink} !important; stroke-width: 2.5px !important; fill: ${fill.primary} !important; filter: drop-shadow(4px 4px 0px ${shadow}) !important; }
+      .actor-line { stroke: ${ink} !important; }
+      .messageLine0, .messageLine1 { stroke: ${ink} !important; stroke-width: 2px !important; }
+      text.actor, .messageText, .noteText, .labelText, .loopText { font-weight: 700 !important; }
+      rect.note { stroke: ${ink} !important; stroke-width: 2.5px !important; fill: ${fill.caution} !important; filter: drop-shadow(4px 4px 0px ${shadow}) !important; }
+    `;
+    if (boxy) css += `
+      /* 브루탈리스트 각색(출처: modern-mermaid.live, MIT) — 장식색 순환 대신 역할·상태 클래스로 색을 준다 */
+      .node rect, .node polygon, .node circle, .node path { stroke: ${ink} !important; stroke-width: 2.5px !important; filter: drop-shadow(4px 4px 0px ${shadow}); }
+      .node .label, .nodeLabel { font-weight: 700 !important; color: ${ink} !important; }
+      .marker, .marker path, .arrowMarkerPath, .arrowheadPath { fill: ${ink} !important; stroke: ${ink} !important; }
+      .cluster rect { stroke: ${ink} !important; stroke-width: 2px !important; filter: drop-shadow(5px 5px 0px ${shadow}); }
+      .node.done rect, .node.done polygon, .node.done circle, .node.done path { fill: ${fill.done} !important; }
+      .node.fail rect, .node.fail polygon, .node.fail circle, .node.fail path { fill: ${fill.fail} !important; }
+      .node.caution rect, .node.caution polygon, .node.caution circle, .node.caution path { fill: ${fill.caution} !important; }
+      .node.info rect, .node.info polygon, .node.info circle, .node.info path { fill: ${fill.info} !important; }
+      .node.neutral rect, .node.neutral polygon, .node.neutral circle, .node.neutral path { fill: ${fill.neutral} !important; stroke: ${fill.line} !important; filter: none; }
+      .node.ext rect, .node.ext polygon, .node.ext circle, .node.ext path { fill: ${fill.ext} !important; }
+      .node.entry rect, .node.entry polygon, .node.entry circle, .node.entry path { fill: ${fill.entry} !important; }
+      .node.logic rect, .node.logic polygon, .node.logic circle, .node.logic path { fill: ${fill.logic} !important; }
+      .node.data rect, .node.data polygon, .node.data circle, .node.data path { fill: ${fill.data} !important; }
+    `;
+    return {
+      startOnLoad: false, theme: 'base',
+      flowchart: { useMaxWidth: false }, sequence: { useMaxWidth: false }, state: { useMaxWidth: false },
+      // 간트: 기본 글자 11px·날짜 전체 표기는 너무 작고 빽빽함(실측) → 13px, 월/일
+      gantt: { useMaxWidth: false, fontSize: 13, sectionFontSize: 13, barHeight: 24, barGap: 6, topPadding: 50, leftPadding: 90, axisFormat: '%m/%d' },
+      gitGraph: { rotateCommitLabel: false },
+      themeVariables: tv, themeCSS: css
+    };
+  }
+
+  // setBoth: CSS만 믿지 않는다(2026-09-23, 실측: 인라인 style에 !important까지 박혀도 사용자 실제 렌더러에서 안 먹는
+  // 사례 — 그 렌더러가 SVG fill/stroke에 CSS를 안 태우는 것으로 추정). 같은 값을 프레젠테이션 속성으로도 박는다.
+  const setBoth = function (el, prop, value) { el.style.setProperty(prop, value, 'important'); el.setAttribute(prop, value); };
+
+  function forceSequence(svg, P) {
+    svg.querySelectorAll('rect.actor').forEach(function (r) {
+      setBoth(r, 'fill', P.fill.primary); setBoth(r, 'stroke', P.ink); setBoth(r, 'stroke-width', '2.5px');
+      r.style.setProperty('filter', 'drop-shadow(4px 4px 0px ' + P.shadow + ')', 'important');
+    });
+    svg.querySelectorAll('rect.note').forEach(function (r) {
+      setBoth(r, 'fill', P.fill.caution); setBoth(r, 'stroke', P.ink); setBoth(r, 'stroke-width', '2.5px');
+      r.style.setProperty('filter', 'drop-shadow(4px 4px 0px ' + P.shadow + ')', 'important');
+    });
+  }
+
+  function forceBoxy(svg, P) {
+    const f = P.fill;
+    const stateFill = { done: f.done, fail: f.fail, caution: f.caution, info: f.info, neutral: f.neutral, ext: f.ext, entry: f.entry, logic: f.logic, data: f.data };
+    svg.querySelectorAll('.node').forEach(function (node) {
+      // 상태 다이어그램 시작(●)·끝(◉) 점은 건너뛴다 — 노드 색으로 덮으면 끝 점의 고리·안쪽 점 구분이 사라진다(2026-09-23 실측)
+      if (/_(start|end)-\d+$/.test(node.id) || node.querySelector('.state-start, .state-end')) return;
+      const cls = Object.keys(stateFill).find(function (k) { return node.classList.contains(k); });
+      const nodeFill = cls ? stateFill[cls] : f.primary;
+      node.querySelectorAll('rect, polygon, circle, path').forEach(function (shape) {
+        setBoth(shape, 'fill', nodeFill);
+        setBoth(shape, 'stroke', cls === 'neutral' ? f.line : P.ink);
+        setBoth(shape, 'stroke-width', '2.5px');
+        shape.style.setProperty('filter', cls !== 'neutral' ? ('drop-shadow(4px 4px 0px ' + P.shadow + ')') : 'none', 'important');
+      });
+    });
+    svg.querySelectorAll('.cluster rect').forEach(function (r) {
+      setBoth(r, 'stroke', P.ink); setBoth(r, 'stroke-width', '2px');
+      r.style.setProperty('filter', 'drop-shadow(5px 5px 0px ' + P.shadow + ')', 'important');
+    });
+    svg.querySelectorAll('.flowchart-link, .transition').forEach(function (p) { setBoth(p, 'stroke', P.ink); setBoth(p, 'stroke-width', '2px'); });
+    svg.querySelectorAll('marker path').forEach(function (p) { setBoth(p, 'fill', P.ink); setBoth(p, 'stroke', P.ink); });
+  }
+
+  async function renderDiagrams() {
+    const pres = Array.prototype.slice.call(document.querySelectorAll('pre.mermaid'));
+    if (!pres.length) return;
+    // 원본 소스 보관/복원 — mermaid가 SVG로 덮어쓰므로 다시 그리려면 소스가 필요
+    pres.forEach(function (p) {
+      if (p.dataset.src === undefined) p.dataset.src = p.textContent;
+      else { p.removeAttribute('data-processed'); p.textContent = p.dataset.src; }
+    });
+    if (!mermaid) mermaid = (await import('https://cdn.jsdelivr.net/npm/mermaid@11.17.2/dist/mermaid.esm.min.mjs')).default;
+    for (const p of pres) {
+      // 지금 안 보이는 다이어그램(접힌 <details> 안 등)은 건너뛰고 펼칠 때 그린다 — 크기를 못 재서 흐름도는
+      // "Syntax error", 간트·마인드맵은 빈 칸으로 나온다(2026-09-23 실측). 규칙 9·12줄 제한 때문에 접힌 칸 안 다이어그램은 흔하다
+      if (!p.offsetParent) { p.dataset.pending = '1'; continue; }
+      await renderOne(p);
+    }
+    // 렌더가 4초를 넘겨 성공한 경우(느린 VDI): 타임아웃이 먼저 붙인 폴백 표시를 걷어낸다
+    document.querySelectorAll('pre.mermaid[data-processed].fallback').forEach(function (p) { p.classList.remove('fallback'); });
+  }
+  async function renderOne(p) {
+    delete p.dataset.pending;
+    const P = palette(document.documentElement.getAttribute('data-theme') === 'dark');
+    const kind = kindOf(p.dataset.src);
+    mermaid.initialize(configFor(kind, P));
+    // 하나씩 그린다 — 종류별 설정을 주려면 필요하고, 한 다이어그램 문법 오류가 나머지를 막지 않는다
+    try { await mermaid.run({ nodes: [p] }); } catch (e) { return; }
+    p.classList.remove('fallback');
+    const svg = p.querySelector('svg');
+    if (!svg) return;
+    if (BOXY.test(kind)) forceBoxy(svg, P);
+    if (kind === 'sequencediagram') forceSequence(svg, P);
+  }
+  // <details>를 펼치면 그 안에서 기다리던 다이어그램을 그린다(toggle은 버블링이 없어서 캡처 단계로 받는다)
+  document.addEventListener('toggle', function (e) {
+    const d = e.target;
+    if (!d.open || !mermaid) return;
+    d.querySelectorAll('pre.mermaid[data-pending]').forEach(function (p) { if (p.offsetParent) renderOne(p); });
+  }, true);
+  const markFallback = function () {
+    document.querySelectorAll('pre.mermaid:not([data-processed]):not([data-pending])').forEach(function (p) { p.classList.add('fallback'); });
+  };
+  window.hrrRenderDiagrams = function () { renderDiagrams().catch(markFallback); };
+  try { await renderDiagrams(); } catch (e) { markFallback(); }
+</script>
+</body>
+</html>
