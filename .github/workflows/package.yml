@@ -1,0 +1,34 @@
+# claude.ai 업로드용 zip을 GitHub에서 만들어 "latest" 릴리스에 올린다.
+# 스킬이 바뀌어 main에 올라올 때마다 다시 만든다 — zip을 저장소에 커밋하지 않아도 항상 최신.
+name: package-skill
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'skills/**'
+      - 'tools/package.js'
+      - '.github/workflows/package.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  zip:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Validate SKILL.md and build the zip
+        run: node tools/package.js
+      - name: Publish to the "latest" release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view latest >/dev/null 2>&1 || gh release create latest \
+            --title "claude.ai 업로드용 스킬 묶음" \
+            --notes "human-readable-reports.zip을 claude.ai 스킬 설정에서 업로드하세요. main의 스킬이 바뀔 때마다 자동으로 다시 만듭니다."
+          gh release upload latest dist/human-readable-reports.zip --clobber
