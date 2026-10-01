@@ -10,11 +10,11 @@
   "plugins": [
     {
       "name": "korean-readable-reports",
-      "description": "Korean adaptation of human-readable-reports: analysis and status reports people actually read, with native Korean phrasing rules, diagrams where the shape is the content, and a one-command md to HTML renderer with lint",
+      "description": "Analysis and status reports in natural Korean that people actually read: native Korean phrasing rules, diagrams where the shape is the content, and a one-command md to HTML renderer with lint",
       "source": "./",
       "strict": false,
       "skills": [
-        "./skills/human-readable-reports"
+        "./skills/korean-readable-reports"
       ]
     }
   ]

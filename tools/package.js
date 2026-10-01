@@ -3,12 +3,12 @@
 /**
  * claude.ai 업로드용 zip 만들기 — 의존성 없음(Node 18+).
  *
- *   node tools/package.js            → dist/human-readable-reports.zip
+ *   node tools/package.js            → dist/korean-readable-reports.zip
  *
  * zip 안 구조는 Anthropic skill-creator의 package_skill.py와 같다: 맨 위에 스킬 폴더 하나, 그 안에 SKILL.md.
- *   human-readable-reports/SKILL.md
- *   human-readable-reports/scripts/…
- *   human-readable-reports/references/…
+ *   korean-readable-reports/SKILL.md
+ *   korean-readable-reports/scripts/…
+ *   korean-readable-reports/references/…
  * 묶기 전에 같은 도구의 quick_validate.py 규칙으로 frontmatter를 검사한다
  * (허용 키 name·description·license·allowed-tools·metadata·compatibility, name은 kebab-case 64자 이하,
  *  description은 1024자 이하·꺾쇠 괄호 금지).
@@ -18,7 +18,7 @@ const path = require('path');
 const zlib = require('zlib');
 
 const ROOT = path.join(__dirname, '..');
-const NAME = 'human-readable-reports';
+const NAME = 'korean-readable-reports';
 const SKILL = path.join(ROOT, 'skills', NAME);
 const OUT = path.join(ROOT, 'dist', `${NAME}.zip`);
 
