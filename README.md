@@ -1,7 +1,6 @@
 # korean-readable-reports
 
 **AI 에이전트가 쓴 보고서를 팀이 실제로 읽게 만드는 스킬입니다.**
-[SummerRiversound/human-readable-reports](https://github.com/SummerRiversound/human-readable-reports)를 바탕으로, 한국어 보고서에 맞게 개량했습니다.
 
 ![type](https://img.shields.io/badge/type-agent%20skill-3d5a99) ![works with](https://img.shields.io/badge/works%20with-Claude%20Code%20%C2%B7%20claude.ai-2f8f5b) ![license](https://img.shields.io/badge/license-MIT-555)
 
@@ -44,7 +43,7 @@
 14. **자연스러운 한국어** — 번역투·업무 관용투를 고치고, 같은 개념은 한 단어로 씁니다.
 15. **모양이 내용이면 그립니다** — 흐름, 주고받기, 구조, 핵심 수치, 나란한 항목.
 
-전체 규칙과 체크리스트, 쓰지 않을 경우는 [`SKILL.md`](./skills/human-readable-reports/SKILL.md)에 있습니다.
+전체 규칙과 체크리스트, 쓰지 않을 경우는 [`SKILL.md`](./skills/korean-readable-reports/SKILL.md)에 있습니다.
 
 ## 설치
 
@@ -57,7 +56,7 @@
 
 업데이트는 `/plugin marketplace update dreeky-nerd`로 받습니다.
 
-**claude.ai (웹·데스크톱 앱).** [human-readable-reports.zip](https://github.com/dreeky-nerd/korean-readable-reports/releases/latest/download/human-readable-reports.zip)을 내려받아 앱의 스킬 설정에서 업로드합니다([방법](https://support.claude.com/en/articles/12512180-using-skills-in-claude)).
+**claude.ai (웹·데스크톱 앱).** [korean-readable-reports.zip](https://github.com/dreeky-nerd/korean-readable-reports/releases/latest/download/korean-readable-reports.zip)을 내려받아 앱의 스킬 설정에서 업로드합니다([방법](https://support.claude.com/en/articles/12512180-using-skills-in-claude)).
 이 zip은 스킬이 바뀔 때마다 GitHub Actions가 자동으로 다시 만들어 [Releases](https://github.com/dreeky-nerd/korean-readable-reports/releases)에 올립니다.
 렌더러와 lint는 Node 스크립트라서, HTML까지 만들려면 코드 실행이 켜져 있어야 합니다.
 
@@ -65,18 +64,17 @@
 
 ```bash
 git clone https://github.com/dreeky-nerd/korean-readable-reports
-cp -r korean-readable-reports/skills/human-readable-reports ~/.claude/skills/          # 모든 프로젝트
-cp -r korean-readable-reports/skills/human-readable-reports <project>/.claude/skills/  # 한 프로젝트
+cp -r korean-readable-reports/skills/korean-readable-reports ~/.claude/skills/          # 모든 프로젝트
+cp -r korean-readable-reports/skills/korean-readable-reports <project>/.claude/skills/  # 한 프로젝트
 ```
 
 보고서나 분석 문서를 써 달라고 하면 에이전트가 알아서 이 스킬을 불러옵니다.
-스킬 이름은 원작과 같은 `human-readable-reports`입니다.
 
 ## 구성
 
 | 경로 | 내용 |
 |---|---|
-| `skills/human-readable-reports/SKILL.md` | 에이전트가 따르는 규칙·작업 순서·체크리스트 |
+| `skills/korean-readable-reports/SKILL.md` | 에이전트가 따르는 규칙·작업 순서·체크리스트 |
 | `…/scripts/render.js` | md를 HTML 한 장으로 렌더(라이트·다크, 목차, Mermaid, 전용 블록), lint도 함께 실행 |
 | `…/scripts/lint.js` | 기계로 검사할 수 있는 규칙 검사 |
 | `…/references/template.html` | 렌더러가 채우는 페이지 디자인 |
@@ -110,8 +108,6 @@ node scripts/render.js report.md --strict # 경고가 있으면 exit 1 (CI·pre-
 그때는 쉬운 말보다 정확함이 먼저라서 `file:line`, 시그니처, 코드를 본문에 그대로 둡니다.
 이 스킬은 사람이 읽는 보고서용입니다.
 
-## 원작과 라이선스
+## 라이선스
 
-- 원작: [SummerRiversound/human-readable-reports](https://github.com/SummerRiversound/human-readable-reports) — 규칙 10개와 고치기 전후 예시의 바탕.
-- 한국어 개량: [dreeky-nerd](https://github.com/dreeky-nerd) — 한국어 보고서용 규칙(배경은 요청 분석, 자연스러운 한국어, 그릴지 판단), 한국어 용어 기준, 렌더러 디자인과 전용 블록, lint 확장.
-- MIT 라이선스 — [`LICENSE`](./LICENSE)에 원작자와 개량자 저작권 표시가 함께 있습니다.
+MIT — [`LICENSE`](./LICENSE)
