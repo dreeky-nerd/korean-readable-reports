@@ -1,0 +1,7 @@
+# 작업 폴더·렌더 시험 결과·업로드용 zip은 저장소에 넣지 않음.
+# zip은 GitHub Actions(.github/workflows/package.yml)가 만들어 "latest" 릴리스에 올린다
+_work/
+*.html
+!**/references/template.html
+*.zip
+dist/
