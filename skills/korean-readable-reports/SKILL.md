@@ -193,7 +193,9 @@ easy.
    2, 4, 6, 7, 8, 9, 11, 13, 14, required frontmatter, and structural traps the
    renderer would otherwise swallow silently (unclosed fence, table column
    mismatch). Fix every finding in the md. Hints (rule 15: "this looks like a
-   flow — draw it?") are printed separately; judge each one.
+   flow — draw it?"; consistency: a summary number missing from the body, "세
+   가지입니다" above a list of two, a "뒤에서 다루겠습니다" to follow up) are
+   printed separately; judge each one.
 4. `node <skill-dir>/scripts/render.js reports/<file>.md` — produces the `.html` next to it
    (falls back to Desktop `reports/` if it can't write there) and runs lint first.
    Tell the reader the full path of the HTML. `--strict` exits 1 on any finding without writing
