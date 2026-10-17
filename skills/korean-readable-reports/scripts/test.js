@@ -78,6 +78,101 @@ test('flow 역할·빈 블록·초과 칸 검사', () => {
 });
 test('잘못된 테마 값 검사', () => assert.ok(lint(fm.replace('---\n', '---\ntheme: sepia\n'), {plain: true, renderer: true}).some(f => f.rule === 'fm')));
 
+// ── 규칙 2: 빈 예고·제목 반복·수정 과정 ────────────────────────────────────
+const bluf = (body, opts) => lint(fm + body, opts)
+  .filter(f => f.rule === 2 && !/요약 박스/.test(f.msg));
+const blufCases = [
+  ['자기 문서 예고', false,
+    ['이 섹션에서는 비용을 다룹니다.', '본 보고서에서는 결과를 정리합니다.'],
+    ['이 문서에서는 결제 모듈은 다루지 않습니다.', '이 서비스에서는 요청을 처리합니다.']],
+  ['표·그림 예고', true,
+    ['아래 표는 비용을 비교합니다.', '다음 목록에서는 실패 원인을 정리합니다.'],
+    ['아래 표에서 비용이 20% 줄었습니다.', '다음 요청에서는 캐시를 비웁니다.']],
+  ['제목 반복', true,
+    ['## 오류 처리 현황\n오류 처리는 오류 처리 현황입니다.', '## API 비용\nAPI 비용은 API 비용이다.'],
+    ['## 오류 처리\n오류 처리는 재시도를 포함합니다.', '## API 비용\nAPI 비용은 월별 사용량입니다.']],
+  ['수정 과정', true,
+    ['처음에는 자동이라고 썼다가 바꿨습니다.', '초안에서는 처리 순서를 수정했습니다.'],
+    ['처음에는 캐시를 확인했습니다.', '초안에서 정의한 조건을 검증했습니다.']],
+];
+for (const [name, hint, positives, negatives] of blufCases) {
+  test(`규칙 2: ${name} 최소쌍과 hint`, () => {
+    for (const body of positives) {
+      const found = bluf(body);
+      assert.equal(found.length, 1, body);
+      assert.equal(found[0].hint, hint, body);
+    }
+    for (const body of negatives) assert.deepEqual(bluf(body), [], body);
+  });
+}
+test('규칙 2: 지정한 예고·수정 과정 활용형', () => {
+  for (const subject of ['이 섹션', '본 절', '이 장', '본 문서', '이 보고서', '본 글']) {
+    for (const verb of ['다룹니다', '살펴봅니다', '살펴보겠습니다', '정리합니다', '설명합니다', '알아봅니다', '소개합니다', '다루겠습니다']) {
+      assert.equal(bluf(`${subject}에서는 결과를 ${verb}.`)[0]?.hint, false, `${subject} ${verb}`);
+    }
+  }
+  for (const noun of ['표', '그림', '목록', '도표', '다이어그램', '흐름도']) {
+    for (const [prefix, particle, verb] of [['아래', '는', '비교합니다'], ['다음', '은', '정리합니다'], ['위', '에서는', '보여 줍니다'], ['위의', '에서', '보여줍니다'], ['아래', '는', '나타냅니다']]) {
+      assert.equal(bluf(`${prefix} ${noun}${particle} 결과를 ${verb}.`)[0]?.hint, true);
+    }
+  }
+  for (const verb of ['썼습니다', '적었습니다', '작성했습니다']) assert.equal(bluf(`처음에는 결과를 ${verb}.`)[0]?.hint, true);
+  for (const verb of ['고쳤습니다', '바꿨습니다', '수정했습니다']) assert.equal(bluf(`초안에서 결과를 ${verb}.`)[0]?.hint, true);
+  for (const body of ['이 문서에서는 결제를 다루지 않습니다.', '본 보고서에서는 비용을 정리하지 않습니다.', '결과를 확인했습니다.', '먼저 결론입니다. 이 문서에서는 결제를 다루지 않습니다.']) assert.deepEqual(bluf(body), [], body);
+});
+test('규칙 2: plain에서는 네 유형 모두 비활성', () => {
+  for (const [, , positives] of blufCases) {
+    for (const body of positives) assert.deepEqual(lint(fm + body, {plain: true}).filter(f => f.rule === 2), [], body);
+  }
+});
+test('규칙 2: 코드·인용·근거·글 블록 펜스 제외 및 줄 번호', () => {
+  const sentences = blufCases.flatMap(([, , positives]) => positives);
+  for (const body of sentences) {
+    for (const wrapped of [
+      `\`\`\`text\n${body}\n\`\`\``, `~~~\n${body}\n~~~`, `\`${body.replace(/\n/g, ' ')}\``,
+      `"${body.replace(/\n/g, ' ')}"`, `'${body.replace(/\n/g, ' ')}'`, `‘${body.replace(/\n/g, ' ')}’`,
+      `“\n${body}\n”`, `「\n${body}\n」`, `『\n${body}\n』`,
+      body.split('\n').map(l => '근거: ' + l).join('\n'),
+      `\`\`\`flow ${body.replace(/\n/g, ' ')}\n노드 | 결과 | done\n\`\`\``,
+    ]) assert.deepEqual(bluf(wrapped), [], wrapped);
+  }
+  const doc = fm + '“인용 시작\n이 섹션에서는 비용을 다룹니다.\n”\n이 섹션에서는 결과를 설명합니다.';
+  const found = lint(doc).filter(f => f.rule === 2 && !/요약 박스/.test(f.msg));
+  assert.equal(found.length, 1); assert.equal(found[0].line, 9);
+});
+test('규칙 2: 제목 반복은 H2 첫 문장만, 새 정보·다른 구조 제외', () => {
+  for (const body of [
+    '## 오류 처리\n오류 처리는 재시도를 포함합니다. 오류 처리는 오류 처리입니다.',
+    '## 오류 처리\n재시도를 지원합니다.\n오류 처리는 오류 처리입니다.',
+    '## 오류 처리\n### 오류 처리\n오류 처리는 오류 처리입니다.',
+    '# 오류 처리\n오류 처리는 오류 처리입니다.',
+    '## 오류 처리\n오류 처리는 20ms 빨라졌습니다.',
+    '## API 비용\nAPI 비용은 30%입니다.',
+    '## 월 비용\n월 비용은 100원입니다.',
+    '## 비용\n비용은 20입니다.',
+    '## 비용\n비용은 “월별 사용량”입니다.',
+    '## 비용\n비용은 `사용량`입니다.',
+  ]) assert.deepEqual(bluf(body), [], body);
+  assert.equal(bluf('## 오류 처리\n\n오류 처리는 오류 처리입니다. 새 정보가 뒤에 옵니다.')[0]?.hint, true);
+});
+test('규칙 2: 글 블록은 펜스 줄만 제외하고 본문은 검사', () => {
+  for (const kind of ['flow', 'stats', 'cards']) {
+    assert.equal(bluf(`\`\`\`${kind}\n이 섹션에서는 비용을 다룹니다.\n\`\`\``)[0]?.hint, false, kind);
+  }
+});
+test('규칙 2: 단순 낱말 비교의 알려진 미검출', () => {
+  for (const body of [
+    '## 오류 처리\n오류 처리는 다음과 같습니다.', // 서술 틀·불용어까지 해석하지 않는다
+    '## 권한 검사\n권한 검사는 권한을 검사합니다.', // 동사 어간을 복원하지 않는다
+    '## 오류 처리\n오류 처리에 관하여\n오류 처리는 오류 처리입니다.', // 여러 줄 문장을 합치지 않는다
+  ]) assert.deepEqual(bluf(body), [], `알려진 미검출: ${body}`);
+});
+test('규칙 2: 2자 미만 새 낱말은 제목 반복의 알려진 오탐', () => {
+  // 명시한 2자 이상 낱말만 비교하므로 새 정보인 한 글자 "앱"을 구분하지 못한다.
+  const found = bluf('## 배포 대상\n배포 대상은 앱입니다.');
+  assert.equal(found.length, 1); assert.equal(found[0].hint, true);
+});
+
 // ── 규칙 14: HEAD 최상위 대안 9 + BODY 19 + SOFT 2 + COUNTED 4 + MIX 3 = 37 ──
 // 각 행은 [패턴 ID, 메시지 식별자, 걸릴 문장, 정상 문장, 힌트 여부]. 다른 규칙의 경고는 제외한다.
 test('규칙 14: 37개 패턴별 최소쌍', () => {
