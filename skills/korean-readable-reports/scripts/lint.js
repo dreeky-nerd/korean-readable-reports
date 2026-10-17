@@ -229,9 +229,17 @@ function lint(src, opts = {}) {
   // ─────────────── 아래는 이 스킬의 문체 규칙(기본 모드만) ───────────────
 
   // 규칙 2·14 공용: 여러 줄 인용도 가리되 줄 번호는 보존한다.
-  // 곧은따옴표·홑따옴표는 아포스트로피·코드 예문과 겹쳐 한 줄 안에서만 가린다.
+  // 곧은따옴표는 줄바꿈 하나까지(문단을 줄마다 끊어 쓰면 인용이 두 줄에 걸친다), 홑따옴표는 아포스트로피와 겹쳐 한 줄 안에서만.
   const unquoted = lines.join('\n').replace(/“[^”]{0,800}”|「[^」]{0,800}」|『[^』]{0,800}』/g,
     m => '""' + '\n'.repeat((m.match(/\n/g) || []).length)).split('\n');
+  // 곧은따옴표가 두 줄에 걸친 인용: 두 줄 모두 따옴표 수가 홀수일 때만 이어 본다(짝이 맞는 줄끼리 묶으면 뒤 짝이 어긋난다)
+  const oddQuotes = l => (l.replace(/`[^`]*`/g, '').match(/"/g) || []).length % 2 === 1;
+  for (let i = 0; i + 1 < unquoted.length; i++) {
+    if (!oddQuotes(unquoted[i]) || !oddQuotes(unquoted[i + 1])) continue;
+    unquoted[i] = unquoted[i].slice(0, unquoted[i].lastIndexOf('"')) + '""';
+    unquoted[i + 1] = unquoted[i + 1].slice(unquoted[i + 1].indexOf('"') + 1);
+    i++;
+  }
   const proseLines = unquoted.map(l => l.replace(/`[^`]*`/g, '')
     .replace(/\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, ']()')
     .replace(/"[^"\n]*"|“[^”\n]*”|‘[^’\n]*’|'[^'\n]*'/g, '""'));
@@ -291,18 +299,26 @@ function lint(src, opts = {}) {
   // 정합성(힌트, 규칙 2): 요약과 본문, 예고와 목록이 서로 맞는지. 문장 품질 검사가 못 보는 내용 모순을 일부 잡는다.
   // 근거: hanlint countMismatch·promiseRecall 방식(docs/research/2026-10-17-korean-polish-trends.md 4-5절). 정확 일치만 보고 반올림은 사람이 판단
   {
-    const quoteEnd = summaryLine && !meta.summary ? (() => { let j = summaryLine; while (j < lines.length && /^>/.test(lines[j])) j++; return j; })() : -1;
+    // 인용 요약이면 그 인용 줄들은 본문에서 뺀다(요약이 자기 근거가 되지 않게). summaryLine 0은 "첫 줄 인용"일 수도 있어 따로 판정
+    const quoteSummary = !meta.summary && !!summary;
+    const quoteEnd = quoteSummary ? (() => { let j = summaryLine; while (j < lines.length && /^>/.test(lines[j])) j++; return j; })() : -1;
+    const summaryAt = meta.summary ? Math.max(0, lines.slice(0, start).findIndex(l => /^summary:/.test(l))) : summaryLine;
     const norm = t => t.replace(/(\d),(?=\d{3})/g, '$1').replace(/(\d)\s+(?=[%A-Za-z가-힣])/g, '$1');
-    const body = norm(lines.filter((_, i) => i >= start && !(i >= summaryLine && i < quoteEnd)).join('\n'));
+    const body = norm(lines.filter((_, i) => i >= start && !(quoteSummary && i >= summaryLine && i < quoteEnd)).join('\n'));
+    // 숫자 경계까지 맞아야 같은 수 — "12%"가 "112%"·"0.12%" 안에 들어 있다고 근거로 치지 않는다
+    const inBody = t => new RegExp('(?<![\\d.,])' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + (/\d$/.test(t) ? '(?![\\d.])' : '')).test(body);
     const NUM = /\d[\d,]*(?:\.\d+)?\s?(?:%|ms|초|분|시간|일|건|개|배|명|회|원|만|억|[KMGT]B|px)?/g;
     const missing = (norm(summary.replace(/\d{4}[-.]\d{1,2}[-.]\d{1,2}/g, '')).match(NUM) || [])
-      .map(t => t.trim()).filter(t => /\D$|\.\d|\d{2}/.test(t) && !body.includes(t));
-    if (missing.length) warn(summaryLine, 2, `요약 수치 ${[...new Set(missing)].map(t => `"${t}"`).join('·')}가 본문에 없음 — 근거 위치를 본문에 두기 (반올림한 값이면 무시)`, true);
+      .map(t => t.trim()).filter(t => /\D$|\.\d|\d{2}/.test(t) && !inBody(t));
+    if (missing.length) warn(summaryAt, 2, `요약 수치 ${[...new Set(missing)].map(t => `"${t}"`).join('·')}가 본문에 없음 — 근거 위치를 본문에 두기 (반올림했거나 단위만 바꿔 쓴 값이면 무시)`, true);
 
     // 개수 약속: "세 가지입니다" 다음에 바로 오는 목록·flow·cards·표의 항목 수와 비교
     const KO_NUM = { 두: 2, 세: 3, 네: 4, 다섯: 5, 여섯: 6, 일곱: 7, 여덟: 8, 아홉: 9, 열: 10 };
     // 약속 = 문장 끝에서 개수를 예고하는 줄만("원인은 세 가지입니다.", "4단계로 처리됩니다:"). 줄 중간의 "8개 서비스 중"은 약속이 아님
+    // 줄 끝 40자만 본다 — 긴 줄 전체에 $ 고정 정규식을 돌리면 되짚기가 길이의 제곱으로 는다
     const PROMISE = /(\d+|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\s?(가지|개|단계|곳)(?:입니다|이다|다|예요|이에요|로 (?:나뉩니다|처리됩니다|진행됩니다|정리합니다|나눕니다)|가 있습니다|가 있다)?\s*[.:：]?\s*$/;
+    // "다음 세 가지를 확인했습니다:"처럼 콜론으로 목록을 여는 예고
+    const COLON_PROMISE = /(?:^|\s)(\d+|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\s?(가지|개|단계|곳)[^.!?]{0,30}[:：]\s*$/;
     const itemsAfter = i => {
       let j = i + 1;
       if (j < lines.length && !lines[j].trim()) j++;
@@ -315,7 +331,16 @@ function lint(src, opts = {}) {
         return null;
       }
       const li = lines[j].match(/^(\s*)([-*]|\d+\.)\s/);
-      if (li) { let n = 0; for (; j < lines.length && lines[j].trim(); j++) if ((lines[j].match(/^(\s*)([-*]|\d+\.)\s/) || [])[1] === li[1]) n++; return n; }
+      if (li) {
+        // 같은 들여쓰기 항목 수. 항목 사이 빈 줄 하나는 같은 목록으로 본다(느슨한 목록)
+        const item = l => (l.match(/^(\s*)([-*]|\d+\.)\s/) || [])[1] === li[1];
+        let n = 0;
+        for (; j < lines.length; j++) {
+          if (!lines[j].trim()) { if (j + 1 < lines.length && item(lines[j + 1])) continue; break; }
+          if (item(lines[j])) n++;
+        }
+        return n;
+      }
       if (/^\s*\|/.test(lines[j])) { let n = 0; for (; j < lines.length && /^\s*\|/.test(lines[j]); j++) n++; return n - 2; }
       return null;
     };
@@ -323,8 +348,9 @@ function lint(src, opts = {}) {
     for (let i = start; i < lines.length; i++) {
       if (fenceAt[i] || SOURCES_RE.test(lines[i])) continue;
       const text = proseLines[i];
-      if (/(뒤에서|아래에서|다음 (?:절|장|섹션)에서|나중에)[^.!?]{0,30}(다루겠습니다|설명하겠습니다|살펴보겠습니다|다루겠다|설명하겠다)/.test(text)) later.push(i);
-      const promised = text.match(PROMISE);
+      if (/(뒤에서|아래에서|다음 (?:절|장|섹션)에서|나중에)[^.!?]{0,30}(다루겠습니다|설명하겠습니다|살펴보겠습니다|다루겠다|설명하겠다)(?![가-힣])/.test(text)) later.push(i);
+      const tail = text.slice(-40);
+      const promised = tail.match(PROMISE) || tail.match(COLON_PROMISE);
       if (!promised || /^\s*(#|\||[-*]\s|\d+\.\s|>)/.test(text)) continue;
       const want = KO_NUM[promised[1]] || Number(promised[1]), got = itemsAfter(i);
       if (want < 2 || want > 10) continue;
