@@ -53,8 +53,9 @@ easy.
    obviousness. Shorter is kinder. Cut only *unsupported* hedges: a "should",
    a "may", or a `[미검증]` that the source or evidence carries stays — and
    don't add hedges the source didn't have. Never pick a stronger verb than
-   the work earned (관찰 < 추정 < 확인 < 검증 < 완료; table in
-   `references/ko-terms.md` §4). Hard limits: summary ≤ 3 sentences, ≤ 7 H2
+   the work earned — 관찰, 추정, 확인, 검증, 완료 each need their own
+   evidence (table in `references/ko-terms.md` §4). They are not one ranking:
+   "관찰 기록 작성 완료, 동작 검증 미실시" is a normal state. Hard limits: summary ≤ 3 sentences, ≤ 7 H2
    sections, ≤ 12 lines of prose per section — anything past that goes behind
    `<details>` or into an appendix.
 9. **Progressive disclosure.** Hide depth behind expandable sections (collapsible
@@ -192,10 +193,10 @@ easy.
 3. `node <skill-dir>/scripts/lint.js report.md` — machine checks for rules 1 (external),
    2, 4, 6, 7, 8, 9, 11, 13, 14, required frontmatter, and structural traps the
    renderer would otherwise swallow silently (unclosed fence, table column
-   mismatch). Fix every finding in the md. Hints (rule 15: "this looks like a
-   flow — draw it?"; consistency: a summary number missing from the body, "세
-   가지입니다" above a list of two, a "뒤에서 다루겠습니다" to follow up) are
-   printed separately; judge each one.
+   mismatch). Fix every finding in the md. Hints are printed separately;
+   judge each one. They cover rule 15 ("this looks like a flow — draw it?")
+   and consistency: a summary number missing from the body,
+   "세 가지입니다" above a list of two, a "뒤에서 다루겠습니다" to follow up.
 4. `node <skill-dir>/scripts/render.js reports/<file>.md` — produces the `.html` next to it
    (falls back to Desktop `reports/` if it can't write there) and runs lint first.
    Tell the reader the full path of the HTML. `--strict` exits 1 on any finding without writing

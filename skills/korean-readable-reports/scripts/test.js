@@ -328,6 +328,17 @@ test('정합성 힌트: 요약 수치·개수 약속·미룬 약속', () => {
   assert.equal(got(doc('a', '## 범위\n\n8개 서비스 중 아래 표의 서비스만 바꿨습니다.\n\n| 서비스 | 상태 |\n| --- | --- |\n| A | 완료 |'), /개수 약속/).length, 0);
   assert.equal(got(doc('a', '## 목록\n\n- 항목은 세 가지입니다.\n- 둘째 항목입니다.'), /개수 약속/).length, 0);
   assert.equal(got(doc('a', '## 단계\n\n배포는 다음 3단계로 진행됩니다.\n\n1. 빌드합니다.\n2. 올립니다.'), /개수 약속/).length, 1);
+  // codex 최종 검수(2026-10-17)
+  assert.equal(got(doc('지연이 12% 늘었다.', '## 결과\n\n지연은 112% 늘었고 오류는 0.12%입니다.'), /요약 수치/).length, 1, '부분 문자열은 근거 아님');
+  assert.equal(got(doc('a', '## 원인\n\n원인은 세 가지입니다.\n\n1. 캐시입니다.\n\n2. 연결 수입니다.\n\n3. 타임아웃입니다.'), /개수 약속/).length, 0, '빈 줄로 띄운 목록');
+  assert.equal(got(doc('a', '## 확인\n\n다음 세 가지를 확인했습니다:\n\n- 로그를 봤습니다.\n- 지표를 봤습니다.'), /개수 약속/).length, 1, '콜론 예고');
+  assert.equal(got(doc('a', '## 범위\n\n뒤에서 설명하겠다는 약속은 하지 않았습니다.\n\n뒤에서 다루겠다는 문장을 삭제했습니다.'), /미룬 약속/).length, 0);
+  assert.equal(got(doc('a', '## 예문\n\n예문 "세\n가지입니다"와 "뒤에서 다루겠습니다"를 인용했다.'), /미룬 약속/).length, 0, '두 줄 곧은따옴표');
+  // 줄마다 짝이 맞는 따옴표는 다음 줄과 묶지 않는다(묶으면 뒤 따옴표 짝이 어긋나 인용 예문이 노출됨 — ko-terms.md에서 실제 발생)
+  assert.deepEqual(lint(fm + '| 표현 | 예 |\n| --- | --- |\n| 바랍니다 | "확인하시기 바랍니다" → "확인해 주세요" |\n| 진행 | "검증을 진행합니다" → "검증합니다" |').filter(f => f.rule === 14), []);
+  { const d = '> 지연은 340ms입니다.\n\n## 결과\n\n수치는 없습니다.'; assert.equal(got(d, /요약 수치/).length, 1, '첫 줄 인용 요약'); }
+  { const f = got(doc('지연 340ms.', '## 결과\n\n없음.'), /요약 수치/); assert.equal(f[0].line, 5, 'frontmatter summary 줄을 가리킴'); }
+  { const t = Date.now(); lint(doc('a', '1'.repeat(50000) + '개x')); assert.ok(Date.now() - t < 1500, (Date.now() - t) + 'ms'); }
   // 미룬 약속: 한 번 알림
   const later = got(doc('a', '## 배경\n\n자세한 원인은 뒤에서 다루겠습니다.\n\n## 원인\n\n아래에서 설명하겠습니다.'), /미룬 약속/);
   assert.equal(later.length, 1); assert.ok(later[0].hint);
