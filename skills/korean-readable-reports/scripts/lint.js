@@ -16,7 +16,7 @@
  *       date는 실제 있는 날짜 YYYY-MM-DD / audience·theme 값
  *   1   audience: external(또는 --external) — 브랜치 경로(feature/…)·내부 호스트·개인 로컬 경로·IP·사번 패턴, redact: 목록(쉼표 구분).
  *       frontmatter·코드·접힌 상세까지 전부 보고, 찾은 문자열은 출력하지 않는다(CI 로그에 다시 새지 않게)
- *   2   요약 박스(frontmatter.summary 또는 첫 H2 이전 인용문) 문장 3개 초과
+ *   2   요약 박스 문장 3개 초과 / 자기 문서 예고 / (힌트) 표·그림 예고·H2 첫 문장의 제목 반복·수정 과정
  *   4   불릿이 서술어 없이 끝남(단편 의심) — 한국어: 다/요/음/함/됨/./: 로 안 끝나는 항목
  *   6   본문 문장 안에 file:line (근거: 줄·코드펜스·표 제외)
  *   7   표 셀이 백틱 코드만으로 채워짐
@@ -226,6 +226,48 @@ function lint(src, opts = {}) {
 
   // ─────────────── 아래는 이 스킬의 문체 규칙(기본 모드만) ───────────────
 
+  // 규칙 2·14 공용: 여러 줄 인용도 가리되 줄 번호는 보존한다.
+  // 곧은따옴표·홑따옴표는 아포스트로피·코드 예문과 겹쳐 한 줄 안에서만 가린다.
+  const unquoted = lines.join('\n').replace(/“[^”]{0,800}”|「[^」]{0,800}」|『[^』]{0,800}』/g,
+    m => '""' + '\n'.repeat((m.match(/\n/g) || []).length)).split('\n');
+  const proseLines = unquoted.map(l => l.replace(/`[^`]*`/g, '')
+    .replace(/\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, ']()')
+    .replace(/"[^"\n]*"|“[^”\n]*”|‘[^’\n]*’|'[^'\n]*'/g, '""'));
+
+  // 규칙 2: 예고 대신 발견을 앞에 쓴다. 문장 머리를 고정해 긴 줄의 되짚기를 막는다.
+  {
+    const previews = [
+      [/^(?:이|본) (?:섹션|절|장|문서|보고서|글)에서는\s+.*(?:다룹니다|살펴봅니다|살펴보겠습니다|정리합니다|설명합니다|알아봅니다|소개합니다|다루겠습니다)(?=\s|$)/, '자기 문서 예고 — 다룰 주제 대신 발견 자체로 시작하기', false],
+      [/^(?:아래|다음|위의?) (?:표|그림|목록|도표|다이어그램|흐름도)(?:는|은|에서는|에서)\s+.*(?:비교합니다|정리합니다|보여 줍니다|보여줍니다|나타냅니다)(?=\s|$)/, '표·그림 예고 — 표 제목 역할인지 검토하고 발견을 먼저 쓰기', true],
+      [/^(?:처음에는\s+.*(?:썼|적었|작성했)|초안에서는?\s+.*(?:고쳤|바꿨|수정했))/, '수정 과정 — 고친 과정 대신 최종 발견을 쓰기', true],
+    ];
+    // shortcut: 조사·서술격만 떼는 낱말 비교. 동사 활용·동의어까지 필요하면 형태소 분석을 검토한다.
+    const words = text => [...new Set(text.match(/[가-힣A-Za-z]+/g) || [])]
+      .map(w => w.replace(/(?:입니다|이다|에서는|에서|으로|에게|까지|부터|은|는|이|가|을|를|의|에|와|과|도|만|로)$/, '').toLowerCase())
+      .filter(w => w.length >= 2);
+    let title = null;
+    for (let i = start; i < lines.length; i++) {
+      const fb = fenceAt[i];
+      if (fb && (i === fb.open || i === fb.close || !/^(flow|stats|cards)$/.test(fb.kind))) continue;
+      if (SOURCES_RE.test(unquoted[i])) continue;
+      const text = proseLines[i].trim();
+      const h = text.match(/^(#{1,6})\s+(.*)$/);
+      if (h) { title = h[1] === '##' ? new Set(words(h[2])) : null; continue; }
+      if (!text || /^\||^<|^[-*_]{3,}$/.test(text) || !/[가-힣A-Za-z]/.test(text)) continue;
+      const sentences = text.replace(/^(?:>\s*|(?:[-*]|\d+\.)\s+)?/, '').split(/[.!?。]/);
+      for (const sentence of sentences) {
+        for (const [re, why, hint] of previews) if (re.test(sentence.trim())) warn(i, 2, why, hint);
+      }
+      if (title) {
+        const first = sentences[0], tokens = words(first);
+        // 수치 또는 인용·코드에 새 정보가 있을 수 있으므로 제목 반복으로 판정하지 않는다.
+        if (tokens.length && !/\d|""/.test(first) && !lines[i].includes('`') &&
+            tokens.every(w => title.has(w))) warn(i, 2, '제목 반복 — 첫 문장에 제목에 없는 발견을 쓰기', true);
+        title = null;
+      }
+    }
+  }
+
   // 요약 박스
   let summary = meta.summary || '', summaryLine = 0;
   if (!summary) {
@@ -413,18 +455,13 @@ function lint(src, opts = {}) {
       (w === '리턴' ? '(?!\\s+로스)' : ''), 'g')));
     const counts = COUNTED.map(() => ({ n: 0, line: -1 }));
     const mix = MIX.map(ws => ws.map(() => ({ n: 0, line: -1 })));
-    // 여러 줄에 걸친 인용(“…”, 「…」, 『…』)은 문서 전체에서 먼저 가린다 — 줄 단위로만 가리면 인용 속 문형이 횟수에 섞인다.
-    // 줄바꿈은 남겨서 줄 번호를 지킨다. 곧은따옴표·홑따옴표는 아포스트로피·코드 예문과 겹쳐 한 줄 안에서만 가린다(아래)
-    const unquoted = lines.join('\n').replace(/“[^”]{0,800}”|「[^」]{0,800}」|『[^』]{0,800}』/g,
-      m => '""' + '\n'.repeat((m.match(/\n/g) || []).length)).split('\n');
     for (let i = start; i < lines.length; i++) {
       const l = unquoted[i], fb = fenceAt[i];
       // 글 블록(flow·stats·cards)의 안쪽은 검사, 펜스 줄 자체와 코드·mermaid는 건너뜀
       if (fb && (i === fb.open || i === fb.close || !/^(flow|stats|cards)$/.test(fb.kind))) continue;
       if (SOURCES_RE.test(l)) continue;
       // 추정: 표시 문구만 검사. 링크 목적지와 인용·코드는 제목/본문에서 같은 방식으로 제외한다.
-      const text = l.replace(/`[^`]*`/g, '').replace(/\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, ']()')
-        .replace(/"[^"\n]*"|“[^”\n]*”|‘[^’\n]*’|'[^'\n]*'/g, '""');
+      const text = proseLines[i];
       const h = text.match(/^#{2,4}\s+(.*)$/);
       if (h) { const m = h[1].trim().match(HEAD); if (m) warn(i, 14, `소제목 은유 "${m[0]}" — 사실을 말하는 소제목으로 (예: "요청 처리 흐름", "등록 테이블 목록")`); continue; }
       for (const [re, why] of BODY) { const m = text.match(re); if (m) warn(i, 14, `"${m[0].trim()}" — ${why}`); }

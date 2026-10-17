@@ -27,6 +27,8 @@ easy.
    box is at most three short sentences: what it does / how it's used / what
    to decide. One modifier per noun — no stacked qualifiers ("with evidence
    and reference links and…"), no analogy, no restating the title.
+   Open with the finding itself; do not repeat the heading or announce
+   "This section covers…".
 3. **Analogy only where a concept is hard — one clause, beside that concept.**
    When a mechanism is genuinely unfamiliar to the reader, add one short
    comparison right where it is explained (e.g. a cache → "reusing a picture
