@@ -191,7 +191,7 @@ test('규칙 14: 측정된 한국어 AI 문형 4종은 힌트(경고 아님)', (
   assert.equal(pair.length, 1); assert.ok(pair[0].hint);
   assert.equal(hint('인증뿐만 아니라 권한도 봅니다.\n\n로그뿐 아니라 지표도 봅니다.', /부정 대구/).length, 0);
   // 역방향 결산 "~하는 이유다": 1회부터 힌트
-  for (const s of ['설정을 바꿔도 반영이 안 되는 이유가 이것입니다.', '재시도가 늘어난 이유다.', '캐시를 끈 이유입니다.']) assert.equal(hint(s, /이유/).length, 1, s);
+  for (const s of ['설정을 바꿔도 반영이 안 되는 이유가 이것입니다.', '이것이 재시도가 늘어난 이유다.', '그게 캐시를 끈 이유입니다.']) assert.equal(hint(s, /이유/).length, 1, s);
   for (const s of ['실패 이유는 세 가지입니다.', '이유를 로그에서 확인했습니다.']) assert.equal(hint(s, /이유/).length, 0, s);
   // 분열문 "핵심은 ~이다": 2회부터
   assert.equal(hint('핵심은 재시도 횟수입니다.', /분열문/).length, 0);
@@ -200,8 +200,18 @@ test('규칙 14: 측정된 한국어 AI 문형 4종은 힌트(경고 아님)', (
   // 범위 상승 "단순한 X를 넘어": 1회부터
   assert.equal(hint('단순한 캐시를 넘어 세션 저장소로 씁니다.', /범위 상승/).length, 1);
   assert.equal(hint('요청 수가 한도를 넘어 실패했습니다.', /범위 상승/).length, 0);
-  // 코드·따옴표 안은 남의 말
+  // 코드·따옴표 안은 남의 말 — 여러 줄 인용과 「」도
   assert.equal(hint('"캐시가 아니라 DB" 라는 제목\n\n`A가 아니라 B`', /부정 대구/).length, 0);
+  assert.equal(hint('“원인은 캐시가 아니라 DB입니다.\n문제는 코드가 아니라 설정입니다.”라고 설명했습니다.', /부정 대구/).length, 0);
+  assert.equal(hint('담당자는 「원인은 캐시가 아니라 DB입니다. 문제는 코드가 아니라 설정입니다」라고 답했습니다.', /부정 대구/).length, 0);
+  // codex 검수(2026-10-17)에서 나온 오탐·미검출
+  for (const s of ['실패 이유가 바로 로그에 기록됩니다.', '실패 이유가 여기저기 흩어져 있어 로그를 모았습니다.', '이 필드는 사용자가 선택한 이유입니다.']) assert.equal(hint(s, /이유/).length, 0, s);
+  for (const s of ['이것이 캐시를 유지하는 이유였다.', '캐시를 유지하는 이유가 바로 여기에 있다.', '그래서 재시도가 필요한 이유입니다.']) assert.equal(hint(s, /이유/).length, 1, s);
+  for (const s of ['단순한 계산으로 구한 값을 넘어선 측정치는 제외했습니다.', '단순히 요청 수가 한도를 넘어서면 연결을 닫습니다.']) assert.equal(hint(s, /범위 상승/).length, 0, s);
+  assert.equal(hint('로그뿐  아니라 지표도 확인했습니다.\n\n설정뿐  아니라 환경 변수도 확인했습니다.', /부정 대구/).length, 0);
+  assert.equal(hint('원인은 캐시가 아니라\nDB입니다.\n\n문제는 코드가 아니라 설정입니다.', /부정 대구/).length, 1);
+  assert.equal(hint('중요한 점은 장애 격리이다.\n\n핵심은 속도다.', /분열문/).length, 1);
+  assert.equal(hint('필요한 것은 없는 레코드를 추가하는 일입니다.\n\n핵심은 속도입니다.', /분열문/).length, 1);
 });
 
 test('규칙 14: 좁은 문맥 판별로 남긴 알려진 미검출', () => {
@@ -219,6 +229,8 @@ test('규칙 14: 좁은 문맥 판별로 남긴 알려진 미검출', () => {
   for (const [id, sentence] of missed) {
     assert.deepEqual(lint(fm + sentence).filter(f => f.rule === 14), [], `알려진 미검출 ${id}: ${sentence}`);
   }
+  // 알려진 미검출(AI 문형): "아닌 B다"는 "정수가 아닌 값"처럼 정상 용법이 흔해 잡지 않는다
+  assert.deepEqual(lint(fm + '병목은 캐시가 아닌 DB다.\n\n원인은 메모리가 아닌 CPU다.').filter(f => f.rule === 14), []);
 });
 
 // ── render: 마크다운 해석 ──────────────────────────────────────────────────
