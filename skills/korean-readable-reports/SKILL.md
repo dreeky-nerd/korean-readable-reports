@@ -180,8 +180,14 @@ easy.
    mismatch). Fix every finding in the md. Hints (rule 15: "this looks like a
    flow — draw it?") are printed separately; judge each one.
 4. `node <skill-dir>/scripts/render.js reports/<file>.md` — produces the `.html` next to it
-   (falls back to Desktop `reports/` if it can't write there) and re-runs lint.
-   Tell the reader the full path of the HTML. `--strict` exits 1 on any finding (CI / pre-commit gate).
+   (falls back to Desktop `reports/` if it can't write there) and runs lint first.
+   Tell the reader the full path of the HTML. `--strict` exits 1 on any finding without writing
+   the HTML (CI / pre-commit gate). Raw HTML is cleaned: only allowlisted tags and
+   attributes survive, so `<script>` and `on…=` never reach the page.
+   Other skills whose documents don't follow these writing rules (plans,
+   proposals) render with `--plain` — structure/safety lint only, quotes stay
+   quotes, soft line breaks. Flags are listed at the top of `scripts/render.js`;
+   `node scripts/test.js` is the regression suite.
 5. If the draft still reads like a default agent report, read
    `references/examples.md` (twelve before/after pairs, one per failure mode,
    plus how the same finding shifts per audience) and rewrite.

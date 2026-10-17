@@ -449,6 +449,16 @@
 <div class="footer">{{작성자·생성 도구 한 줄 — 예: 작성 {{작업일}} · korean-readable-reports}}</div>
 
 <script>
+  // 인쇄할 때는 접힌 상세(details)를 전부 펼쳐 상세가 빠지지 않게 하고, 인쇄가 끝나면 보던 상태로 되돌린다
+  var printState = [];
+  window.addEventListener('beforeprint', function () {
+    printState = Array.prototype.map.call(document.querySelectorAll('details'), function (d) { return [d, d.open]; });
+    printState.forEach(function (s) { s[0].open = true; });
+  });
+  window.addEventListener('afterprint', function () {
+    printState.forEach(function (s) { s[0].open = s[1]; });
+    printState = [];
+  });
   // 목차 자동 생성 + 현재 위치 강조 + 상단 진행바 + 코드 복사 버튼 (전부 선택 기능, 꺼져도 문서는 읽힘)
   (function () {
     var list = document.getElementById('toc-list');

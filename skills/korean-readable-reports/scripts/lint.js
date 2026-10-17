@@ -5,16 +5,23 @@
  *
  *   node lint.js report.md            → 경고 출력, exit 0
  *   node lint.js report.md --strict   → 경고 있으면 exit 1
+ *   node lint.js report.md --plain    → 문체 규칙(2·4·6·7·8·11·13·14·15) 없이 구조·안전 검사만.
+ *                                       이 스킬의 문체를 따르지 않는 문서(기획서·제안서 등, report-team)용
+ *        --renderer      (--plain에서) 렌더용 frontmatter title·date·audience 필수. 기본 모드는 항상 필수
+ *        --reader-review (--plain에서) 본문 file:line 검사(규칙 6) 켜기. 기본 모드는 항상 켜짐
+ *        --external      audience와 무관하게 외부 공유 검사(규칙 1) 켜기
  *
  * 검사 항목(규칙 번호는 SKILL.md, "fm"/"구조"는 렌더 안전용):
- *   fm  frontmatter 없음 / title·date·audience 누락 (audience 없으면 외부 공유 검사가 조용히 꺼지므로 필수)
- *   1   audience: external 일 때만 — 브랜치 경로(feature/…)·내부 호스트·IP·사번 패턴, redact: 목록(쉼표 구분)
+ *   fm  frontmatter 없음·안 닫힘 / title·date·audience 누락 (audience 없으면 외부 공유 검사가 조용히 꺼지므로 필수)
+ *       date는 실제 있는 날짜 YYYY-MM-DD / audience·theme 값
+ *   1   audience: external(또는 --external) — 브랜치 경로(feature/…)·내부 호스트·개인 로컬 경로·IP·사번 패턴, redact: 목록(쉼표 구분).
+ *       frontmatter·코드·접힌 상세까지 전부 보고, 찾은 문자열은 출력하지 않는다(CI 로그에 다시 새지 않게)
  *   2   요약 박스(frontmatter.summary 또는 첫 H2 이전 인용문) 문장 3개 초과
  *   4   불릿이 서술어 없이 끝남(단편 의심) — 한국어: 다/요/음/함/됨/./: 로 안 끝나는 항목
  *   6   본문 문장 안에 file:line (근거: 줄·코드펜스·표 제외)
  *   7   표 셀이 백틱 코드만으로 채워짐
- *   8   H2 7개 초과 / 섹션 본문 12줄 초과(코드·표·details 제외) / H2 전에 H3
- *   9   <details> 열림/닫힘 개수 불일치
+ *   8   H1 두 개 이상 / H2 7개 초과 / 섹션 본문 12줄 초과(코드·표·details 제외) / H2 전에 H3
+ *   9   <details> 열림/닫힘 짝이 안 맞음
  *   11  한 줄에 문장 2개 이상 (마침표 뒤 공백 없어도 잡음, 말줄임표는 제외)
  *   13  "## 배경" 없음·첫 섹션 아님 / 배경에 요청·현상 라벨 없음 / "비유하자면"·"그래서 이번에" 같은 이야기체 표현
  *   15  (힌트) 그림이 나을 내용을 글로만 씀 — 주어 있는 처리 단계 3개 이상 나열, 화살표 3단계 이상. --strict 실패 사유 아님
@@ -24,7 +31,8 @@
  *       업무 관용투(하시기 바랍니다·하는 것이 가능·하도록 하겠습니다·을 진행합니다), 표기(파라메터·어플리케이션),
  *       용어 섞임(오류/에러·반환/리턴·파라미터/매개변수). 힌트: 사물 주어, 영어 낱말+하다, 해당·에 대한·를 통해·로 인해 4회 이상.
  *       따옴표 안은 인용이라 건너뜀. 기준은 references/ko-terms.md
- *   구조 코드펜스 안 닫힘 / 표 행의 칸 수가 헤더와 다름 — 렌더러가 조용히 내용을 바꾸는 입력
+ *   구조 코드펜스(``` ~~~) 안 닫힘 / 표 구분 행 없음·칸 수가 헤더와 다름(접힌 상세 안 포함) / 허용 안 되는 링크 주소
+ *        각주·참조형 링크(미지원) / (힌트) 렌더러가 글자로 보여 주는 태그, (--plain만) 4칸 들여쓴 줄
  *        flow·stats 칸이 정해진 수보다 많음 / 모르는 역할·상태 이름 / 빈 flow·stats·cards 블록
  */
 const fs = require('fs');
@@ -33,6 +41,12 @@ const ENDERS = /(다|요|음|함|됨|임|것|\.|:|：)\s*[.!?]?\s*$/;   // 문�
 const FILE_LINE = /\b[\w./-]+\.(js|ts|tsx|jsx|py|java|kt|go|rs|rb|php|cs|c|cpp|h|xml|yml|yaml|json|sql|sh|md)\s*:\s*\d+/;
 const SOURCES_RE = /^\s*(근거|출처|basis|sources)\s*[:：]/i;
 const BOM = String.fromCharCode(0xFEFF);
+// 렌더러(render.js)가 통과시키는 raw HTML 태그 — 나머지는 텍스트로 이스케이프된다. render.js가 이 목록을 그대로 쓴다
+const HTML_TAGS = /^(details|summary|div|span|figure|figcaption|img|p|ul|ol|li|table|thead|tbody|tr|th|td|caption|pre|code|blockquote|section|br|hr|strong|em|b|i|sub|sup|a)$/i;
+
+// 링크·이미지 주소: http(s)·mailto 또는 스킴 없는 상대 경로만. "//host", 공백·따옴표·꺾쇠가 든 주소는 거부(속성 탈출 방지)
+const safeUrl = u => !/[\u0000- <>"'`]/.test(u) && !u.startsWith('//') &&
+  (/^(https?:|mailto:)/i.test(u) || !/^[^/?#]*:/.test(u));
 
 // 문장 수: 말줄임표·소수점·약어 제거 후, 종결부호 뒤 공백/끝 또는 한글 종결어미+마침표 뒤 바로 글자(공백 없는 타자)
 function countSentences(text) {
@@ -44,47 +58,180 @@ function parseFrontmatter(lines) {
   const meta = {}; let start = 0, has = false;
   if (lines[0] === '---') {
     const end = lines.indexOf('---', 1);
-    if (end > 0) {
-      has = true; start = end + 1;
-      let key = null, block = null;
-      for (const l of lines.slice(1, end)) {
-        const m = l.match(/^([\w가-힣-]+):\s*(.*)$/);
-        if (m) {
-          key = m[1]; const v = m[2].trim();
-          if (/^[|>][-+]?$/.test(v)) { block = v[0]; meta[key] = ''; }
-          else { block = null; meta[key] = v.replace(/^(["'])(.*)\1$/, '$2'); }
-        } else if (key && /^\s+\S/.test(l)) {
-          const t = l.trim();
-          meta[key] = meta[key] ? meta[key] + (block === '>' ? ' ' : '\n') + t : t;
-        }
+    if (end < 0) return { meta, start, has, unclosed: true };
+    has = true; start = end + 1;
+    let key = null, block = null;
+    for (const l of lines.slice(1, end)) {
+      const m = l.match(/^([\w가-힣-]+):\s*(.*)$/);
+      if (m) {
+        key = m[1]; const v = m[2].trim();
+        if (/^[|>][-+]?$/.test(v)) { block = v[0]; meta[key] = ''; }
+        else { block = null; meta[key] = v.replace(/^(["'])(.*)\1$/, '$2'); }
+      } else if (key && /^\s+\S/.test(l)) {
+        const t = l.trim();
+        meta[key] = meta[key] ? meta[key] + (block === '>' ? ' ' : '\n') + t : t;
       }
     }
   }
-  return { meta, start, has };
+  return { meta, start, has, unclosed: false };
 }
 
-function lint(src) {
+// 코드펜스 지도: ``` 와 ~~~ (앞 공백 3칸까지), 닫는 펜스는 같은 글자로 같거나 더 길게 + 뒤에 공백만.
+// 모든 검사가 이 지도 하나를 쓴다 — 검사마다 펜스를 따로 세면 ~~~ 나 ```` 안의 ``` 에서 서로 어긋난다
+const FENCE_RE = /^\s{0,3}(`{3,}|~{3,})\s*([^\s`~]*)\s*(.*)$/;
+function scanFences(lines, start) {
+  const at = new Array(lines.length).fill(null);   // 펜스 줄(여는·닫는·안쪽)이면 그 블록
+  const blocks = [];
+  let cur = null;
+  for (let i = start; i < lines.length; i++) {
+    const m = lines[i].match(FENCE_RE);
+    if (!cur) {
+      if (m) { cur = { open: i, close: -1, char: m[1][0], len: m[1].length, kind: m[2].toLowerCase(), body: [] }; blocks.push(cur); at[i] = cur; }
+      continue;
+    }
+    at[i] = cur;
+    if (m && m[1][0] === cur.char && m[1].length >= cur.len && !m[2] && !m[3]) { cur.close = i; cur = null; }
+    else cur.body.push([i, lines[i]]);
+  }
+  return { at, blocks };
+}
+
+function lint(src, opts = {}) {
   src = src.replace(/\r\n/g, '\n');
   if (src.startsWith(BOM)) src = src.slice(1);
-  const lines = src.split('\n');
+  const rawLines = src.split('\n');
+  let lines = rawLines;
   const F = [];
+  const plain = !!opts.plain;
+  // 외부 공유 문서면 어떤 경고 문구에도 민감한 값이 찍히지 않게, 경고를 넣는 이 한 곳에서 가린다(CI 로그로 새지 않게)
+  let pats = [];
+  const mask = msg => pats.reduce((s, [re]) => s.replace(new RegExp(re.source, re.flags.replace('g', '') + 'g'), '[가림]'), msg);
   // hint=true 는 "판단해서 반영" 제안 — 오탐 가능성이 있어 --strict 실패 사유에서 뺀다
-  const warn = (line, rule, msg, hint) => F.push({ line: line + 1, rule, msg, hint: !!hint });
+  const warn = (line, rule, msg, hint) => F.push({ line: line + 1, rule, msg: mask(msg), hint: !!hint });
 
-  const { meta, start, has } = parseFrontmatter(lines);
-  if (!has) warn(0, 'fm', 'frontmatter 없음 — title / date / audience 는 필수');
-  else {
-    if (!meta.title) warn(0, 'fm', 'frontmatter title 없음');
-    if (!meta.date) warn(0, 'fm', 'frontmatter date 없음 — 없으면 렌더 당일이 작업일로 찍힘');
-    if (!meta.audience) warn(0, 'fm', 'frontmatter audience 없음 (team | cross-team | leadership | external) — 없으면 외부 공유 검사가 꺼짐');
-    else if (!/^(team|cross-team|leadership|external)$/i.test(meta.audience.trim())) warn(0, 'fm', `audience "${meta.audience}" — team | cross-team | leadership | external 중 하나`);
-    if (meta.theme && !/^(light|dark|auto)$/i.test(meta.theme.trim())) warn(0, 'fm', `theme "${meta.theme}" — light | dark | auto 중 하나 (아니면 light로 렌더됨)`);
+  const { meta, start, has, unclosed } = parseFrontmatter(lines);
+  const sharing = /^external$/i.test((meta.audience || '').trim()) || !!opts.external;
+  if (sharing) {
+    // 긴 것부터 — "SECRET"이 먼저 가려지면 "SECRET-TOKEN"의 나머지가 남는다
+    const extra = (meta.redact || '').split(/[,\n]/).map(s => s.trim()).filter(Boolean).sort((a, b) => b.length - a.length);
+    pats = [
+      // 브랜치는 슬래시 경로만(feature/x, release/1.2). dev-server, release-1.2 같은 일상 단어는 안 잡음
+      [/\b(feature|fix|bugfix|hotfix|release|stg|dev)\/[\w.-]+/i, '브랜치명'],
+      [/\bstg-v\d+\b/i, '브랜치명'],
+      [/\b[\w-]+\.(internal|local|corp|lan|intra)\b/i, '내부 호스트'],
+      [/(?:\/Users\/|\/home\/|[A-Z]:\\Users\\)[^\s)]+/i, '개인 로컬 경로'],
+      // IP: 각 옥텟 0~255, 앞에 v/version 이 붙은 버전 표기는 제외
+      [/(?<![\w.]|v)\b((25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(25[0-5]|2[0-4]\d|1?\d?\d)\b(?![\w.])/, 'IP 주소'],
+      [/\b[A-Z]{1,3}\d{5,7}\b/, '사번 형태'],
+      ...extra.map(w => [new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), 'redact 목록']),
+    ];
+    // 다른 검사는 가린 사본을 본다 — 경고 문구가 줄 일부를 잘라 인용해도 가리기 전 값이 남지 않는다. 규칙 1 검사만 원문을 본다
+    lines = rawLines.map(mask);
   }
+  if (unclosed) warn(0, '구조', 'frontmatter가 닫히지 않음 — 둘째 --- 줄 필요');
+  else if (!has && !plain) warn(0, 'fm', 'frontmatter 없음 — title / date / audience 는 필수');
+  else if (!plain || opts.renderer) {
+    if (!meta.title) warn(0, 'fm', 'frontmatter title 없음');
+    if (!meta.date) warn(0, 'fm', `frontmatter date 없음 — ${plain ? '문서 기준일(YYYY-MM-DD)' : '없으면 렌더 당일이 작업일로 찍힘'}`);
+    if (!meta.audience) warn(0, 'fm', 'frontmatter audience 없음 (team | cross-team | leadership | external) — 없으면 외부 공유 검사가 꺼짐');
+  }
+  if (meta.audience && !/^(team|cross-team|leadership|external)$/i.test(meta.audience.trim())) warn(0, 'fm', `audience "${meta.audience}" — team | cross-team | leadership | external 중 하나`);
+  if (meta.date && (!/^\d{4}-\d{2}-\d{2}$/.test(meta.date) || Number.isNaN(Date.parse(meta.date)) || new Date(meta.date).toISOString().slice(0, 10) !== meta.date)) warn(0, 'fm', `date "${meta.date}" — 실제 있는 날짜 YYYY-MM-DD로`);
+  if (meta.theme && !/^(light|dark|auto)$/i.test(meta.theme.trim())) warn(0, 'fm', `theme "${meta.theme}" — light | dark | auto 중 하나 (아니면 light로 렌더됨)`);
+
+  const { at: fenceAt, blocks } = scanFences(lines, start);
+  const inCode = i => !!fenceAt[i];
+  for (const b of blocks) if (b.close < 0) warn(b.open, '구조', `코드펜스(${b.char.repeat(3)})가 닫히지 않음 — 이 뒤 내용이 전부 코드 패널로 들어감`);
+
+  // ── 구조 검사(두 모드 공통): 표·링크·태그·details 짝 — 접힌 상세 안도 본다 ──
+  {
+    let tableHead = -1, tableStartLine = -1, depth = 0, lastOpen = -1, h1 = 0;
+    const cellCount = l => l.trim().replace(/\\\|/g, ' ').replace(/^\||\|$/g, '').split('|').length;
+    const isSep = l => /^\s*\|?(\s*:?-+:?\s*\|)+\s*:?-*:?\s*\|?\s*$/.test(l) && /-/.test(l);
+    for (let i = start; i < lines.length; i++) {
+      const l = lines[i];
+      if (inCode(i)) { tableHead = -1; continue; }
+      const plainText = l.replace(/`[^`]*`/g, '');
+      for (const lm of l.matchAll(/\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g)) {
+        if (!safeUrl(lm[1])) warn(i, '구조', `링크 주소 "${lm[1].slice(0, 40)}" — 허용 안 되는 스킴·문자, 렌더 시 죽은 링크(#)가 됨`);
+      }
+      for (const tm of plainText.matchAll(/<\/?([a-zA-Z][\w-]*)(?![\w-])[^>]*>/g)) {
+        if (!HTML_TAGS.test(tm[1])) { warn(i, '구조', `<${tm[1]}> 는 태그가 아니라 글자로 표시됨 — 의도한 태그면 Markdown이나 허용 태그(details·figure·img 등)로`, true); break; }
+      }
+      // 참조 정의 "[이름]: 주소" — 상태 태그로 시작하는 줄("[완료]: …")은 제외
+      if (/^\s*\[\^|\]\[[^\]]*\]|^\s*\[(?!(완료|미검증|실패|블로커|선재|주의|정보|추천)\])[^\]]+\]:\s*\S/.test(plainText)) warn(i, '구조', '각주·참조형 링크는 지원 안 함 — 인라인 링크 [글](주소)로');
+      const opens = (plainText.match(/<details(\s|>)/gi) || []).length, closes = (plainText.match(/<\/details\s*>/gi) || []).length;
+      if (opens) lastOpen = i;
+      depth += opens;
+      for (let c = 0; c < closes; c++) { if (depth) depth--; else warn(i, 9, '열리지 않은 </details> — 짝을 맞추기'); }
+      if (plain && opts.renderer && /^#\s/.test(l) && ++h1 === 2) warn(i, '구조', 'H1(#)이 두 번 — 두 번째부터 섹션(##)으로 표시됨');
+      if (/^\s*\|/.test(l)) {
+        if (tableHead < 0) {
+          tableStartLine = i;
+          if (!isSep(lines[i + 1] || '')) { warn(i, '구조', '표 헤더 뒤에 | --- | 구분 행 필요 — 없으면 표가 아니라 글로 렌더됨'); tableHead = 0; continue; }
+          tableHead = cellCount(l); continue;
+        }
+        if (tableHead) {
+          const n = cellCount(l);
+          const where = i === tableStartLine + 1 ? '표 구분 행' : '표';
+          if (n !== tableHead) warn(i, '구조', `${where} 칸 ${n}개, 헤더 ${tableHead}개 — 칸 수 맞추기 (셀 안 파이프는 \\| 로)`);
+        }
+        continue;
+      }
+      tableHead = -1;
+      // --plain 만: 이 스킬의 문서는 번호 목록 안 문단을 4칸 들여 쓰는 게 보통이라 기본 모드에서는 잡음뿐
+      if (plain && /^ {4,}\S/.test(l) && !/^\s*([-*]|\d+\.)\s/.test(l)) warn(i, '구조', '4칸 들여쓴 줄 — 코드 블록이 아니라 글로 렌더됨. 코드면 펜스(```)로', true);
+    }
+    if (depth) warn(lastOpen, 9, `닫히지 않은 <details> ${depth}개 — 이 뒤 내용이 통째로 접힘`);
+  }
+
+  // ── 블록 검사(flow·stats·cards): 렌더러가 칸을 합치거나 이름을 무시하는 입력을 미리 알린다 ──
+  // 역할·상태 목록은 render.js의 FLOW_ROLES·STAT_STATE와 같아야 한다
+  {
+    const ROLE = /^(ext|entry|logic|data|done|fail|caution|info|neutral)$/;
+    const STATE = /^(done|완료|fail|실패|블로커|caution|주의|unverified|미검증|info|정보|neutral|중립|선재)$/i;
+    const split = l => l.trim().replace(/\\\|/g, ' ').split('|').map(c => c.trim());   // 칸 수만 세므로 \| 는 공백으로
+    for (const fb of blocks) {
+      if (!/^(flow|stats|cards)$/.test(fb.kind)) continue;
+      const filled = fb.body.filter(([, l]) => l.trim());
+      if (!filled.length) { warn(fb.open, '구조', `빈 \`\`\`${fb.kind} 블록 — 내용이 없으면 지우기`); continue; }
+      if (fb.kind === 'cards') continue;
+      const flow = fb.kind === 'flow', fixed = flow ? 3 : 4, ok = flow ? ROLE : STATE;
+      const name = flow ? '역할' : '상태';
+      const allowed = flow ? 'ext·entry·logic·data (또는 done·fail·caution·info·neutral)' : '완료·실패·주의·미검증·정보·중립 (또는 영문)';
+      for (const [ln, l] of filled) {
+        const f = split(l);
+        if (f.length > fixed) warn(ln, '구조', `${fb.kind} 칸 ${f.length}개 — 최대 ${fixed}개. 남는 칸은 설명 뒤에 " | "로 붙어 표시됨 (글자 | 를 쓰려면 \\|)`);
+        const t = f[fixed - 1];
+        if (t && !ok.test(t)) warn(ln, '구조', `${name} "${t}" — ${allowed} 중 하나. 모르는 이름은 설명 뒤에 글자로 붙어 표시됨`);
+      }
+    }
+  }
+
+  // ── 규칙 1: 외부 공유 문서의 내부 식별자 — frontmatter·코드·접힌 상세까지, 값은 출력하지 않음 ──
+  if (sharing) {
+    if (meta.branch) warn(0, 1, '외부 공유 문서에 frontmatter branch — 지우기 (메타 pill에 그대로 찍힘)');
+    rawLines.forEach((l, i) => {
+      if (/^(redact|branch):/.test(l) && i < start) return;
+      for (const [re, what] of pats) if (re.test(l)) warn(i, 1, `외부 공유 문서에 ${what} — 제거하거나 일반화 (찾은 문자열은 출력하지 않음)`);
+    });
+  }
+
+  if (plain) {
+    // --plain: 문체 규칙은 끄고, 독자 검토용 file:line만 요청 시
+    if (opts.readerReview) for (let i = start; i < lines.length; i++) {
+      if (!inCode(i) && !SOURCES_RE.test(lines[i]) && FILE_LINE.test(lines[i])) warn(i, 6, '본문에 코드 위치 — 독자의 판단에 필요한지 검토, 아니면 "근거:" 줄로');
+    }
+    return F.sort((a, b) => a.line - b.line);
+  }
+
+  // ─────────────── 아래는 이 스킬의 문체 규칙(기본 모드만) ───────────────
 
   // 요약 박스
   let summary = meta.summary || '', summaryLine = 0;
   if (!summary) {
     for (let i = start; i < lines.length; i++) {
+      if (inCode(i)) continue;
       if (/^##\s/.test(lines[i])) break;
       if (/^>/.test(lines[i])) {
         summaryLine = i; const buf = [];
@@ -98,34 +245,22 @@ function lint(src) {
     if (n > 3) warn(summaryLine, 2, `요약 박스 문장 ${n}개 — 3개 이하로 (무엇을/어떻게/결정할 것)`);
   } else warn(start, 2, '요약 박스 없음 — frontmatter summary: 또는 H1 아래 첫 인용문(>)');
 
-  // 본문 스캔
-  let inCode = false, codeStart = -1, fenceLen = 0, inHtml = false, h1Count = 0;
+  // 본문 스캔 (코드·표·접힌 상세는 건너뜀 — 표·details 구조는 위 공통 검사가 본다)
+  let inHtml = false, h1Count = 0;
   let h2Count = 0, secLines = 0, secStart = -1, secName = '', h3BeforeH2 = false;
-  let tableHead = -1, tableStartLine = -1;
   const flushSec = () => { if (secStart >= 0 && secLines > 12) warn(secStart, 8, `"${secName}" 본문 ${secLines}줄 — 12줄 넘으면 <details>로 접기`); };
-  const cellCount = l => l.trim().replace(/\\\|/g, ' ').replace(/^\||\|$/g, '').split('|').length;
 
   for (let i = start; i < lines.length; i++) {
     const l = lines[i];
-    const fence = l.match(/^(`{3,})/);
-    if (fence) {
-      if (!inCode) { inCode = true; codeStart = i; fenceLen = fence[1].length; continue; }
-      if (fence[1].length >= fenceLen && /^`{3,}\s*$/.test(l)) { inCode = false; codeStart = -1; continue; }
-    }
-    if (inCode) continue;
+    if (inCode(i)) continue;
     if (/^<details/i.test(l)) inHtml = true;
     if (inHtml) { if (/<\/details>/i.test(l)) inHtml = false; continue; }
 
     if (/^\s*\|/.test(l)) {
-      if (tableHead < 0) { tableHead = cellCount(l); tableStartLine = i; continue; }
-      if (i === tableStartLine + 1) continue;   // 정렬 행
-      const n = cellCount(l);
-      if (n !== tableHead) warn(i, '구조', `표 칸 ${n}개, 헤더 ${tableHead}개 — 칸 수 맞추기 (셀 안 파이프는 \\| 로)`);
       const cells = l.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
       cells.forEach((c, ci) => { if (/^`[^`]+`$/.test(c) && ci > 0) warn(i, 7, `표 셀이 코드만 있음 "${c}" — 구절로 (예: "가장 오래 안 쓴 것부터 지운다")`); });
       continue;
     }
-    tableHead = -1;
     if (!l.trim()) continue;
 
     if (/^#\s/.test(l) && ++h1Count === 2) warn(i, 8, 'H1(#)이 두 번 — 문서 제목은 하나, 나머지는 ##로 (렌더러가 섹션으로 강등함)');
@@ -137,12 +272,6 @@ function lint(src) {
 
     const text = l.replace(/^>\s?/, '').replace(/`[^`]*`/g, '');
     if (secStart >= 0) secLines++;
-
-    // 링크 스킴: 렌더러가 # 으로 죽이는 링크를 미리 알린다
-    for (const lm of l.matchAll(/\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g)) {
-      const u = lm[1];
-      if (/^javascript:/i.test(u) || !/^(https?:|mailto:|#|\/|\.\.?\/|[\w.-]+(\/|$))/i.test(u)) warn(i, '구조', `링크 "${u.slice(0, 40)}" — 허용 안 되는 스킴, 렌더 시 죽은 링크(#)가 됨`);
-    }
 
     // 규칙 6
     if (FILE_LINE.test(l)) warn(i, 6, `본문에 file:line — 섹션 끝 "근거:" 줄로 옮기기`);
@@ -163,25 +292,11 @@ function lint(src) {
     }
   }
   flushSec();
-  if (inCode) warn(codeStart, '구조', '코드펜스(```)가 닫히지 않음 — 이 뒤 내용이 전부 코드 패널로 들어감');
   if (h2Count > 7) warn(0, 8, `H2 ${h2Count}개 — 7개 이하로, 나머지는 <details>나 부록으로`);
-
-  // 규칙 9: <details> 열림/닫힘 짝 (코드펜스 밖만) — 안 맞으면 렌더 결과가 통째로 접힌다
-  {
-    let code = false, opens = 0, closes = 0, lastOpen = 0;
-    for (let i = start; i < lines.length; i++) {
-      if (/^`{3,}/.test(lines[i])) { code = !code; continue; }
-      if (code) continue;
-      const o = (lines[i].match(/<details(\s|>)/gi) || []).length, c = (lines[i].match(/<\/details\s*>/gi) || []).length;
-      if (o) lastOpen = i;
-      opens += o; closes += c;
-    }
-    if (opens !== closes) warn(lastOpen, 9, `<details> 열림 ${opens}개 / 닫힘 ${closes}개 — 짝을 맞추기`);
-  }
 
   // 규칙 13: 배경 섹션은 요청 분석 — "- **요청** — …", "- **현상** — …" 라벨 필수, 비유·서사 표현 경고
   {
-    let code = false, inBg = false, bgLine = -1, hasReq = false, hasObs = false;
+    let inBg = false, bgLine = -1, hasReq = false, hasObs = false;
     const label = name => new RegExp('^\\s*(?:[-*]\\s+|\\d+\\.\\s+|\\|\\s*)?(?:\\*\\*)?(?:' + name + ')(?:\\*\\*)?\\s*[—:：|-]', 'i');
     const REQ = label('요청|request'), OBS = label('현상|문제|problem|symptom');
     const STORY = /비유하자면|비유하면|마치 [^.]{1,30} 같|그래서 이번에/;
@@ -190,8 +305,7 @@ function lint(src) {
     };
     for (let i = start; i < lines.length; i++) {
       const l = lines[i];
-      if (/^`{3,}/.test(l)) { code = !code; continue; }
-      if (code) continue;
+      if (inCode(i)) continue;
       if (/^##\s/.test(l)) {
         if (inBg) finish();
         inBg = /^##\s+(배경|background)/i.test(l); bgLine = i; hasReq = hasObs = false;
@@ -208,10 +322,9 @@ function lint(src) {
 
   // 규칙 13: 배경 섹션이 있고 첫 H2여야 한다
   {
-    let code = false, firstH2 = -1, firstH2Text = '', hasBg = false;
+    let firstH2 = -1, firstH2Text = '', hasBg = false;
     for (let i = start; i < lines.length; i++) {
-      if (/^`{3,}/.test(lines[i])) { code = !code; continue; }
-      if (code || !/^##\s/.test(lines[i])) continue;
+      if (inCode(i) || !/^##\s/.test(lines[i])) continue;
       const t = lines[i].replace(/^##\s+/, '');
       if (firstH2 < 0) { firstH2 = i; firstH2Text = t; }
       if (/^(배경|background)/i.test(t)) hasBg = true;
@@ -265,15 +378,10 @@ function lint(src) {
     const MIX = [['오류', '에러'], ['반환', '리턴'], ['파라미터', '매개변수', '매개 변수']];
     const counts = COUNTED.map(() => ({ n: 0, line: -1 }));
     const mix = MIX.map(ws => ws.map(() => ({ n: 0, line: -1 })));
-    let fence = null;   // { len, prose } — 글 블록(flow·stats·cards)은 검사, 코드·mermaid는 건너뜀
     for (let i = start; i < lines.length; i++) {
-      const l = lines[i];
-      const fm = l.match(/^\s*(`{3,})\s*([^\s`]*)/);
-      if (fm) {
-        if (!fence) { fence = { len: fm[1].length, prose: /^(flow|stats|cards)$/.test(fm[2]) }; continue; }
-        if (fm[1].length >= fence.len && !fm[2]) { fence = null; continue; }
-      }
-      if (fence && !fence.prose) continue;
+      const l = lines[i], fb = fenceAt[i];
+      // 글 블록(flow·stats·cards)의 안쪽은 검사, 펜스 줄 자체와 코드·mermaid는 건너뜀
+      if (fb && (i === fb.open || i === fb.close || !/^(flow|stats|cards)$/.test(fb.kind))) continue;
       if (SOURCES_RE.test(l)) continue;
       const h = l.match(/^#{2,4}\s+(.*)$/);
       if (h) { const m = h[1].trim().match(HEAD); if (m) warn(i, 14, `소제목 은유 "${m[0]}" — 사실을 말하는 소제목으로 (예: "요청 처리 흐름", "등록 테이블 목록")`); continue; }
@@ -299,7 +407,7 @@ function lint(src) {
   {
     const ORD = /^\s*(\d+\.|첫째|둘째|셋째|넷째|다섯째|여섯째|먼저|그다음|그 다음|다음으로|이어서|마지막으로)[,\s]/;
     const SUBJ = /^(\S+\s+){0,3}\S*(이|가|은|는)\s/;   // 앞 네 어절 안에 주어·주제 표지
-    let code = false, sec = null;
+    let sec = null;
     const secs = [];
     const open = (i, name) => {
       sec = { name, steps: 0, subj: 0, diagram: false, first: -1, procedure: /절차|방법|할 일|체크리스트|준비|설치|how to/i.test(name) };
@@ -307,10 +415,8 @@ function lint(src) {
     };
     open(start, '(머리말)');
     for (let i = start; i < lines.length; i++) {
-      const l = lines[i];
-      const fence = l.match(/^`{3,}\s*(\w*)/);
-      if (fence) { if (!code && /^(flow|mermaid)$/.test(fence[1])) sec.diagram = true; code = !code; continue; }
-      if (code) continue;
+      const l = lines[i], fb = fenceAt[i];
+      if (fb) { if (i === fb.open && /^(flow|mermaid)$/.test(fb.kind)) sec.diagram = true; continue; }
       const h = l.match(/^#{2,3}\s+(.*)$/);
       if (h) { open(i, h[1].trim()); continue; }
       if (ORD.test(l)) {
@@ -322,59 +428,6 @@ function lint(src) {
     for (const s of secs) {
       if (s.diagram || s.procedure || s.steps < 3 || s.subj / s.steps < 0.5) continue;
       warn(s.first, 15, `"${s.name}"에 처리 단계 ${s.steps}개를 글로만 나열 — 시스템이 처리하는 순서면 \`\`\`flow 블록(가지·반복 있으면 Mermaid)으로`, true);
-    }
-  }
-
-  // 블록 검사(flow·stats·cards): 렌더러가 칸을 합치거나 이름을 무시하는 입력을 미리 알린다.
-  // 역할·상태 목록은 render.js의 FLOW_ROLES·STAT_STATE와 같아야 한다
-  {
-    const ROLE = /^(ext|entry|logic|data|done|fail|caution|info|neutral)$/;
-    const STATE = /^(done|완료|fail|실패|블로커|caution|주의|unverified|미검증|info|정보|neutral|중립|선재)$/i;
-    const split = l => l.trim().replace(/\\\|/g, ' ').split('|').map(c => c.trim());   // 칸 수만 세므로 \| 는 공백으로
-    const check = fb => {
-      if (!/^(flow|stats|cards)$/.test(fb.kind)) return;
-      const filled = fb.body.filter(([, l]) => l.trim());
-      if (!filled.length) { warn(fb.open, '구조', `빈 \`\`\`${fb.kind} 블록 — 내용이 없으면 지우기`); return; }
-      if (fb.kind === 'cards') return;
-      const flow = fb.kind === 'flow', fixed = flow ? 3 : 4, ok = flow ? ROLE : STATE;
-      const name = flow ? '역할' : '상태';
-      const allowed = flow ? 'ext·entry·logic·data (또는 done·fail·caution·info·neutral)' : '완료·실패·주의·미검증·정보·중립 (또는 영문)';
-      for (const [ln, l] of filled) {
-        const f = split(l);
-        if (f.length > fixed) warn(ln, '구조', `${fb.kind} 칸 ${f.length}개 — 최대 ${fixed}개. 남는 칸은 설명 뒤에 " | "로 붙어 표시됨 (글자 | 를 쓰려면 \\|)`);
-        const t = f[fixed - 1];
-        if (t && !ok.test(t)) warn(ln, '구조', `${name} "${t}" — ${allowed} 중 하나. 모르는 이름은 설명 뒤에 글자로 붙어 표시됨`);
-      }
-    };
-    let fb = null;
-    for (let i = start; i < lines.length; i++) {
-      const l = lines[i], fm = l.match(/^(`{3,})\s*([^\s`]*)/);
-      if (!fb) { if (fm) fb = { len: fm[1].length, kind: fm[2], open: i, body: [] }; continue; }
-      if (fm && fm[1].length >= fb.len && /^`{3,}\s*$/.test(l)) { check(fb); fb = null; continue; }
-      fb.body.push([i, l]);
-    }
-  }
-
-  // 규칙 1: audience: external 이면 내부 식별자 검사
-  if (/^external$/i.test((meta.audience || '').trim())) {
-    const extra = (meta.redact || '').split(/[,\n]/).map(s => s.trim()).filter(Boolean);
-    const pats = [
-      // 브랜치는 슬래시 경로만(feature/x, release/1.2). dev-server, release-1.2 같은 일상 단어는 안 잡음
-      [/\b(feature|fix|bugfix|hotfix|release|stg|dev)\/[\w.-]+/i, '브랜치명'],
-      [/\bstg-v\d+\b/i, '브랜치명'],
-      [/\b[\w-]+\.(internal|local|corp|lan|intra)\b/i, '내부 호스트'],
-      // IP: 각 옥텟 0~255, 앞에 v/version 이 붙은 버전 표기는 제외
-      [/(?<![\w.]|v)\b((25[0-5]|2[0-4]\d|1?\d?\d)\.){3}(25[0-5]|2[0-4]\d|1?\d?\d)\b(?![\w.])/, 'IP 주소'],
-      [/\b[A-Z]{1,3}\d{5,7}\b/, '사번 형태'],
-      ...extra.map(w => [new RegExp(w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i'), 'redact 목록']),
-    ];
-    if (meta.branch) warn(0, 1, `외부 공유 문서에 frontmatter branch "${meta.branch}" — 지우기 (메타 pill에 그대로 찍힘)`);
-    let code = false;
-    for (let i = start; i < lines.length; i++) {
-      const l = lines[i];
-      if (/^`{3,}/.test(l)) { code = !code; continue; }
-      if (code) continue;
-      for (const [re, what] of pats) { const m = l.match(re); if (m) warn(i, 1, `외부 공유 문서에 ${what} "${m[0]}" — 제거하거나 일반화`); }
     }
   }
 
@@ -395,15 +448,16 @@ function report(file, F) {
   return errs.length;
 }
 
-module.exports = { lint, report };
+module.exports = { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, FENCE_RE };
 
 if (require.main === module) {
   const args = process.argv.slice(2);
   const file = args.find(a => !a.startsWith('-'));
-  if (!file) { console.error('usage: node lint.js <report.md> [--strict]'); process.exit(1); }
+  if (!file || args.includes('--help') || args.includes('-h')) { console.error('usage: node lint.js <report.md> [--strict] [--plain [--renderer] [--reader-review]] [--external]'); process.exit(args.includes('--help') || args.includes('-h') ? 0 : 1); }
   let src;
   try { src = fs.readFileSync(file, 'utf8'); }
   catch (e) { console.error(`lint: 입력 파일을 읽을 수 없음 — ${file} (${e.code || e.message})`); process.exit(2); }
-  const errors = report(file, lint(src));
+  const opts = { plain: args.includes('--plain'), renderer: args.includes('--renderer'), readerReview: args.includes('--reader-review'), external: args.includes('--external') };
+  const errors = report(file, lint(src, opts));
   process.exit(args.includes('--strict') && errors ? 1 : 0);
 }

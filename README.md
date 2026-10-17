@@ -77,6 +77,7 @@ cp -r korean-readable-reports/skills/korean-readable-reports <project>/.claude/s
 | `skills/korean-readable-reports/SKILL.md` | 에이전트가 따르는 규칙·작업 순서·체크리스트 |
 | `…/scripts/render.js` | md를 HTML 한 장으로 렌더(라이트·다크, 목차, Mermaid, 전용 블록), lint도 함께 실행 |
 | `…/scripts/lint.js` | 기계로 검사할 수 있는 규칙 검사 |
+| `…/scripts/test.js` | 렌더러·lint 회귀 시험 |
 | `…/references/template.html` | 렌더러가 채우는 페이지 디자인 |
 | `…/references/examples.md` | 실패 유형별 고치기 전후 예시 12쌍, 독자별로 같은 내용을 다르게 쓰는 예 |
 | `…/references/design-guide.md` | 색, 차트 선택, Mermaid 주의점, 검증 기록 |
@@ -100,8 +101,14 @@ cp -r korean-readable-reports/skills/korean-readable-reports <project>/.claude/s
 ```bash
 node scripts/lint.js report.md            # 규칙 검사 + 필수 frontmatter + 렌더가 조용히 바꾸는 입력
 node scripts/render.js report.md          # md → report.html, lint도 실행
-node scripts/render.js report.md --strict # 경고가 있으면 exit 1 (CI·pre-commit). 힌트는 실패로 안 침
+node scripts/render.js report.md --strict # 경고가 있으면 HTML을 만들지 않고 exit 1 (CI·pre-commit). 힌트는 실패로 안 침
+node scripts/render.js plan.md --plain    # 문체 규칙 없이 렌더만 — 기획서·제안서처럼 형식이 다른 문서용
+node scripts/test.js                      # 회귀 시험(임시 폴더에만 씀)
 ```
+
+그 밖의 옵션(`--keep-existing`·`--force`·`--offline`·`--hard-breaks`)은 `scripts/render.js` 맨 위에 있습니다.
+md 안의 raw HTML은 허용한 태그·속성만 남기므로 `<script>`나 `onerror=` 같은 실행 코드는 페이지에 들어가지 않습니다.
+원본 md·심볼릭 링크·원본의 하드링크에는 출력하지 않습니다.
 
 ## 쓰지 않을 때
 
