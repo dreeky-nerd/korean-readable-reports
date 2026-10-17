@@ -385,6 +385,21 @@ function lint(src, opts = {}) {
       [/(을|를) 통해/g, '를 통해', '수단은 "~로", 장소는 "~에서"'], // 실측: 조사는 "를 통해 ~할 수 있습니다" 표현군
       [/로 인해/g, '로 인해', '"~ 때문에", "~해서"'], // 실측
     ];
+    // 한국어 AI 문형 — 서로 다른 두 코퍼스(im-not-ai 대조 코퍼스, hanlint 위키백과·사업보고서 155만 문장 대 기계 글 360편)에서
+    // 같은 방향으로 측정된 것만. 둘 다 에세이·위키 장르라 기술 보고서에서는 미측정 → 전부 힌트, 정당한 용법이 흔한 것은 문서당 횟수 기준.
+    // 근거·조건: docs/research/2026-10-17-korean-polish-trends.md 4-1절
+    const AFTER_FIX = ' — 고친 문장이 다른 틀(결국·이유다·아니라)을 새로 만들지 않게';
+    const TELLS = [
+      // 부정 대구: 1회는 가설을 뒤집는 정당한 정정일 수 있어 2회부터. "뿐(만) 아니라"는 다른 구문
+      [/(?<!뿐\s?|뿐만\s?)아니라(?=[\s,])|라기보다/g, 2, n => `부정 대구 "A가 아니라 B" ${n}회 — 독자가 실제로 믿던 것을 바로잡을 때만 남기고 나머지는 B를 바로 단언`],
+      // 역방향 결산: 결론을 문단 끝에서 "이유"로 뒤집는 틀
+      [/[가-힣] 이유(?:다|이다|입니다)(?=[.!?\s]|$)|이유가 (?:이것|이거|여기|바로)/g, 1, () => '역방향 결산 "~하는 이유다" — 결론을 앞에 두고 바로 단언: "그래서 ~합니다"'],
+      // 분열문: 문장 머리 "핵심은·문제는 ~이다". "문제는 없었습니다"는 제외
+      [/(?:^|[.!?]\s+)(?:[-*]\s+)?(?:핵심은|문제는|관건은|요점은|중요한 것은|필요한 것은) (?!없)[^.!?]{1,60}(?:이다|입니다|였다|였습니다|이었다|이었습니다)(?=[.!?]|$)/g, 2, n => `분열문 "핵심은 ~이다" ${n}회 — 강조 틀 없이 그 내용을 주어로 바로 쓰기`],
+      // 범위 상승
+      [/단순(?:한|히) [^.!?]{0,20}(?:을|를) 넘어/g, 1, () => '범위 상승 "단순한 X를 넘어 Y" — Y만 말하기'],
+    ];
+    const tells = TELLS.map(() => ({ n: 0, line: -1 }));
     // 같은 개념의 다른 말 — 첫 단어가 권장어(references/ko-terms.md)
     const MIX = [
       ['오류', '에러'], // 실측: 오류 33건·에러 37건, 오류 고정은 편집 기준
@@ -409,9 +424,11 @@ function lint(src, opts = {}) {
       for (const [re, why] of BODY) { const m = text.match(re); if (m) warn(i, 14, `"${m[0].trim()}" — ${why}`); }
       for (const [re, why] of SOFT) { const m = text.match(re); if (m) warn(i, 14, `"${m[0].trim()}" — ${why}`, true); }
       COUNTED.forEach(([re], k) => { const n = (text.match(re) || []).length; if (n) { counts[k].n += n; if (counts[k].line < 0) counts[k].line = i; } });
+      TELLS.forEach(([re], k) => { const n = (text.match(re) || []).length; if (n) { tells[k].n += n; if (tells[k].line < 0) tells[k].line = i; } });
       mixPatterns.forEach((rs, k) => rs.forEach((re, j) => { const n = (text.match(re) || []).length; if (n) { mix[k][j].n += n; if (mix[k][j].line < 0) mix[k][j].line = i; } }));
     }
     COUNTED.forEach(([, name, how], k) => { if (counts[k].n > 3) warn(counts[k].line, 14, `"${name}" ${counts[k].n}회 — 3회 이하로: ${how}`, true); });
+    TELLS.forEach(([, min, msg], k) => { if (tells[k].n >= min) warn(tells[k].line, 14, msg(tells[k].n) + AFTER_FIX, true); });
     MIX.forEach((ws, k) => {
       const used = ws.map((w, j) => [w, mix[k][j]]).filter(([, c]) => c.n);
       if (used.length < 2) return;

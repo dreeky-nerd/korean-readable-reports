@@ -183,6 +183,27 @@ test('규칙 14: 인용·코드·링크 주소 제외, 글 블록·링크 표시
   }
 });
 
+test('규칙 14: 측정된 한국어 AI 문형 4종은 힌트(경고 아님)', () => {
+  const hint = (doc, re) => lint(fm + doc).filter(f => f.rule === 14 && re.test(f.msg));
+  // 부정 대구 "A가 아니라 B": 2회부터 힌트, 1회는 정당한 정정일 수 있어 통과. "뿐만 아니라"는 다른 구문
+  assert.equal(hint('원인은 캐시가 아니라 DB입니다.', /부정 대구/).length, 0);
+  const pair = hint('원인은 캐시가 아니라 DB입니다.\n\n문제는 코드가 아니라 설정이었습니다.', /부정 대구/);
+  assert.equal(pair.length, 1); assert.ok(pair[0].hint);
+  assert.equal(hint('인증뿐만 아니라 권한도 봅니다.\n\n로그뿐 아니라 지표도 봅니다.', /부정 대구/).length, 0);
+  // 역방향 결산 "~하는 이유다": 1회부터 힌트
+  for (const s of ['설정을 바꿔도 반영이 안 되는 이유가 이것입니다.', '재시도가 늘어난 이유다.', '캐시를 끈 이유입니다.']) assert.equal(hint(s, /이유/).length, 1, s);
+  for (const s of ['실패 이유는 세 가지입니다.', '이유를 로그에서 확인했습니다.']) assert.equal(hint(s, /이유/).length, 0, s);
+  // 분열문 "핵심은 ~이다": 2회부터
+  assert.equal(hint('핵심은 재시도 횟수입니다.', /분열문/).length, 0);
+  assert.equal(hint('핵심은 재시도 횟수입니다.\n\n문제는 타임아웃 설정입니다.', /분열문/).length, 1);
+  assert.equal(hint('문제는 없었습니다.\n\n문제는 없었습니다.', /분열문/).length, 0);
+  // 범위 상승 "단순한 X를 넘어": 1회부터
+  assert.equal(hint('단순한 캐시를 넘어 세션 저장소로 씁니다.', /범위 상승/).length, 1);
+  assert.equal(hint('요청 수가 한도를 넘어 실패했습니다.', /범위 상승/).length, 0);
+  // 코드·따옴표 안은 남의 말
+  assert.equal(hint('"캐시가 아니라 DB" 라는 제목\n\n`A가 아니라 B`', /부정 대구/).length, 0);
+});
+
 test('규칙 14: 좁은 문맥 판별로 남긴 알려진 미검출', () => {
   // 알려진 미검출: 오탐을 줄인 대상/어미/단어 경계 밖의 나쁜 표현. 해소 전까지 검출을 기대하지 않는다.
   const missed = [
