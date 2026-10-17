@@ -142,9 +142,10 @@ easy.
     quotes ("…") is someone else's words and is skipped — quote a ticket title
     or a before-example instead of rewording it.
 
-    Four sentence frames were measured as strong Korean AI tells in two
-    independent corpora (essays and wiki text — not yet measured on tech
-    reports, so lint only hints): the negative contrast "A가 아니라 B"
+    Four sentence frames are flagged as Korean AI tells — the first two
+    reported in the same direction by two independent corpora, the last two
+    from one small sample, all on essays and wiki text and none yet measured
+    on tech reports, so lint only hints: the negative contrast "A가 아니라 B"
     (keep it only when correcting something the reader actually believed),
     the reverse wrap-up "~하는 이유다", the cleft "핵심은 ~이다", and the scope
     climb "단순한 X를 넘어 Y". State the conclusion directly instead, and check
