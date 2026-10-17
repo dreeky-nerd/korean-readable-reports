@@ -48,7 +48,11 @@ easy.
    not "한 페이지에 표시할 결과의 수입니다." (Korean-written API docs do this in
    63% of tables, translated docs in 11%.)
 8. **Cut the slop.** Delete throat-clearing intros, hedging caveats, restated
-   obviousness. Shorter is kinder. Hard limits: summary ≤ 3 sentences, ≤ 7 H2
+   obviousness. Shorter is kinder. Cut only *unsupported* hedges: a "should",
+   a "may", or a `[미검증]` that the source or evidence carries stays — and
+   don't add hedges the source didn't have. Never pick a stronger verb than
+   the work earned (관찰 < 추정 < 확인 < 검증 < 완료; table in
+   `references/ko-terms.md` §4). Hard limits: summary ≤ 3 sentences, ≤ 7 H2
    sections, ≤ 12 lines of prose per section — anything past that goes behind
    `<details>` or into an appendix.
 9. **Progressive disclosure.** Hide depth behind expandable sections (collapsible
