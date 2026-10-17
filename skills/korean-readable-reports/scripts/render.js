@@ -6,8 +6,17 @@
  *   node render.js report.md                → report.html (같은 폴더)
  *   node render.js report.md -o out.html
  *   node render.js report.md --no-lint      → lint 건너뜀
- *   node render.js report.md --strict       → lint 경고 있으면 exit 1 (CI·pre-commit 게이트용)
+ *   node render.js report.md --strict       → lint 경고 있으면 HTML을 만들지 않고 exit 1 (CI·pre-commit 게이트용)
  *   exit 2 = 입력 파일 없음/읽기 실패
+ *
+ *   --plain        이 스킬의 문체 규칙 없이 렌더만(기획서·제안서 등 다른 형식의 문서, report-team이 씀):
+ *                  lint는 구조·안전 검사만, 첫 인용문을 요약 상자로 바꾸지 않음, 문단 안 줄바꿈은 브라우저에 맡김,
+ *                  date가 없으면 오늘 날짜 대신 "기준일 미기재"
+ *   --hard-breaks  (--plain에서) 문단 안 줄바꿈을 <br>로 유지
+ *   --keep-existing  출력 파일이 이미 있으면 덮어쓰지 않고 exit 1. --force 를 같이 주면 교체
+ *   --offline      CDN 글꼴·Mermaid를 빼고 생성(Mermaid는 소스 글자로 표시)
+ *   항상: 원본 md·심볼릭 링크·원본의 하드링크에는 쓰지 않는다
+ *   --reader-review · --external 은 lint.js 로 그대로 넘긴다
  *
  * md 규약(이 스크립트가 알아보는 것):
  *   frontmatter   title / date / project / branch / kind / audience / summary  (전부 선택)
@@ -15,7 +24,9 @@
  *                 theme: light(기본, OS가 다크여도 라이트) | dark | auto(보는 사람 OS 따름). 상단 토글로 보는 사람이 바꿀 수 있음
  *   # 제목        frontmatter.title 없으면 이걸 제목으로. 두 번째 이후 H1은 섹션(##)으로 강등(버리지 않음)
  *   #### ~ ######  h4
- *   ````lang      백틱 4개 이상 펜스도 됨 — 안의 ``` 는 내용으로 보존
+ *   ````lang      백틱 4개 이상 펜스도 됨 — 안의 ``` 는 내용으로 보존. ~~~ 펜스도 같음
+ *   ![설명](경로)  이미지. 주소는 http(s)·mailto·상대 경로만(나머지는 #)
+ *   3. 항목       번호 목록의 시작 번호·항목 번호를 그대로 유지
  *   > 인용문      첫 H2 이전의 첫 인용문 = BLUF 요약 박스 (frontmatter.summary 없을 때). 둘 다 없으면 요약 박스 생략
  *   ## 섹션       .sec 카드 (번호 자동)
  *   ### 소제목    .block 카드 (섹션 안 번호 자동 → 배지 "01", "02"…). "TASK 3: 제목"처럼 쓰면 배지에 TASK 3
@@ -32,16 +43,18 @@
  *   [완료] [미검증] [실패] [블로커] [선재] [주의] [정보]  → 상태 태그 칩
  *   근거: … / 출처: …   줄 시작(들여쓰기 허용) → .sources 박스 (규칙 6)
  *   <details>     짝이 맞는 </details>까지 한 덩어리. 안쪽은 md로 다시 렌더(빈 줄·불릿·표 OK)
- *   raw HTML      허용 태그(details, div, figure, figcaption, img, p, ul, ol, table, pre, blockquote, section, br, hr)만
- *                 통과. 그 밖의 태그(<script> 등)는 텍스트로 이스케이프
- *   문단 안 줄바꿈 = <br> (규칙 11: 한 문장 한 줄)
+ *   raw HTML      줄 맨 앞이 허용 태그(details, div, figure, figcaption, img, p, ul, ol, table, pre, blockquote, section, br, hr)면
+ *                 그 덩어리를 통과. 안의 태그도 허용 목록(lint.js HTML_TAGS)만 남기고, 속성은 class·id·src·href·alt·title·
+ *                 width·height·open·colspan·rowspan만(주소는 위 이미지와 같은 검사). on…= 같은 속성·<script>는 버리거나 글자로
+ *   문단 안 줄바꿈 = <br> (규칙 11: 한 문장 한 줄). --plain 이면 공백
  */
 const fs = require('fs');
 const path = require('path');
+const { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, FENCE_RE } = require('./lint.js');
 
 const args = process.argv.slice(2);
 if (!args.length || args.includes('-h') || args.includes('--help')) {
-  console.error('usage: node render.js <report.md> [-o out.html] [--no-lint] [--strict]');
+  console.error('usage: node render.js <report.md> [-o out.html] [--no-lint] [--strict] [--plain [--hard-breaks]] [--keep-existing [--force]] [--offline]');
   process.exit(args.length ? 0 : 1);
 }
 const inPath = args[0];
@@ -50,6 +63,22 @@ const outPath = outIdx > -1 ? args[outIdx + 1] : inPath.replace(/\.md$/i, '') + 
 if (outIdx > -1 && (!outPath || outPath.startsWith('-'))) { console.error('render: -o 뒤에 출력 파일 경로가 없음'); process.exit(1); }
 const doLint = !args.includes('--no-lint');
 const strict = args.includes('--strict');
+const plain = args.includes('--plain');
+const hardBreaks = !plain || args.includes('--hard-breaks');
+if (strict && !doLint) { console.error('render: --strict와 --no-lint는 함께 쓸 수 없음'); process.exit(1); }
+
+// 출력 파일 보호: 원본 md, 심볼릭 링크(끊어진 것 포함), 원본의 하드링크에는 절대 쓰지 않는다.
+// 처음 경로와 바탕화면 대체 경로 둘 다 이 함수 하나로 검사한다
+const keepExisting = args.includes('--keep-existing') && !args.includes('--force');
+function guardOut(p) {
+  if (path.resolve(inPath) === path.resolve(p)) { console.error(`render: 원본 md 경로에는 출력할 수 없음 — ${p}`); process.exit(1); }
+  const existing = fs.lstatSync(p, { throwIfNoEntry: false });
+  if (!existing) return;
+  const inStat = fs.statSync(inPath, { throwIfNoEntry: false });
+  if (existing.isSymbolicLink() || (inStat && inStat.dev === existing.dev && inStat.ino === existing.ino)) { console.error(`render: 심볼릭 링크나 원본의 하드링크에는 출력할 수 없음 — ${p}`); process.exit(1); }
+  if (keepExisting) { console.error(`render: 출력 파일이 이미 있음 — ${p} (교체하려면 --force)`); process.exit(1); }
+}
+guardOut(outPath);
 
 const TEMPLATE = path.join(__dirname, '..', 'references', 'template.html');
 let src, tpl;
@@ -62,25 +91,18 @@ const BOM = String.fromCharCode(0xFEFF);
 src = src.replace(/\r\n/g, '\n');
 if (src.startsWith(BOM)) src = src.slice(1);
 
-// ── frontmatter (key: value, 들여쓴 연속줄, | / >- 블록 스칼라) ─────────────
-let meta = {};
-let body = src;
-const fm = src.match(/^---\n([\s\S]*?)\n---\n?/);
-if (fm) {
-  body = src.slice(fm[0].length);
-  let key = null, block = null;   // block: '|' 줄 유지, '>' 접기
-  for (const line of fm[1].split('\n')) {
-    const m = line.match(/^([\w가-힣-]+):\s*(.*)$/);
-    if (m) {
-      key = m[1]; const v = m[2].trim();
-      if (/^[|>][-+]?$/.test(v)) { block = v[0]; meta[key] = ''; }
-      else { block = null; meta[key] = v.replace(/^(["'])(.*)\1$/, '$2'); }
-    } else if (key && /^\s+\S/.test(line)) {
-      const t = line.trim();
-      meta[key] = meta[key] ? meta[key] + (block === '>' ? ' ' : '\n') + t : t;
-    }
-  }
+// lint 먼저 — --strict 실패면 HTML을 쓰지 않는다(이전 HTML이 최신인 척 남지 않게, 기존 파일도 그대로)
+if (doLint) {
+  const errors = report(inPath, lint(src, { plain, renderer: true, readerReview: args.includes('--reader-review'), external: args.includes('--external') }));
+  console.log('');
+  if (strict && errors) { console.error('render: lint 경고가 있어 HTML을 만들지 않음 (--strict)'); process.exit(1); }
 }
+
+// ── frontmatter (key: value, 들여쓴 연속줄, | / >- 블록 스칼라) — lint.js와 같은 해석 ─
+const srcLines = src.split('\n');
+const fmParsed = parseFrontmatter(srcLines);
+const meta = fmParsed.meta;
+const body = srcLines.slice(fmParsed.start).join('\n');
 
 // ── inline ─────────────────────────────────────────────────────────────────
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
@@ -92,7 +114,7 @@ const TAG_RE = new RegExp('\\[(' + Object.keys(TAGS).join('|') + ')\\]', 'g');
 // 인라인 코드 자리표시자: NUL 문자를 소스에 원시 바이트로 박지 않고 실행 시 생성(git이 바이너리로 보지 않게)
 const NUL = String.fromCharCode(0);
 const NUL_RE = new RegExp(NUL + '(\\d+)' + NUL, 'g');
-const safeHref = u => /^(https?:|mailto:|#|\/|\.\.?\/|[\w.-]+(\/|$))/i.test(u) && !/^javascript:/i.test(u) ? u : '#';
+const safeHref = u => safeUrl(u) ? u : '#';
 
 function inline(text) {
   const codes = [];
@@ -104,7 +126,11 @@ function inline(text) {
   s = s.replace(/(^|[^\w*])\*(\S(?:[^*\n]*?\S)?)\*(?![\w*])/g, '$1<em>$2</em>');
   // URL: esc()가 만든 엔티티를 되돌린 뒤 스킴 검사 → 다시 이스케이프. 괄호 한 겹 포함 허용
   const unesc = u => u.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
-  s = s.replace(/\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, (_, t, u) => { const h = safeHref(unesc(u)); return h.charAt(0) === '#' ? `<a href="${esc(h)}">${t}</a>` : `<a href="${esc(h)}" target="_blank" rel="noopener noreferrer">${t}</a>`; });
+  s = s.replace(/(!?)\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, (_, img, t, u) => {
+    const h = safeHref(unesc(u));
+    if (img) return `<img src="${esc(h)}" alt="${esc(unesc(t).replace(/<[^>]*>/g, ''))}" loading="lazy">`;
+    return h.charAt(0) === '#' ? `<a href="${esc(h)}">${t}</a>` : `<a href="${esc(h)}" target="_blank" rel="noopener noreferrer">${t}</a>`;
+  });
   s = s.replace(NUL_RE, (_, i) => codes[i]);
   return s;
 }
@@ -281,9 +307,10 @@ function renderList(items) {
     while (k < items.length && items[k].indent === indent) {
       // 같은 깊이에서 마커가 바뀌면(- → 1.) 목록을 새로 연다
       const ordered = items[k].ordered;
-      html += ordered ? '<ol>' : '<ul>';
+      // 번호 목록은 적은 번호를 그대로(3. 으로 시작하면 3부터, 건너뛴 번호도 유지)
+      html += ordered ? `<ol start="${items[k].number}">` : '<ul>';
       while (k < items.length && items[k].indent === indent && items[k].ordered === ordered) {
-        html += '<li>' + inline(items[k].text);
+        html += (ordered ? `<li value="${items[k].number}">` : '<li>') + inline(items[k].text);
         k++;
         if (k < items.length && items[k].indent > indent) html += level(items[k].indent);
         html += '</li>';
@@ -295,21 +322,55 @@ function renderList(items) {
   return level(items[0].indent);
 }
 
-const FENCE_RE = /^(`{3,})\s*([^\s`]*)\s*(.*)$/;  // [3]=언어 뒤 나머지(예: ```cards wide 의 "wide")         // [1]=백틱 런(3개 이상), [2]=언어. 닫는 펜스는 같거나 더 긴 백틱 런만              // 언어 = 첫 토큰(하이픈·속성 허용). ``` 로 시작하면 무조건 펜스
+// FENCE_RE(lint.js): [1]=``` 또는 ~~~ 런(3개 이상, 앞 공백 3칸까지), [2]=언어 첫 토큰, [3]=나머지(예: ```cards wide 의 "wide")
+// 닫는 펜스는 같은 글자로 같거나 더 긴 런 + 뒤에 공백만
 const LIST_RE = /^(\s*)([-*]|\d+\.)\s+(.*)$/;
 const SOURCES_RE = /^\s*(근거|출처|basis|sources)\s*[:：]/i;
 const HTML_ALLOW = /^<(details|div|figure|figcaption|img|p|ul|ol|table|pre|blockquote|section|br|hr)(\s|>|\/)/i;
 const tableStart = (lines, i) => /^\s*\|/.test(lines[i]) && i + 1 < lines.length && /^\s*\|?\s*:?-+/.test(lines[i + 1]);
-const isBlockStart = l => /^(#{1,6}\s|`{3,}|>|\s*\||\s*([-*]|\d+\.)\s|---+\s*$)/.test(l) || SOURCES_RE.test(l) || HTML_ALLOW.test(l);
+const isBlockStart = l => /^(#{1,6}\s|>|\s*\||\s*([-*]|\d+\.)\s|---+\s*$)/.test(l) || FENCE_RE.test(l) || SOURCES_RE.test(l) || HTML_ALLOW.test(l);
 
-// raw HTML 덩어리: 첫 줄 태그의 열림/닫힘 짝이 맞을 때까지 모은다(빈 줄에 끊지 않음)
+// raw HTML 정리: 허용 태그(HTML_TAGS)는 허용 속성만 남겨 다시 쓰고, 나머지 <…>는 글자로 이스케이프한다.
+// 속성 값은 엔티티를 풀어서 검사한 뒤 다시 이스케이프 — href="javascript&#58;…" 처럼 숨긴 주소도 막힌다
+const ATTR_OK = /^(class|id|src|href|alt|title|width|height|open|colspan|rowspan)$/i;
+const codePoint = e => { const hex = /^#x/i.test(e), n = parseInt(e.slice(hex ? 2 : 1), hex ? 16 : 10); return n > 0 && n <= 0x10FFFF ? n : 0xFFFD; };
+const decodeEnt = v => v.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);?/gi, (_, e) => e[0] === '#'
+  ? String.fromCodePoint(codePoint(e))
+  : { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[e.toLowerCase()]);
+// 태그 하나 = < 부터 따옴표 밖의 > 까지 (alt="A > B" 의 > 에서 끊지 않게)
+const TAG_CHUNK = /<(?:[^>"']|"[^"]*"|'[^']*')*>?/g;
+function sanitizeHtml(html) {
+  return html.replace(TAG_CHUNK, raw => {
+    // > 로 안 끝난 조각은 바로 글자로 — 아래 정규식이 실패할 때 되짚기가 입력 길이의 제곱으로 늘지 않게
+    const m = raw.endsWith('>') && raw.match(/^<(\/?)([a-zA-Z][\w-]*)(?![\w-])((?:[^>"']|"[^"]*"|'[^']*')*)>$/);
+    if (!m || !HTML_TAGS.test(m[2])) return esc(raw);
+    const [, slash, name] = m;
+    if (slash) return `</${name.toLowerCase()}>`;
+    const attrs = [];
+    for (const a of m[3].matchAll(/([^\s=\/"'>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g)) {
+      const key = a[1].toLowerCase();
+      if (!ATTR_OK.test(key)) continue;
+      let v = a[2] ?? a[3] ?? a[4];
+      if (v === undefined) { attrs.push(key); continue; }
+      v = decodeEnt(v);
+      if ((key === 'src' || key === 'href') && !safeUrl(v)) v = '#';
+      attrs.push(`${key}="${esc(v)}"`);
+    }
+    return `<${name.toLowerCase()}${attrs.length ? ' ' + attrs.join(' ') : ''}>`;
+  });
+}
+
+// raw HTML 덩어리: 첫 줄 태그의 열림/닫힘 짝이 맞을 때까지 모은다(빈 줄에 끊지 않음). 안쪽 코드펜스의 태그는 세지 않는다
 function collectHtml(lines, i) {
   const tag = lines[i].match(/^<([a-zA-Z][\w-]*)/)[1].toLowerCase();
   const VOID = /^(img|hr|br)$/i;
   const open = new RegExp('<' + tag + '(\\s|>|/)', 'gi'), close = new RegExp('</' + tag + '\\s*>', 'gi');
-  const buf = []; let depth = 0;
+  const buf = []; let depth = 0, fence = null;
   do {
     const l = lines[i++]; buf.push(l);
+    const f = l.match(FENCE_RE);
+    if (fence) { if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !f[2] && !f[3]) fence = null; continue; }
+    if (f && depth > 0) { fence = f[1]; continue; }
     depth += (l.match(open) || []).length - (l.match(close) || []).length;
     if (VOID.test(tag)) break;
   } while (i < lines.length && depth > 0);
@@ -318,6 +379,8 @@ function collectHtml(lines, i) {
 
 // <details> 안쪽: summary 줄 다음부터 닫는 태그 전까지를 md로 다시 렌더
 function renderDetails(buf) {
+  // 한 줄에 다 쓴 <details><summary>…</summary>…</details> 는 안쪽을 md로 다시 읽지 않고 HTML로 정리만(같은 줄을 다시 읽으면 무한 재귀)
+  if (buf.length === 1) return sanitizeHtml(buf[0]);
   const first = buf[0], last = buf[buf.length - 1];
   const inner = buf.slice(1, -1);
   const closeIdx = last.lastIndexOf('</details>');
@@ -325,9 +388,13 @@ function renderDetails(buf) {
   if (tail.trim()) inner.push(tail);
   // </details> 뒤에 같은 줄로 이어 쓴 글자는 버리지 않고 뒤따르는 문단으로
   const after = closeIdx > -1 ? last.slice(closeIdx + '</details>'.length).trim() : '';
+  // 여는 줄(<details open> 등)은 정리해서, summary 글은 태그를 글자로 바꿔서 — 제목 칸에 <img onerror> 같은 것이 들어와도 실행 안 됨.
+  // summary가 없으면 브라우저 기본 영어 "Details" 대신 "상세"
   let summary = '';
-  if (inner.length && /^\s*<summary/i.test(inner[0])) summary = inner.shift();
-  return [first, summary, ...renderBlocks(inner, true), '</details>', after ? `<p>${inline(after)}</p>` : ''].filter(Boolean).join('\n');
+  const sm = inner.length && inner[0].match(/^\s*(<summary(?:\s(?:[^>"']|"[^"]*"|'[^']*')*)?>)(.*)<\/summary>\s*$/i);
+  if (sm) { inner.shift(); summary = `${sanitizeHtml(sm[1])}${inline(sm[2])}</summary>`; }
+  else if (!/<summary/i.test(first)) summary = '<summary>상세</summary>';
+  return [sanitizeHtml(first), summary, ...renderBlocks(inner, true), '</details>', after ? `<p>${inline(after)}</p>` : ''].filter(Boolean).join('\n');
 }
 
 // ── block parser (nested=true 면 섹션/블록 카드 안 만들고 제목은 h4) ───────────
@@ -346,9 +413,9 @@ function renderBlocks(lines, nested) {
     let m;
 
     if ((m = line.match(FENCE_RE))) {
-      const fenceLen = m[1].length, lang = m[2], info = (m[3] || '').trim(); const buf = []; i++;
-      // ```` 네 개짜리 펜스 안의 ``` 는 내용이다 — 여는 것과 같거나 긴 백틱 런 + 뒤에 공백만 있을 때만 닫힘
-      const isClose = l => { const c = l.match(/^(`{3,})\s*$/); return !!c && c[1].length >= fenceLen; };
+      const fenceLen = m[1].length, fenceChar = m[1][0], lang = m[2].toLowerCase(), info = (m[3] || '').trim(); const buf = []; i++;
+      // ```` 네 개짜리 펜스 안의 ``` 는 내용이다 — 여는 것과 같은 글자로 같거나 긴 런 + 뒤에 공백만 있을 때만 닫힘
+      const isClose = l => { const c = l.match(/^\s{0,3}(`{3,}|~{3,})\s*$/); return !!c && c[1][0] === fenceChar && c[1].length >= fenceLen; };
       while (i < lines.length && !isClose(lines[i])) buf.push(lines[i++]);
       i++;
       if (lang === 'mermaid') out.push('<pre class="mermaid">\n' + esc(buf.join('\n')) + '\n</pre>');
@@ -362,7 +429,8 @@ function renderBlocks(lines, nested) {
 
     if ((m = line.match(/^(#{1,6})\s+(.*)$/))) {
       let lv = m[1].length; const t = m[2].trim(); i++;
-      if (nested) { out.push(`<h4>${inline(t)}</h4>`); continue; }
+      // 기본은 H4 이하를 h4 하나로(템플릿이 h4까지만 꾸밈). --plain 은 기획서 장·절·항 단계를 살려 h4~h6 유지
+      if (nested) { const hx = plain ? Math.max(3, lv) : 4; out.push(`<h${hx}>${inline(t)}</h${hx}>`); continue; }
       // 본문 첫 H1 = 문서 제목(frontmatter title 이 있으면 그쪽 우선). 두 번째 이후 H1은 버리지 않고 섹션(H2)으로 강등
       if (lv === 1) { if (!seenH1) { seenH1 = true; if (!title) title = t; continue; } lv = 2; }
       if (lv === 2) { closeSec(); seenH2 = true; blockNo = 0; out.push(`<section class="sec" id="${slug(t)}">\n<h2>${inline(t)}</h2>`); secOpen = true; continue; }
@@ -376,15 +444,16 @@ function renderBlocks(lines, nested) {
         out.push(`<div class="block">\n<span class="block-badge">${esc(badge)}</span>\n<h3>${inline(tt)}</h3>`);
         blockOpen = true; continue;
       }
-      out.push(`<h4>${inline(t)}</h4>`); continue;
+      { const hx = plain ? lv : 4; out.push(`<h${hx}>${inline(t)}</h${hx}>`); continue; }
     }
 
     if (/^>/.test(line)) {
       const buf = [];
       while (i < lines.length && /^>/.test(lines[i])) buf.push(lines[i++].replace(/^>\s?/, ''));
       const text = buf.join('\n').trim();
-      if (!nested && !seenH2 && !summary) summary = text;
-      else out.push(`<blockquote>${inline(text).replace(/\n/g, '<br>')}</blockquote>`);
+      // 기본: 첫 H2 앞 첫 인용문 = 요약 상자(규칙 2). --plain: 인용문은 인용문 그대로(인터뷰 발언 등이 요약으로 둔갑하지 않게)
+      if (!plain && !nested && !seenH2 && !summary) summary = text;
+      else out.push(`<blockquote>${inline(text).replace(/\n/g, hardBreaks ? '<br>' : ' ')}</blockquote>`);
       continue;
     }
 
@@ -397,7 +466,7 @@ function renderBlocks(lines, nested) {
     if (LIST_RE.test(line)) {
       const items = [];
       while (i < lines.length && (m = lines[i].match(LIST_RE))) {
-        const it = { indent: m[1].length, ordered: /\d/.test(m[2]), text: m[3] }; i++;
+        const it = { indent: m[1].length, ordered: /\d/.test(m[2]), number: parseInt(m[2], 10), text: m[3] }; i++;
         while (i < lines.length && lines[i].trim() && !LIST_RE.test(lines[i]) && /^\s{2,}/.test(lines[i])) it.text += ' ' + lines[i++].trim();
         items.push(it);
       }
@@ -408,7 +477,7 @@ function renderBlocks(lines, nested) {
 
     if (HTML_ALLOW.test(line)) {
       const { buf, next, tag } = collectHtml(lines, i); i = next;
-      out.push(tag === 'details' ? renderDetails(buf) : buf.join('\n')); continue;
+      out.push(tag === 'details' ? renderDetails(buf) : sanitizeHtml(buf.join('\n'))); continue;
     }
 
     if (/^---+\s*$/.test(line)) { out.push('<hr>'); i++; continue; }
@@ -417,7 +486,7 @@ function renderBlocks(lines, nested) {
     const buf = [];
     while (i < lines.length && lines[i].trim() && !isBlockStart(lines[i])) buf.push(lines[i++]);
     if (!buf.length) buf.push(lines[i++]);
-    out.push('<p>' + buf.map(inline).join('<br>\n') + '</p>');
+    out.push('<p>' + buf.map(inline).join(hardBreaks ? '<br>\n' : '\n') + '</p>');
   }
   closeSec();
   return out;
@@ -427,7 +496,7 @@ const out = renderBlocks(body.split('\n'), false);
 
 // ── template fill ──────────────────────────────────────────────────────────
 const today = new Date().toISOString().slice(0, 10);
-const date = meta.date || today;
+const date = meta.date || (plain ? '기준일 미기재' : today);   // --plain 문서는 기준일을 지어내지 않는다
 const proj = meta.project || '';
 const branch = meta.branch || '';
 const kind = meta.kind || '보고서';
@@ -464,29 +533,33 @@ html = html
   .replace('{{문서 종류 — 예: 작업기록 · 이슈정리 · 핸드오프}}', () => esc(kind))
   .replace(/\{\{작성자·생성 도구 한 줄[^}]*\}\}/, () => `작성 ${esc(date)}${meta.author ? ' · ' + esc(meta.author) : ''} · korean-readable-reports/render.js`);
 
+// --offline: 템플릿의 CDN 요청(Pretendard 글꼴, Mermaid 모듈)을 빼고, Mermaid는 소스 글자로 보여 준다
+if (args.includes('--offline')) {
+  html = html.replace(/<link[^>]+cdn\.jsdelivr\.net[^>]*>/g, '')
+    .replace(/<script type="module">[\s\S]*?<\/script>/g, '')
+    .replace(/<pre class="mermaid">/g, '<pre class="mermaid fallback">');
+}
+
 // 출력: 기본은 md 옆(= 실행 위치의 reports/). 쓰기 권한이 없으면 바탕화면 reports/ 로 넘긴다
+// --keep-existing 이면 'wx'(이미 있으면 실패)로 써서, 검사와 쓰기 사이에 생긴 파일도 덮지 않는다
 function desktopDir() {
   const home = process.env.USERPROFILE || process.env.HOME || '';
   const cands = [path.join(home, 'Desktop'), path.join(home, 'OneDrive', 'Desktop'), path.join(home, 'OneDrive', '바탕 화면'), path.join(home, '바탕 화면')];
   return cands.find(d => { try { return fs.statSync(d).isDirectory(); } catch (e) { return false; } }) || home;
 }
+const flag = keepExisting ? 'wx' : 'w';
 let written = outPath;
 try {
   fs.mkdirSync(path.dirname(path.resolve(outPath)), { recursive: true });
-  fs.writeFileSync(outPath, html);
+  fs.writeFileSync(outPath, html, { flag });
 } catch (e) {
+  if (e.code === 'EEXIST') { console.error(`render: 출력 파일이 이미 있음 — ${outPath} (교체하려면 --force)`); process.exit(1); }
   if (!/^(EACCES|EPERM|EROFS|ENOENT|EBUSY)$/.test(e.code)) throw e;
   const dir = path.join(desktopDir(), 'reports');
   fs.mkdirSync(dir, { recursive: true });
   written = path.join(dir, path.basename(outPath));
-  fs.writeFileSync(written, html);
+  guardOut(written);
+  fs.writeFileSync(written, html, { flag });
   console.log(`render: ${outPath} 에 쓸 수 없어서(${e.code}) 바탕화면으로 저장`);
 }
 console.log('rendered → ' + path.resolve(written));
-
-if (doLint) {
-  const { lint, report } = require('./lint.js');
-  console.log('');
-  const errors = report(inPath, lint(src));
-  if (strict && errors) process.exit(1);
-}
