@@ -309,6 +309,32 @@ test('규칙 14: 측정된 한국어 AI 문형 4종은 힌트(경고 아님)', (
   assert.equal(hint('필요한 것은 없는 레코드를 추가하는 일입니다.\n\n핵심은 속도입니다.', /분열문/).length, 1);
 });
 
+test('정합성 힌트: 요약 수치·개수 약속·미룬 약속', () => {
+  const doc = (summary, body) => '---\ntitle: t\ndate: 2026-10-17\naudience: team\nsummary: ' + summary + '\n---\n# t\n\n' + body;
+  const got = (d, re, opts) => lint(d, opts).filter(f => re.test(f.msg));
+  // 요약 수치: 본문에 없는 숫자만, 힌트로. 쉼표·공백 차이는 같은 수
+  const miss = got(doc('응답 시간이 340ms에서 120ms로 줄었다.', '## 결과\n\n응답 시간은 340ms였습니다.'), /요약 수치/);
+  assert.equal(miss.length, 1); assert.ok(miss[0].hint); assert.ok(/120ms/.test(miss[0].msg));
+  assert.equal(got(doc('처리 1,234건을 확인했다.', '## 결과\n\n| 항목 | 값 |\n| --- | --- |\n| 처리 | 1234건 |'), /요약 수치/).length, 0);
+  assert.equal(got(doc('2026-10-17 기준 3개 서비스를 바꿨다.', '## 결과\n\n서비스 3개를 바꿨습니다.'), /요약 수치/).length, 0, '날짜는 수치로 보지 않음');
+  assert.equal(got(doc('지연이 12% 늘었다.', '## 결과\n\n```stats\n지연 | 12% | 9월 기준 | 주의\n```'), /요약 수치/).length, 0, 'stats 블록도 본문');
+  // 개수 약속: 예고한 수와 바로 아래 목록·카드·흐름의 항목 수
+  assert.equal(got(doc('a', '## 원인\n\n원인은 세 가지입니다.\n\n- 캐시가 꺼져 있었습니다.\n- 연결 수가 모자랐습니다.'), /개수 약속/).length, 1);
+  assert.equal(got(doc('a', '## 원인\n\n원인은 두 가지입니다.\n\n- 캐시가 꺼져 있었습니다.\n- 연결 수가 모자랐습니다.\n  - 최대 10개였습니다.'), /개수 약속/).length, 0, '하위 항목은 세지 않음');
+  assert.equal(got(doc('a', '## 흐름\n\n요청은 4단계로 처리됩니다.\n\n```flow\n사용자 | 요청 | ext\n서버 | 검증 | logic\nDB | 저장 | data\n```'), /개수 약속/).length, 1);
+  assert.equal(got(doc('a', '## 선택지\n\n선택지는 2개입니다.\n\n```cards\n수동 [추천]\n운영자가 승인합니다.\n\n자동\n다음 단계에서 봅니다.\n```'), /개수 약속/).length, 0);
+  assert.equal(got(doc('a', '## 범위\n\n서비스 3개 중 하나만 바꿨습니다.\n\n다음 절에서 이유를 씁니다.'), /개수 약속/).length, 0, '목록이 이어지지 않으면 비교 안 함');
+  // 실제 문서에서 나온 오탐(2026-10-17): 줄 중간 개수 + 바로 아래 표, 목록 항목 안의 개수
+  assert.equal(got(doc('a', '## 범위\n\n8개 서비스 중 아래 표의 서비스만 바꿨습니다.\n\n| 서비스 | 상태 |\n| --- | --- |\n| A | 완료 |'), /개수 약속/).length, 0);
+  assert.equal(got(doc('a', '## 목록\n\n- 항목은 세 가지입니다.\n- 둘째 항목입니다.'), /개수 약속/).length, 0);
+  assert.equal(got(doc('a', '## 단계\n\n배포는 다음 3단계로 진행됩니다.\n\n1. 빌드합니다.\n2. 올립니다.'), /개수 약속/).length, 1);
+  // 미룬 약속: 한 번 알림
+  const later = got(doc('a', '## 배경\n\n자세한 원인은 뒤에서 다루겠습니다.\n\n## 원인\n\n아래에서 설명하겠습니다.'), /미룬 약속/);
+  assert.equal(later.length, 1); assert.ok(later[0].hint);
+  // --plain에서는 끔
+  assert.equal(got(doc('120ms로 줄었다.', '## 결과\n\n원인은 세 가지입니다.\n\n- 하나입니다.'), /요약 수치|개수 약속/, {plain: true}).length, 0);
+});
+
 test('규칙 14: 좁은 문맥 판별로 남긴 알려진 미검출', () => {
   // 알려진 미검출: 오탐을 줄인 대상/어미/단어 경계 밖의 나쁜 표현. 해소 전까지 검출을 기대하지 않는다.
   const missed = [

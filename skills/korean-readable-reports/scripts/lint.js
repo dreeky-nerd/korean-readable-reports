@@ -17,6 +17,7 @@
  *   1   audience: external(또는 --external) — 브랜치 경로(feature/…)·내부 호스트·개인 로컬 경로·IP·사번 패턴, redact: 목록(쉼표 구분).
  *       frontmatter·코드·접힌 상세까지 전부 보고, 찾은 문자열은 출력하지 않는다(CI 로그에 다시 새지 않게)
  *   2   요약 박스 문장 3개 초과 / 자기 문서 예고 / (힌트) 표·그림 예고·H2 첫 문장의 제목 반복·수정 과정
+ *       (힌트) 정합성 — 요약 박스 수치가 본문에 없음, 문장 끝 개수 예고("세 가지입니다")와 바로 아래 목록·flow·cards·표 항목 수가 다름, "뒤에서 다루겠습니다" 미룬 약속
  *   4   불릿이 서술어 없이 끝남(단편 의심) — 한국어: 다/요/음/함/됨/./: 로 안 끝나는 항목
  *   6   본문 문장 안에 file:line (근거: 줄·코드펜스·표 제외)
  *   7   표 셀이 백틱 코드만으로 채워짐
@@ -285,6 +286,51 @@ function lint(src, opts = {}) {
     const n = countSentences(summary.replace(/\n/g, ' '));
     if (n > 3) warn(summaryLine, 2, `요약 박스 문장 ${n}개 — 3개 이하로 (무엇을/어떻게/결정할 것)`);
   } else warn(start, 2, '요약 박스 없음 — frontmatter summary: 또는 H1 아래 첫 인용문(>)');
+
+  // 정합성(힌트, 규칙 2): 요약과 본문, 예고와 목록이 서로 맞는지. 문장 품질 검사가 못 보는 내용 모순을 일부 잡는다.
+  // 근거: hanlint countMismatch·promiseRecall 방식(docs/research/2026-10-17-korean-polish-trends.md 4-5절). 정확 일치만 보고 반올림은 사람이 판단
+  {
+    const quoteEnd = summaryLine && !meta.summary ? (() => { let j = summaryLine; while (j < lines.length && /^>/.test(lines[j])) j++; return j; })() : -1;
+    const norm = t => t.replace(/(\d),(?=\d{3})/g, '$1').replace(/(\d)\s+(?=[%A-Za-z가-힣])/g, '$1');
+    const body = norm(lines.filter((_, i) => i >= start && !(i >= summaryLine && i < quoteEnd)).join('\n'));
+    const NUM = /\d[\d,]*(?:\.\d+)?\s?(?:%|ms|초|분|시간|일|건|개|배|명|회|원|만|억|[KMGT]B|px)?/g;
+    const missing = (norm(summary.replace(/\d{4}[-.]\d{1,2}[-.]\d{1,2}/g, '')).match(NUM) || [])
+      .map(t => t.trim()).filter(t => /\D$|\.\d|\d{2}/.test(t) && !body.includes(t));
+    if (missing.length) warn(summaryLine, 2, `요약 수치 ${[...new Set(missing)].map(t => `"${t}"`).join('·')}가 본문에 없음 — 근거 위치를 본문에 두기 (반올림한 값이면 무시)`, true);
+
+    // 개수 약속: "세 가지입니다" 다음에 바로 오는 목록·flow·cards·표의 항목 수와 비교
+    const KO_NUM = { 두: 2, 세: 3, 네: 4, 다섯: 5, 여섯: 6, 일곱: 7, 여덟: 8, 아홉: 9, 열: 10 };
+    // 약속 = 문장 끝에서 개수를 예고하는 줄만("원인은 세 가지입니다.", "4단계로 처리됩니다:"). 줄 중간의 "8개 서비스 중"은 약속이 아님
+    const PROMISE = /(\d+|두|세|네|다섯|여섯|일곱|여덟|아홉|열)\s?(가지|개|단계|곳)(?:입니다|이다|다|예요|이에요|로 (?:나뉩니다|처리됩니다|진행됩니다|정리합니다|나눕니다)|가 있습니다|가 있다)?\s*[.:：]?\s*$/;
+    const itemsAfter = i => {
+      let j = i + 1;
+      if (j < lines.length && !lines[j].trim()) j++;
+      if (j >= lines.length) return null;
+      const fb = fenceAt[j];
+      if (fb && fb.open === j) {
+        const filled = fb.body.filter(([, l]) => l.trim());
+        if (fb.kind === 'flow') return filled.length;
+        if (fb.kind === 'cards') return fb.body.reduce((n, [, l], k, a) => n + (l.trim() && (k === 0 || !a[k - 1][1].trim()) ? 1 : 0), 0);
+        return null;
+      }
+      const li = lines[j].match(/^(\s*)([-*]|\d+\.)\s/);
+      if (li) { let n = 0; for (; j < lines.length && lines[j].trim(); j++) if ((lines[j].match(/^(\s*)([-*]|\d+\.)\s/) || [])[1] === li[1]) n++; return n; }
+      if (/^\s*\|/.test(lines[j])) { let n = 0; for (; j < lines.length && /^\s*\|/.test(lines[j]); j++) n++; return n - 2; }
+      return null;
+    };
+    const later = [];
+    for (let i = start; i < lines.length; i++) {
+      if (fenceAt[i] || SOURCES_RE.test(lines[i])) continue;
+      const text = proseLines[i];
+      if (/(뒤에서|아래에서|다음 (?:절|장|섹션)에서|나중에)[^.!?]{0,30}(다루겠습니다|설명하겠습니다|살펴보겠습니다|다루겠다|설명하겠다)/.test(text)) later.push(i);
+      const promised = text.match(PROMISE);
+      if (!promised || /^\s*(#|\||[-*]\s|\d+\.\s|>)/.test(text)) continue;
+      const want = KO_NUM[promised[1]] || Number(promised[1]), got = itemsAfter(i);
+      if (want < 2 || want > 10) continue;
+      if (got !== null && got > 0 && got !== want) warn(i, 2, `개수 약속 "${promised[0]}" — 바로 아래 항목은 ${got}개`, true);
+    }
+    if (later.length) warn(later[0], 2, `미룬 약속 ${later.length}곳("뒤에서 다루겠습니다" 등) — 실제로 다뤘는지 확인하고, 다뤘다면 그 절 이름을 적기`, true);
+  }
 
   // 본문 스캔 (코드·표·접힌 상세는 건너뜀 — 표·details 구조는 위 공통 검사가 본다)
   let inHtml = false, h1Count = 0;
