@@ -516,8 +516,10 @@ test('속성 값에 > 가 있는 summary', () => {
   assert.ok(r.html.includes('<summary title="A &gt; B">제목글</summary>'), r.html.match(/<details>[\s\S]*?<\/details>/)?.[0]);
 });
 test('raw HTML 정리가 긴 입력에서 느려지지 않음', () => {
-  const t = Date.now(); const r = render('# 제목\n\n<div><' + 'a'.repeat(50000) + '"x></div>', ['--no-lint']);
-  assert.equal(r.status, 0); assert.ok(Date.now() - t < 1500, (Date.now() - t) + 'ms');
+  // 프로세스 시작 시간은 PC마다 다르다(보안 프로그램이 도는 Windows는 2초 가까이) — 작은 문서 렌더를 기준으로 차이만 본다
+  const t0 = Date.now(); render('# 제목\n\n본문', ['--no-lint']); const base = Date.now() - t0;
+  const t = Date.now(); const r = render('# 제목\n\n<div><' + 'a'.repeat(50000) + '"x></div>', ['--no-lint']); const took = Date.now() - t;
+  assert.equal(r.status, 0); assert.ok(took - base < 1000, took + 'ms (기준 ' + base + 'ms)');
   const t2 = Date.now(); lint(fm + '<' + 'a'.repeat(50000)); lint(fm + '<' + 'a'.repeat(50000), {plain: true}); assert.ok(Date.now() - t2 < 500, 'lint ' + (Date.now() - t2) + 'ms');
 });
 test('바탕화면 대체 경로도 원본·링크 보호', () => {
