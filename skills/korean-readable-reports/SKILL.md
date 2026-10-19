@@ -205,7 +205,7 @@ easy.
    Other skills whose documents don't follow these writing rules (plans,
    proposals) render with `--plain` — structure/safety lint only, quotes stay
    quotes, soft line breaks. Flags are listed at the top of `scripts/render.js`;
-   `node scripts/test.js` is the regression suite.
+   `node <skill-dir>/scripts/test.js` is the regression suite.
 5. If the draft still reads like a default agent report, read
    `references/examples.md` (twelve before/after pairs, one per failure mode,
    plus how the same finding shifts per audience) and rewrite.
