@@ -10,11 +10,16 @@ const {spawnSync} = require('node:child_process');
 const {lint} = require('./lint.js');
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'krr-test-'));
 const renderer = path.join(__dirname, 'render.js');
-let passed = 0, failed = 0, seq = 0;
+let passed = 0, failed = 0, skipped = 0, seq = 0;
+// 이 OS에서 시험 조건을 만들 수 없으면 실패가 아니라 건너뜀(Windows: 폴더 chmod가 쓰기를 막지 못함, 심볼릭 링크는 관리자 권한 필요)
+const skip = reason => { const e = new Error(reason); e.skip = true; throw e; };
 const fm = '---\ntitle: 시험 문서\ndate: 2026-09-22\naudience: team\n---\n';
 function test(name, fn) {
   try { fn(); passed++; console.log('PASS ' + name); }
-  catch (e) { failed++; console.log('FAIL ' + name + '\n  ' + e.message.split('\n').slice(0, 4).join('\n  ')); }
+  catch (e) {
+    if (e.skip) { skipped++; console.log('SKIP ' + name + ' — ' + e.message); return; }
+    failed++; console.log('FAIL ' + name + '\n  ' + e.message.split('\n').slice(0, 4).join('\n  '));
+  }
 }
 function render(body, args = [], metadata = fm) {
   const input = path.join(dir, 'case-' + (++seq) + '.md');
@@ -318,6 +323,9 @@ test('정합성 힌트: 요약 수치·개수 약속·미룬 약속', () => {
   assert.equal(got(doc('처리 1,234건을 확인했다.', '## 결과\n\n| 항목 | 값 |\n| --- | --- |\n| 처리 | 1234건 |'), /요약 수치/).length, 0);
   assert.equal(got(doc('2026-10-17 기준 3개 서비스를 바꿨다.', '## 결과\n\n서비스 3개를 바꿨습니다.'), /요약 수치/).length, 0, '날짜는 수치로 보지 않음');
   assert.equal(got(doc('지연이 12% 늘었다.', '## 결과\n\n```stats\n지연 | 12% | 9월 기준 | 주의\n```'), /요약 수치/).length, 0, 'stats 블록도 본문');
+  assert.equal(got(doc('90일 결과면 약 4.1점이 된다.', '## 점수\n\n90일 결과로 4/4.5/5(4.10)입니다.'), /요약 수치/).length, 0, '소수 끝 0은 같은 수');
+  assert.equal(got(doc('후보 5개를 골랐고 국내만 있는 것은 0개다.', '## 선정\n\n### 해외 (3개)\n\n본문입니다.\n\n### 진출 (2개)\n\n본문입니다.'), /요약 수치/).length, 0, '20 이하 개수는 세거나 더한 값');
+  assert.equal(got(doc('처리 1,500건이 밀렸다.', '## 결과\n\n처리가 밀렸습니다.'), /요약 수치/).length, 1, '큰 개수는 계속 검사');
   // 개수 약속: 예고한 수와 바로 아래 목록·카드·흐름의 항목 수
   assert.equal(got(doc('a', '## 원인\n\n원인은 세 가지입니다.\n\n- 캐시가 꺼져 있었습니다.\n- 연결 수가 모자랐습니다.'), /개수 약속/).length, 1);
   assert.equal(got(doc('a', '## 원인\n\n원인은 두 가지입니다.\n\n- 캐시가 꺼져 있었습니다.\n- 연결 수가 모자랐습니다.\n  - 최대 10개였습니다.'), /개수 약속/).length, 0, '하위 항목은 세지 않음');
@@ -517,6 +525,7 @@ test('바탕화면 대체 경로도 원본·링크 보호', () => {
   const home = fs.mkdtempSync(path.join(dir, 'home-')); const reports = path.join(home, 'Desktop', 'reports'); fs.mkdirSync(reports, {recursive: true});
   const input = path.join(reports, 'same.md'); fs.writeFileSync(input, fm + '# 제목\n본문'); const before = fs.readFileSync(input, 'utf8');
   const ro = path.join(dir, 'readonly-' + seq); fs.mkdirSync(ro); fs.chmodSync(ro, 0o555);   // 쓰기 실패 = EACCES → 바탕화면으로
+  try { fs.writeFileSync(path.join(ro, 'probe'), 'x'); fs.chmodSync(ro, 0o755); skip('이 OS에서는 chmod로 폴더 쓰기를 막을 수 없음'); } catch (e) { if (e.skip) throw e; }
   const r = spawnSync(process.execPath, [renderer, input, '-o', path.join(ro, 'same.md'), '--no-lint'], {encoding: 'utf8', env: {...process.env, HOME: home, USERPROFILE: home}});
   fs.chmodSync(ro, 0o755);
   assert.equal(fs.readFileSync(input, 'utf8'), before, r.stdout + r.stderr); assert.notEqual(r.status, 0);
@@ -542,7 +551,8 @@ test('원본 덮어쓰기 거부', () => {
   assert.equal(result.status, 1); assert.equal(fs.readFileSync(r.input, 'utf8'), before);
 });
 test('끊어진 출력 심볼릭 링크도 거부', () => {
-  const r = plain('# 제목\n본문', ['--strict']); const target = path.join(dir, 'not-created.html'); const alias = path.join(dir, 'symlink.html'); fs.symlinkSync(target, alias);
+  const r = plain('# 제목\n본문', ['--strict']); const target = path.join(dir, 'not-created.html'); const alias = path.join(dir, 'symlink.html');
+  try { fs.symlinkSync(target, alias); } catch (e) { if (e.code === 'EPERM') skip('심볼릭 링크를 만들 권한이 없음(Windows 개발자 모드·관리자 필요)'); throw e; }
   const result = run(r.input, '-o', alias, '--force');
   assert.equal(result.status, 1); assert.equal(fs.existsSync(target), false);
 });
@@ -571,5 +581,5 @@ test('문서별 테마 기본값', () => {
   const dark = plain('# 제목\n본문', ['--strict'], fm.replace('---\n', '---\ntheme: dark\n'));
   assert.equal(dark.status, 0, dark.stdout + dark.stderr); assert.ok(dark.html.includes('data-theme-default="dark"'));
 });
-console.log(`${passed} passed, ${failed} failed; artifacts: ${dir}`);
+console.log(`${passed} passed, ${failed} failed${skipped ? `, ${skipped} skipped` : ''}; artifacts: ${dir}`);
 process.exit(failed ? 1 : 0);

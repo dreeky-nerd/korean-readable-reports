@@ -302,13 +302,18 @@ function lint(src, opts = {}) {
     const quoteSummary = !meta.summary && !!summary;
     const quoteEnd = quoteSummary ? (() => { let j = summaryLine; while (j < lines.length && /^>/.test(lines[j])) j++; return j; })() : -1;
     const summaryAt = meta.summary ? Math.max(0, lines.slice(0, start).findIndex(l => /^summary:/.test(l))) : summaryLine;
-    const norm = t => t.replace(/(\d),(?=\d{3})/g, '$1').replace(/(\d)\s+(?=[%A-Za-z가-힣])/g, '$1');
+    // 소수 끝의 0은 같은 수(4.10 = 4.1, 2.0 = 2) — 실측(2026-10-19): 요약 "약 4.1점"·본문 "(4.10)"을 다른 수로 봤다
+    const norm = t => t.replace(/(\d),(?=\d{3})/g, '$1').replace(/(\d)\s+(?=[%A-Za-z가-힣])/g, '$1')
+      .replace(/(\d)\.(\d*?)0+(?!\d)/g, (_, a, b) => b ? a + '.' + b : a);
     const body = norm(lines.filter((_, i) => i >= start && !(quoteSummary && i >= summaryLine && i < quoteEnd)).join('\n'));
     // 숫자 경계까지 맞아야 같은 수 — "12%"가 "112%"·"0.12%" 안에 들어 있다고 근거로 치지 않는다
     const inBody = t => new RegExp('(?<![\\d.,])' + t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + (/\d$/.test(t) ? '(?![\\d.])' : '')).test(body);
     const NUM = /\d[\d,]*(?:\.\d+)?\s?(?:%|ms|초|분|시간|일|건|개|배|명|회|원|만|억|[KMGT]B|px)?/g;
+    // 20 이하의 개수("후보 5개", "14건")는 보지 않는다 — 대개 본문의 표·목록을 세거나 소제목의 수를 더한 값이라
+    // 본문에 같은 글자가 없는 게 정상이다(실측 2026-10-19: 주간 보고서 "5개" = 소제목 "(3개)"+"(2개)", "0개" = 없음)
+    const smallCount = t => { const m = t.match(/^(\d{1,2})\s?(?:개|건|명|회)$/); return !!m && +m[1] <= 20; };
     const missing = (norm(summary.replace(/\d{4}[-.]\d{1,2}[-.]\d{1,2}/g, '')).match(NUM) || [])
-      .map(t => t.trim()).filter(t => /\D$|\.\d|\d{2}/.test(t) && !inBody(t));
+      .map(t => t.trim()).filter(t => /\D$|\.\d|\d{2}/.test(t) && !smallCount(t) && !inBody(t));
     if (missing.length) warn(summaryAt, 2, `요약 수치 ${[...new Set(missing)].map(t => `"${t}"`).join('·')}가 본문에 없음 — 근거 위치를 본문에 두기 (반올림했거나 단위만 바꿔 쓴 값이면 무시)`, true);
 
     // 개수 약속: "세 가지입니다" 다음에 바로 오는 목록·flow·cards·표의 항목 수와 비교
