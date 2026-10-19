@@ -343,6 +343,20 @@ test('규칙 14: 마무리 틀(1회)과 번역투·보고서 말투(4회부터)�
   }
 });
 
+// ── 2026-10-19 추가: 날것의 Claude 글 15개와 이 PC 보고서 18건을 비교해 보고서에 0번인 버릇만 ──
+test('규칙 14: Claude 버릇 — 이모지·"결국 X입니다"·"중요한 건"은 힌트', () => {
+  const hint = (doc, re) => lint(fm + doc).filter(f => f.rule === 14 && re.test(f.msg));
+  const e = hint('## 🚀 다음 분기 계획\n\n배포를 마쳤습니다 🎉', /이모지/);
+  assert.equal(e.length, 1); assert.ok(e[0].hint); assert.ok(/이모지 2개/.test(e[0].msg));
+  assert.ok(/이모지 1개/.test(hint('# 🛠️ 소식', /이모지/)[0].msg), '변형 선택자 붙은 이모지는 1개');
+  assert.equal(hint('A ↔ B 비교, ★ 추천, ✓ 완료', /이모지/).length, 0, '글자 모양 기호');
+  assert.equal(hint('로그에 "🚀 started"가 찍힙니다.\n\n`🎉`', /이모지/).length, 0, '인용·코드');
+  for (const s of ['AI가 쓴 코드를 믿을 근거는 결국 테스트입니다.', '개발은 결국 사람과 함께하는 일이다.']) assert.equal(hint(s, /본질 단정/).length, 1, s);
+  for (const s of ['결국 30분 뒤 롤백했습니다.', '결국 캐시 만료가 원인이었습니다.']) assert.equal(hint(s, /본질 단정/).length, 0, s);
+  assert.equal(hint('중요한 건 빠른 공유입니다.\n\n필요한 건 재현 절차입니다.', /분열문/).length, 1);
+  assert.equal(hint('중요한 건수는 12건입니다.\n\n필요한 건물 목록입니다.', /분열문/).length, 0);
+});
+
 test('구조: 보이지 않는 문자 경고 — 코드·frontmatter 안도, 이모지 결합은 제외', () => {
   const inv = doc => lint(doc).filter(f => /보이지 않는 문자/.test(f.msg));
   const zw = String.fromCharCode(0x200B), rlo = String.fromCharCode(0x202E), zwj = String.fromCharCode(0x200D);

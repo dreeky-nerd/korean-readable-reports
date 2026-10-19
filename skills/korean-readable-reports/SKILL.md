@@ -158,6 +158,11 @@ easy.
     Wrap-up stock phrases are hinted on first use too: sentence-initial
     "결론적으로·요컨대·종합하면", "시사하는 바가 크다", "~할 때입니다" — the
     conclusion already lives in the summary box and each section's first line.
+    Two Claude habits are hinted on first use — measured in 15 raw Claude
+    drafts against 18 real reports, where they never appeared: emoji in
+    headings or sentences (use text labels such as 확인·추정 for status), and
+    the essence claim "X는 결국 Y입니다" (give the evidence, or state the fact
+    without 결국).
     Invisible characters (zero-width space, stray BOM, bidi controls) are a
     warning in every mode: they break copy, search, and diff.
 
