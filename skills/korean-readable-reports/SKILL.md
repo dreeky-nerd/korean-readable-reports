@@ -141,7 +141,9 @@ easy.
       기본값, 오류, 설정, 타임아웃, 재시도…).
 
     Lint warns on the low-false-positive patterns and term mixing, and hints
-    when 해당 / 에 대한 / 를 통해 / 로 인해 appear four or more times. Text in
+    when 해당 / 에 대한 / 를 통해 / 로 인해 — or 에 있어서 / 라는 점에서 /
+    와 관련하여 / 이루어지다 / 할 필요가 있다 / sentence-initial 이는 and 즉, —
+    appear four or more times. Text in
     quotes ("…") is someone else's words and is skipped — quote a ticket title
     or a before-example instead of rewording it.
 
@@ -153,6 +155,11 @@ easy.
     the reverse wrap-up "~하는 이유다", the cleft "핵심은 ~이다", and the scope
     climb "단순한 X를 넘어 Y". State the conclusion directly instead, and check
     that the rewrite didn't swap in another frame (결국·이유다·아니라).
+    Wrap-up stock phrases are hinted on first use too: sentence-initial
+    "결론적으로·요컨대·종합하면", "시사하는 바가 크다", "~할 때입니다" — the
+    conclusion already lives in the summary box and each section's first line.
+    Invisible characters (zero-width space, stray BOM, bidi controls) are a
+    warning in every mode: they break copy, search, and diff.
 
     For a deeper pass on a Korean draft, the `humanize-korean` skill (if
     installed) targets exactly these translationese patterns.

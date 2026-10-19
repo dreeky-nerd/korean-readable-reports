@@ -314,6 +314,47 @@ test('규칙 14: 측정된 한국어 AI 문형 4종은 힌트(경고 아님)', (
   assert.equal(hint('필요한 것은 없는 레코드를 추가하는 일입니다.\n\n핵심은 속도입니다.', /분열문/).length, 1);
 });
 
+// ── 2026-10-19 추가: im-not-ai 분류·linkedin-agent-skill li-human에서 가져온 마무리 틀과 횟수 힌트 ──
+test('규칙 14: 마무리 틀(1회)과 번역투·보고서 말투(4회부터)는 힌트', () => {
+  const hint = (doc, re) => lint(fm + doc).filter(f => f.rule === 14 && re.test(f.msg));
+  // 마무리 틀 — 문장 첫머리만. 문장 중간의 "종합하면"·조건의 "요약하면"은 통과
+  for (const s of ['결론적으로, 캐시를 켜야 합니다.', '요컨대 연결 수가 모자랐습니다.', '- 종합하면 설정 문제입니다.', '오류가 줄었습니다. 한마디로 성공입니다.']) assert.equal(hint(s, /마무리 틀/).length, 1, s);
+  for (const s of ['두 지표를 종합하면 결과가 같습니다.', '요약하면 다음과 같은 표가 됩니다.', '결론을 먼저 씁니다.']) assert.equal(hint(s, /마무리 틀/).length, 0, s);
+  assert.equal(hint('이번 장애는 시사하는 바가 큽니다.', /과장 관용구/).length, 1);
+  assert.equal(hint('로그가 시사하는 원인은 타임아웃입니다.', /과장 관용구/).length, 0);
+  for (const s of ['이제 결정할 때입니다.', '지금이 구조를 바꿀 시점입니다.']) assert.equal(hint(s, /완결 공식/).length, 1, s);
+  for (const s of ['배포할 때 이 값을 바꿉니다.', '재시작할 때입니다라는 메시지가 뜹니다.']) assert.equal(hint(s, /완결 공식/).length, 0, s);
+  // 횟수 힌트 — 3회까지는 통과, 4회부터
+  const pairs = [
+    ['에 있어서', '운영에 있어서 중요합니다.\n', '서버에 있어서 지울 수 없습니다.\n'],
+    ['라는 점에서', '재현된다는 점에서 의미가 있습니다.\n', '재현되므로 의미가 있습니다.\n'],
+    ['와 관련하여', '결제와 관련하여 문의합니다.\n', '결제 관련 문의입니다.\n'],
+    ['이루어지다', '배포가 이루어집니다.\n', '배포합니다.\n'],
+    ['할 필요가 있다', '재시작할 필요가 있습니다.\n', '재시작해야 합니다.\n'],
+    ['이는', '캐시가 꺼졌습니다. 이는 설정 문제입니다.\n', '캐시가 꺼진 것은 설정 문제입니다.\n'],
+    ['즉,', '연결이 끊깁니다. 즉, 재시도가 필요합니다.\n', '연결이 끊기면 재시도해야 합니다.\n'],
+  ];
+  for (const [name, bad, good] of pairs) {
+    const re = new RegExp('"' + name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '" 4회');
+    assert.equal(hint(bad.repeat(4), re).length, 1, name + ' 4회');
+    assert.ok(hint(bad.repeat(4), re)[0].hint, name + ' 힌트');
+    assert.equal(hint(bad.repeat(3), re).length, 0, name + ' 3회');
+    assert.equal(hint(good.repeat(4), /회 — 3회 이하로/).length, 0, name + ' 정상 문장: ' + good.trim());
+  }
+});
+
+test('구조: 보이지 않는 문자 경고 — 코드·frontmatter 안도, 이모지 결합은 제외', () => {
+  const inv = doc => lint(doc).filter(f => /보이지 않는 문자/.test(f.msg));
+  const zw = String.fromCharCode(0x200B), rlo = String.fromCharCode(0x202E), zwj = String.fromCharCode(0x200D);
+  const found = inv(fm + '# 제목\n\n캐시를' + zw + ' 켭니다.');
+  assert.equal(found.length, 1); assert.equal(found[0].hint, false); assert.ok(/폭 없는 공백/.test(found[0].msg));
+  assert.ok(/방향 제어/.test(inv(fm + '# 제목\n\n파일 이름은 abc' + rlo + 'txt.exe 입니다.')[0].msg));
+  assert.equal(inv(fm + '# 제목\n\n```js\nconst a = 1;' + zw + '\n```').length, 1, '코드 안');
+  assert.equal(inv('---\ntitle: 제목' + zw + '\ndate: 2026-10-19\naudience: team\n---\n# 제목').length, 1, 'frontmatter');
+  assert.equal(inv(fm + '# 제목\n\n가족 이모지 👨' + zwj + '👩' + zwj + '👧 는 그대로 둡니다.').length, 0, '이모지 결합');
+  assert.equal(lint('# 제목\n본문' + zw, {plain: true}).filter(f => /보이지 않는 문자/.test(f.msg)).length, 1, '--plain도 검사');
+});
+
 test('정합성 힌트: 요약 수치·개수 약속·미룬 약속', () => {
   const doc = (summary, body) => '---\ntitle: t\ndate: 2026-10-17\naudience: team\nsummary: ' + summary + '\n---\n# t\n\n' + body;
   const got = (d, re, opts) => lint(d, opts).filter(f => re.test(f.msg));
