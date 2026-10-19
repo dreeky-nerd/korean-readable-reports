@@ -296,7 +296,7 @@ function lint(src, opts = {}) {
   } else warn(start, 2, '요약 박스 없음 — frontmatter summary: 또는 H1 아래 첫 인용문(>)');
 
   // 정합성(힌트, 규칙 2): 요약과 본문, 예고와 목록이 서로 맞는지. 문장 품질 검사가 못 보는 내용 모순을 일부 잡는다.
-  // 근거: hanlint countMismatch·promiseRecall 방식(docs/research/2026-10-17-korean-polish-trends.md 4-5절). 정확 일치만 보고 반올림은 사람이 판단
+  // 근거: hanlint의 countMismatch·promiseRecall 방식. 정확 일치만 보고 반올림은 사람이 판단
   {
     // 인용 요약이면 그 인용 줄들은 본문에서 뺀다(요약이 자기 근거가 되지 않게). summaryLine 0은 "첫 줄 인용"일 수도 있어 따로 판정
     const quoteSummary = !meta.summary && !!summary;
@@ -506,7 +506,6 @@ function lint(src, opts = {}) {
     // 한국어 AI 문형 — 부정 대구·이유다는 서로 다른 두 자료(im-not-ai 대조 코퍼스, hanlint 위키백과·사업보고서 155만 문장 대 기계 글 360편)가
     // 같은 방향을 보고, 분열문·범위 상승은 im-not-ai 소표본만 있다. 모두 에세이·위키 장르라 기술 보고서에서는 미측정 → 전부 힌트,
     // 정당한 용법이 흔한 것은 문서당 횟수 기준. 알려진 오탐: "문제는 재현 가능한 오류입니다" 같은 정의 문장도 분열문으로 센다(2회 기준으로 완화).
-    // 근거·조건: docs/research/2026-10-17-korean-polish-trends.md 4-1절
     const AFTER_FIX = ' — 고친 문장이 다른 틀(결국·이유다·아니라)을 새로 만들지 않게';
     const TELLS = [
       // 부정 대구: 1회는 가설을 뒤집는 정당한 정정일 수 있어 2회부터. "뿐(만) 아니라"는 다른 구문
