@@ -113,16 +113,70 @@ function scanFences(lines, start) {
 
 // 읽을 글만 센다: 표·접힌 글·요약·렌더용 블록 포함, 일반 코드·출처 제외.
 const SOURCES_LINE = /^\s*(?:>\s*)?(?:[-*+]\s*)?(?:\*\*)?(근거|출처|basis|sources)(?:\*\*)?\s*[:：]/i;
-function visibleText(text) {
-  return text
-    .replace(/<!--[\s\S]*?-->/g, '')
-    .replace(/<(pre|code)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
-    .replace(/(`+)([^`]*?)\1/g, '')
-    .replace(/!\[[^\]]*\]\((?:[^()\s]|\([^()\s]*\))*\)/g, '')
-    .replace(/\[([^\]]+)\]\((?:[^()\s]|\([^()\s]*\))*\)/g, '$1')
-    .replace(/<https?:\/\/[^>]+>/gi, '')
+// HTML 후보는 한 번만 훑는다. 닫히지 않은 태그·따옴표는 뒤의 <마다 다시 검색하지 않는다.
+function htmlTokens(text, literalLines = []) {
+  const out = [], start = /<!--|<\/?[a-zA-Z][\w-]*/g;
+  let m, line = 0, cursor = 0;
+  while ((m = start.exec(text))) {
+    line += (text.slice(cursor, m.index).match(/\n/g) || []).length;
+    cursor = m.index;
+    if (literalLines[line]) {
+      const end = text.indexOf('\n', m.index);
+      start.lastIndex = end < 0 ? text.length : end;
+      continue;
+    }
+    let end = start.lastIndex, quote = '';
+    if (m[0] === '<!--') {
+      const close = text.indexOf('-->', end);
+      end = close < 0 ? text.length : close + 3;
+      out.push({start: m.index, end, line, comment: true});
+    } else {
+      for (; end < text.length; end++) {
+        const c = text[end];
+        if (quote) { if (c === quote) quote = ''; }
+        else if (c === '"' || c === "'") quote = c;
+        else if (c === '>') break;
+        else if (c === '<') break;
+      }
+      if (text[end] !== '>') { start.lastIndex = end; continue; }
+      end++;
+      out.push({start: m.index, end, line, name: m[0].replace(/^<\/?/, '').toLowerCase(), close: m[0][1] === '/'});
+    }
+    start.lastIndex = end;
+  }
+  return out;
+}
+// 제거 후에도 원래 줄 번호를 보존한다. hide는 닫힌 요소 전체, strip은 태그만 가린다.
+function maskHtml(text, {tokens = htmlTokens(text), hide = () => false, strip = () => true, comments = () => true} = {}) {
+  const opens = new Map(), ends = new Map();
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i];
+    if (t.comment) continue;
+    if (!opens.has(t.name)) opens.set(t.name, []);
+    const stack = opens.get(t.name);
+    if (!t.close) stack.push(i);
+    else if (stack.length) ends.set(stack.pop(), i);
+  }
+  const out = []; let cursor = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    const t = tokens[i]; let end = t.end;
+    if (t.comment ? !comments(t) : !strip(t) && !hide(t)) continue;
+    if (!t.close && hide(t) && ends.has(i)) { i = ends.get(i); end = tokens[i].end; }
+    out.push(text.slice(cursor, t.start), text.slice(t.start, end).replace(/[^\n]/g, ''));
+    cursor = end;
+  }
+  return out.join('') + text.slice(cursor);
+}
+// 링크가 아니어도 라벨 후보 전체를 소비해, 닫힘 실패 때 안쪽 [부터 다시 찾지 않는다.
+function replaceLinks(text, replace) {
+  return text.replace(/(!?)\[([^\]]*)(?:\](?:\(((?:[^()\s]|\([^()\s]*\))*)\))?|$)/g,
+    (raw, image, label, url) => url === undefined ? raw : replace(image, label, url));
+}
+function visibleText(text, literalHtml = false) {
+  return replaceLinks((literalHtml ? text : maskHtml(text, {hide: t => /^(pre|code)$/.test(t.name)}))
+    .replace(/`[^`]*`/g, ''), (image, label) => image ? '' : label)
+    .replace(/<https?:\/\/[^<>]+>/gi, '')
     .replace(/(?:https?:\/\/|mailto:)[^\s<>]+/gi, '')
-    .replace(/<[^>]*>/g, '')
     .replace(/&nbsp;|&#160;/gi, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
     .replace(/^\s{0,3}#{1,6}\s+/, '')
     .replace(/^\s*(?:>\s*)+(?:[-*+]\s+)?/, '')
@@ -134,38 +188,93 @@ function visibleText(text) {
 }
 const isSep = l => /^\s*\|?(\s*:?-+:?\s*\|)+\s*:?-*:?\s*\|?\s*$/.test(l) && /-/.test(l);
 function splitCells(l) {
-  return l.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '').split(/(?<!\\)\|/).map(visibleText);
+  return l.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '').split(/(?<!\\)\|/).map(t => visibleText(t, true));
 }
 const READABLE_BLOCK = /^(cards|browser|flow|stats)$/;
-// 줄 번호는 보존한다. 코드 안의 <!-- 가 본문까지 주석으로 삼키지 않게 코드를 먼저 가린다.
+const FLOW_ROLE = /^(ext|entry|logic|data|done|fail|caution|info|neutral)$/;
+const BLOCK_STATE = /^(done|완료|fail|실패|블로커|caution|주의|unverified|미검증|info|정보|neutral|중립|선재)$/i;
+const HTML_BLOCK = /^<(div|figure|figcaption|img|p|ul|ol|table|pre|blockquote|section|br|hr)(\s|>|\/)/i;
+// 읽기량·태그·표 칸이 같은 제외 결과를 쓴다. flow·stats는 HTML도 주석도 글자로 표시한다.
 function readingLines(lines, at) {
-  return lines.map((l, i) => at[i] && (!READABLE_BLOCK.test(at[i].kind) || at[i].open === i || at[i].close === i) ? '' : l)
-    .join('\n').replace(/<(pre|code)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, m => '\n'.repeat((m.match(/\n/g) || []).length))
-    .replace(/<!--[\s\S]*?(?:-->|$)|<\/?[a-zA-Z](?:"[^"]*"|'[^']*'|[^'">])*>/g,
-      m => '\n'.repeat((m.match(/\n/g) || []).length)).split('\n');
+  const masked = lines.map((l, i) => at[i] && (!READABLE_BLOCK.test(at[i].kind) || at[i].open === i || at[i].close === i) ? '' : l);
+  const text = masked.join('\n'), raw = new Array(lines.length).fill(false);
+  const detailsAt = Array.from({length: lines.length}, () => []), inline = [];
+  let card = null, title = true;
+  for (let i = 0; i < lines.length; i++) {
+    const fb = at[i];
+    if (fb !== card) { card = fb; title = true; }
+    inline[i] = !!fb && /^(flow|stats)$/.test(fb.kind);
+    if (fb?.kind === 'cards' && fb.open !== i && fb.close !== i) {
+      if (!lines[i].trim()) title = true;
+      else if (title) { inline[i] = true; title = false; }
+    }
+  }
+  const tokens = htmlTokens(text, inline);
+  let block = '', depth = 0, tokenIndex = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const literal = inline[i];
+    if (!literal && !block) {
+      const m = masked[i].match(HTML_BLOCK);
+      if (m) { block = m[1].toLowerCase(); depth = 0; }
+    }
+    raw[i] = !!block && !literal;
+    while (tokenIndex < tokens.length && tokens[tokenIndex].line <= i) {
+      const t = tokens[tokenIndex++];
+      if (block && t.name === block) depth += t.close ? -1 : 1;
+    }
+    if (block && (depth <= 0 || /^(img|br|hr)$/.test(block))) block = '';
+  }
+  const literal = t => inline[t.line];
+  const readable = maskHtml(text, {tokens,
+    hide: t => raw[t.line] && /^(pre|code)$/.test(t.name),
+    strip: t => {
+      if (!literal(t) && t.name === 'details') detailsAt[t.line].push(t.close);
+      return !literal(t) && (raw[t.line] || /^(details|summary)$/.test(t.name));
+    },
+    comments: t => !literal(t),
+  }).split('\n');
+  readable.detailsAt = detailsAt;
+  readable.raw = raw;
+  readable.inline = inline;
+  return readable;
+}
+// 출처 제목은 자신을 포함한 details 범위에서만 유효하다. 바깥 출처 상태는 스택으로 복원한다.
+function sourceLines(lines, at, readable) {
+  const result = new Array(lines.length).fill(false), stack = [];
+  let depth = 0;
+  for (let i = 0; i < lines.length; i++) {
+    if (at[i]) { result[i] = !!depth; continue; }
+    for (const close of readable.detailsAt[i]) {
+      if (close) depth = stack.length ? stack.pop() : depth;
+      else stack.push(depth);
+    }
+    const h = readable[i].match(/^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
+    if (h) {
+      if (depth && h[1].length <= depth) depth = 0;
+      if (SOURCE_HEADING.test(visibleText(h[2], true))) depth = h[1].length;
+    }
+    result[i] = !!depth;
+  }
+  return result;
 }
 function measureReading(src) {
   const lines = src.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').split('\n');
   const {meta, start, unclosed} = parseFrontmatter(lines);
   const {at} = scanFences(lines, start), readable = readingLines(lines, at);
   const chunks = [], cells = [], excluded = {sourceLines: 0, codeLines: 0, evidenceLines: 0};
-  let sourceDepth = 0, table = false;
-  if (meta.summary) chunks.push(visibleText(meta.summary));
+  const sources = sourceLines(lines, at, readable);
+  let table = false;
+  if (meta.summary) chunks.push(visibleText(meta.summary, true));
   for (let i = start; i < lines.length; i++) {
     const l = readable[i], fb = at[i];
     if (fb && (fb.open === i || fb.close === i)) { table = false; continue; }
     if (fb && !READABLE_BLOCK.test(fb.kind)) { excluded.codeLines++; continue; }
-    if (!fb) {
-      const h = l.match(/^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
-      if (h) {
-        if (sourceDepth && h[1].length <= sourceDepth) sourceDepth = 0;
-        if (SOURCE_HEADING.test(visibleText(h[2]))) sourceDepth = h[1].length;
-      }
-    }
-    if (sourceDepth) { excluded.sourceLines++; table = false; continue; }
+    if (sources[i]) { excluded.sourceLines++; table = false; continue; }
     if (SOURCES_LINE.test(l)) { excluded.evidenceLines++; table = false; continue; }
     if (fb && /^(flow|stats)$/.test(fb.kind)) {
-      chunks.push(...l.split(/(?<!\\)\|/).slice(0, fb.kind === 'flow' ? 2 : 3).map(visibleText));
+      const fields = l.split(/(?<!\\)\|/), control = fb.kind === 'flow' ? 2 : 3;
+      const known = fb.kind === 'flow' ? FLOW_ROLE : BLOCK_STATE;
+      chunks.push(...fields.filter((f, col) => col !== control || !known.test(f.trim())).map(t => visibleText(t, true)));
       continue;
     }
     const ref = l.match(/^\s*\[([^\]]+)\]:\s*\S/);
@@ -179,7 +288,7 @@ function measureReading(src) {
     }
     table = false;
     if (/^\s*(?:[-*_]\s*){3,}$/.test(l)) continue;
-    chunks.push(visibleText(l));
+    chunks.push(visibleText(l, true));
   }
   return {audience: meta.audience || 'missing', chars: chunks.reduce((n, t) => n + [...t].length, 0),
     charsNoSpace: chunks.reduce((n, t) => n + [...t.replace(/\s/g, '')].length, 0), cells, excluded, unclosedFrontmatter: unclosed};
@@ -244,21 +353,25 @@ function lint(src, opts = {}) {
     }
   }
 
-  const checkCell = (i, raw, column = 0) => {
-    const c = raw.trim(), text = visibleText(c), n = [...text].length, sentences = countSentences(text);
+  const readable = plain ? null : readingLines(lines, fenceAt);
+  const checkCell = (i, raw, column = 0, literalHtml = false) => {
+    const c = raw.trim(), text = visibleText(c, literalHtml), n = [...text].length, sentences = countSentences(text);
     if (/^`[^`]+`$/.test(c) && column > 0) warn(i, 7, `표 셀이 코드만 있음 "${c}" — 구절로 (예: "가장 오래 안 쓴 것부터 지운다")`);
     if (n > 60 || sentences >= 2) warn(i, 7, `표 칸 ${n}자/문장 ${sentences}개 — 칸은 구절로, 설명은 표 아래나 근거 줄로`);
   };
   // raw HTML도 허용하므로 td는 같은 기준으로 본다(th는 머리글). 코드·주석의 가짜 td는 제외.
   if (!plain) {
-    const html = lines.map((l, i) => inCode(i) ? '' : l).join('\n')
-      .replace(/<thead\b[^>]*>[\s\S]*?<\/thead\s*>/gi, m => '\n'.repeat((m.match(/\n/g) || []).length))
-      .replace(/<!--[\s\S]*?(?:-->|$)|(`+)([^`]*?)\1/g, m => '\n'.repeat((m.match(/\n/g) || []).length));
-    let cursor = 0, line = 0;
-    for (const m of html.matchAll(/<td\b(?:"[^"]*"|'[^']*'|[^'">])*?>([\s\S]*?)<\/td\s*>/gi)) {
-      line += (html.slice(cursor, m.index).match(/\n/g) || []).length;
-      checkCell(line, m[1]);
-      cursor = m.index;
+    const input = lines.map((l, i) => fenceAt[i] && (fenceAt[i].open === i || fenceAt[i].close === i || !/^(cards|browser)$/.test(fenceAt[i].kind)) ? '' : l).join('\n');
+    const html = maskHtml(input, {tokens: htmlTokens(input, readable.inline), hide: t => /^(pre|code|thead)$/.test(t.name), strip: () => false})
+      .split('\n').map((l, i) => readable.raw[i] ? l : '').join('\n').replace(/`[^`]*`/g, '');
+    let open = null, cursor = 0, line = 0;
+    for (const t of htmlTokens(html)) {
+      line += (html.slice(cursor, t.start).match(/\n/g) || []).length;
+      if (t.name === 'td') {
+        if (!t.close && !open) open = {...t, line};
+        else if (t.close && open) { checkCell(open.line, html.slice(open.end, t.start)); open = null; }
+      }
+      cursor = t.start;
     }
   }
 
@@ -274,8 +387,8 @@ function lint(src, opts = {}) {
       for (const lm of l.matchAll(/\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g)) {
         if (!safeUrl(lm[1])) warn(i, '구조', `링크 주소 "${lm[1].slice(0, 40)}" — 허용 안 되는 스킴·문자, 렌더 시 죽은 링크(#)가 됨`);
       }
-      for (const tm of plainText.matchAll(/<\/?([a-zA-Z][\w-]*)(?![\w-])[^>]*>/g)) {
-        if (!HTML_TAGS.test(tm[1])) { warn(i, '구조', `<${tm[1]}> 는 태그가 아니라 글자로 표시됨 — 의도한 태그면 Markdown이나 허용 태그(details·figure·img 등)로`, true); break; }
+      for (const tm of htmlTokens(plainText)) {
+        if (!tm.comment && !HTML_TAGS.test(tm.name)) { warn(i, '구조', `<${plainText.slice(tm.start, tm.end).match(/^<\/?([\w-]+)/)[1]}> 는 태그가 아니라 글자로 표시됨 — 의도한 태그면 Markdown이나 허용 태그(details·figure·img 등)로`, true); break; }
       }
       // 참조 정의 "[이름]: 주소" — 상태 태그로 시작하는 줄("[완료]: …")은 제외
       if (/^\s*\[\^|\]\[[^\]]*\]/.test(plainText) || (/^\s*\[([^\]]+)\]:\s*\S/.test(plainText) && !Object.hasOwn(STATUS_TAGS, plainText.match(/^\s*\[([^\]]+)\]/)[1]))) warn(i, '구조', '각주·참조형 링크는 지원 안 함 — 인라인 링크 [글](주소)로');
@@ -294,10 +407,6 @@ function lint(src, opts = {}) {
           const n = cellCount(l);
           const where = i === tableStartLine + 1 ? '표 구분 행' : '표';
           if (n !== tableHead) warn(i, '구조', `${where} 칸 ${n}개, 헤더 ${tableHead}개 — 칸 수 맞추기 (셀 안 파이프는 \\| 로)`);
-          if (!plain && i > tableStartLine + 1 && !isSep(l)) {
-            const rawCells = l.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '').split(/(?<!\\)\|/);
-            rawCells.forEach((raw, ci) => checkCell(i, raw, ci));
-          }
         }
         continue;
       }
@@ -308,11 +417,23 @@ function lint(src, opts = {}) {
     if (depth) warn(lastOpen, 9, `닫히지 않은 <details> ${depth}개 — 이 뒤 내용이 통째로 접힘`);
   }
 
+  if (!plain) {
+    let table = false;
+    for (let i = start; i < lines.length; i++) {
+      const fb = fenceAt[i], l = readable[i];
+      if (fb && (fb.open === i || fb.close === i || !/^(cards|browser)$/.test(fb.kind))) { table = false; continue; }
+      if (!/^\s*\|/.test(l)) { table = false; continue; }
+      if (isSep(l)) { table = true; continue; }
+      if (!table) continue;
+      l.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '').split(/(?<!\\)\|/)
+        .forEach((raw, ci) => checkCell(i, raw, ci, true));
+    }
+  }
+
   // ── 블록 검사(flow·stats·cards): 렌더러가 칸을 합치거나 이름을 무시하는 입력을 미리 알린다 ──
   // 역할·상태 목록은 render.js의 FLOW_ROLES·STAT_STATE와 같아야 한다
   {
-    const ROLE = /^(ext|entry|logic|data|done|fail|caution|info|neutral)$/;
-    const STATE = /^(done|완료|fail|실패|블로커|caution|주의|unverified|미검증|info|정보|neutral|중립|선재)$/i;
+    const ROLE = FLOW_ROLE, STATE = BLOCK_STATE;
     const split = l => l.trim().replace(/\\\|/g, ' ').split('|').map(c => c.trim());   // 칸 수만 세므로 \| 는 공백으로
     // 한 그림에 역할 색(누가 하나)과 상태 색(어떻게 됐나)을 섞지 않는다 — 분홍(외부)과 연빨강(실패)이 나란히 서면 구분이 안 된다.
     // 사례: 2026-10-21 시나리오 6건 중 2건이 flow에 ext·logic과 fail·done을 섞음. Mermaid는 class A x / A:::x 로 붙인 이름을 본다
@@ -368,8 +489,7 @@ function lint(src, opts = {}) {
 
   // 짧은 대괄호 휴리스틱: 한글 시작 또는 README처럼 영문 이름+한글 설명. 뜻은 자동 교정하지 않는다.
   const checkTags = (line, text) => {
-    const prose = text.replace(/(`+)([^`]*?)\1/g, '')
-      .replace(/!?\[[^\]]*\](?:\((?:[^()\s]|\([^()\s]*\))*\)|\[[^\]]*\])/g, '')
+    const prose = replaceLinks(text.replace(/`[^`]*`/g, ''), () => '').replace(/!?\[[^\[\]]*\]\[[^\[\]]*\]/g, '')
       .replace(/(?:https?:\/\/|mailto:)[^\s<>]+/gi, '');
     if (/^\s*\[\^?[^\]]+\]:/.test(prose) && !Object.hasOwn(STATUS_TAGS, (prose.match(/^\s*\[([^\]]+)\]/) || [])[1])) return;
     for (const m of prose.matchAll(/(?<!\\)\[([^\]\n]{1,30})\]/g)) {
@@ -383,7 +503,7 @@ function lint(src, opts = {}) {
   // 상태 태그로 시작하지 않는 라벨([판단]·[게임제안]·[README 주장])은 문서마다 쓰는 자체 분류라 힌트 한 번.
   // 사례: 2026-10-21 이 PC 보고서 고유 198종에서 상태 접두 변형 2곳, 자체 라벨 691곳 — 줄마다 경고하면 묻힌다
   const labels = new Map();
-  const tagLines = readingLines(lines, fenceAt);
+  const tagLines = readable;
   for (let i = start; i < lines.length; i++) checkTags(i, tagLines[i]);
   if (meta.summary) checkTags(Math.max(0, lines.findIndex(l => /^summary:/.test(l))), meta.summary);
   if (labels.size) warn([...labels.values()][0], 4, `배지 목록 밖 대괄호 라벨 ${labels.size}종(${[...labels.keys()].slice(0, 4).map(t => `[${t}]`).join('·')}) — 배지로 그려지지 않고 글자 그대로 나옴. 상태면 ${Object.keys(STATUS_TAGS).map(t => `[${t}]`).join('')} 중 하나로, 출처 종류면 근거 줄에 글로`, true);
@@ -543,20 +663,16 @@ function lint(src, opts = {}) {
   }
 
   // 본문 스캔 (코드·표·접힌 상세는 건너뜀 — 표·details 구조는 위 공통 검사가 본다)
-  let inHtml = false, h1Count = 0, sourceDepth = 0;
+  let htmlDepth = 0, h1Count = 0;
+  const sources = sourceLines(lines, fenceAt, readable);
   let h2Count = 0, secLines = 0, secStart = -1, secName = '', h3BeforeH2 = false;
   const flushSec = () => { if (secStart >= 0 && secLines > 12) warn(secStart, 8, `"${secName}" 본문 ${secLines}줄 — 12줄 넘으면 <details>로 접기`); };
 
   for (let i = start; i < lines.length; i++) {
     const l = lines[i];
     if (inCode(i)) continue;
-    const heading = l.match(/^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
-    if (heading) {
-      if (sourceDepth && heading[1].length <= sourceDepth) sourceDepth = 0;
-      if (SOURCE_HEADING.test(visibleText(heading[2]))) sourceDepth = heading[1].length;
-    }
-    if (/^<details/i.test(l)) inHtml = true;
-    if (inHtml) { if (/<\/details>/i.test(l)) inHtml = false; continue; }
+    for (const close of readable.detailsAt[i]) htmlDepth = Math.max(0, htmlDepth + (close ? -1 : 1));
+    if (htmlDepth || readable.detailsAt[i].some(Boolean)) continue;
 
     if (/^\s*\|/.test(l)) continue;
     if (!l.trim()) continue;
@@ -576,9 +692,9 @@ function lint(src, opts = {}) {
 
     // 규칙 4: 불릿 단편
     const li = l.match(/^\s*([-*]|\d+\.)\s+(.*)$/);
-    if (li && !sourceDepth && !/(?:https?:\/\/|mailto:)/i.test(l)) {
+    if (li && !sources[i] && !/(?:https?:\/\/|mailto:)/i.test(l)) {
       const raw = li[2].trim();
-      const item = raw.replace(/`[^`]*`/g, '').replace(/\*\*/g, '').replace(/\[[^\]]+\]\([^)]*\)/g, 'x').replace(STATUS_RE, '').trim();
+      const item = replaceLinks(raw.replace(/`[^`]*`/g, '').replace(/\*\*/g, ''), () => 'x').replace(STATUS_RE, '').trim();
       if (/^`[^`]+`$/.test(raw)) warn(i, 4, `불릿이 코드만 있음 "${raw}" — 무엇을 하는지 문장으로`);
       else if (item.length > 3 && !ENDERS.test(item)) warn(i, 4, `불릿이 서술어 없이 끝남 — 온전한 문장으로: "${item.slice(0, 40)}"`);
     }
@@ -654,7 +770,7 @@ function lint(src, opts = {}) {
       [/뽑아(냅|내|낸)/, '구어체 — "추출합니다"'], // 사례
       [/(^|\s)(딱\s|엄청\s|진짜\s+(?=[가-힣]+(니다|해요|돼요)(?=[.!?,\s]|$)|(잘|못|너무|매우|다시|빨리|천천히|자주|더|덜)(?=\s)))/, '구어체 강조어 — 빼기'], // 사례(딱·진짜), 추정(엄청·용언/부사 판별)
       [/(나누면|정리하면|요약하면|살펴보면) (이렇습니다|다음과 같습니다)\.?\s*$/, '예고 문장 — 빼고 바로 표·목록'], // 사례
-      [/[가-힣]+\((설정값|코드|데이터)\)/, '비유를 괄호로 풀이 — 대상을 바로 이름으로'], // 사례: 괄호 안 정확히 한 단어만
+      [/(?<![가-힣])[가-힣]+\((설정값|코드|데이터)\)/, '비유를 괄호로 풀이 — 대상을 바로 이름으로'], // 사례: 괄호 안 정확히 한 단어만
       // 번역투 — 번역판에 몇 배 많은 것(괄호: 그 표현이 나온 문서 비율, 국내 원문 / 번역판)
       [/(?<=[가-힣A-Za-z0-9)])에 의해(?=[^.!?\n]{0,40}(됩|되었|됐|된|되는|됨|받|졌|집니다))/,'번역투(3% / 29%) — 행위자를 주어로: "서버에 의해 발급됩니다" → "서버가 발급합니다"'], // 실측: ko-terms.md의 피동 표현군, 논리 근거만인 문장은 제외
       [/되어(지|진|집|져)/, '이중 피동 — "되어집니다" → "됩니다"'], // 추정

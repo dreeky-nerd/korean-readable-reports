@@ -957,6 +957,91 @@ test('표 칸: raw HTML 본문도 검사, th·코드·주석은 제외', () => {
   assert.equal(cellFindings('```html\n<table><tr><td>' + '글'.repeat(61) + '</td></tr></table>\n```').length, 0);
   assert.equal(cellFindings('<!-- <table><tr><td>' + '글'.repeat(61) + '</td></tr></table> -->').length, 0);
 });
+// 구조 검사 결함 회귀: 렌더러와 같은 문맥에서 읽을 글·표를 검사한다.
+test('출처 범위: details가 닫히면 복원하고 바깥 출처는 유지', () => {
+  const {measureReading} = require('./lint.js');
+  const hits = body => lint(fm + body).filter(f => /불릿이 서술어/.test(f.msg));
+  for (const inner of ['## 출처\n- 문서 제목', '<details>\n<summary>안쪽</summary>\n## 출처\n- 문서 제목\n</details>']) {
+    const body = '<details>\n<summary>근거</summary>\n' + inner + '\n</details>\n- 담당자 배정';
+    assert.equal(hits(body).length, 1, inner);
+    assert.ok(measureReading(fm + body).chars >= 6);
+    assert.equal(volumeFindings(body + '\n' + '글'.repeat(6001)).length, 1);
+  }
+  assert.equal(hits('## 출처\n<details>\n<summary>상세</summary>\n### 설명\n</details>\n- 문서 제목').length, 0);
+  assert.equal(measureReading(fm + '## 출처\n<details>\n<summary>상세</summary>\n## 판단\n</details>\n' + '글'.repeat(6001)).chars, 2);
+});
+test('표 칸: cards·browser의 두 펜스, HTML 표도 검사하고 flow·stats는 표 아님', () => {
+  const long = '글'.repeat(61), md = table(['항목', long]);
+  for (const fence of ['```', '~~~']) for (const kind of ['cards', 'browser']) {
+    const body = fence + kind + '\n' + (kind === 'cards' ? '제목\n' : '') + md + '\n' + fence;
+    assert.equal(cellFindings(body).length, 1, body.slice(0, 20));
+    const r = render(body, ['--no-lint']);
+    assert.equal(r.status, 0, r.stderr); assert.ok(r.html.includes('<table>'));
+    assert.equal(cellFindings(fence + kind + '\n제목\n<table><tr><td>' + long + '</td></tr></table>\n' + fence).length, 1);
+  }
+  for (const kind of ['flow', 'stats', 'text']) assert.equal(cellFindings('~~~' + kind + '\n' + md + '\n~~~').length, 0);
+});
+test('표 칸: 주석의 같은 제외 결과를 읽기량과 공유하고 줄 번호 유지', () => {
+  const {measureReading} = require('./lint.js'), md = table(['항목', '글'.repeat(61)]);
+  for (const body of ['<!--\n' + md + '\n-->', '<!--\n' + md, '~~~cards\n제목\n<!--\n' + md + '\n-->\n~~~']) {
+    assert.deepEqual(cellFindings(body), []);
+    assert.deepEqual(measureReading(fm + body).cells, []);
+  }
+  const body = '<!--\n' + md + '\n-->\n' + md;
+  assert.deepEqual(cellFindings(body).map(f => f.line), [13]);
+  assert.deepEqual(measureReading(fm + body).cells.filter(c => c.chars > 60).map(c => c.line), [13]);
+});
+test('읽을 글: inline code 태그는 글자, raw HTML code만 제외', () => {
+  const {measureReading} = require('./lint.js'), value = '<code>[추정, 오차 큼]</code>';
+  for (const body of [value, '~~~flow\n제목 | ' + value + ' | logic\n~~~', '~~~stats\n제목 | 값 | ' + value + ' | 완료\n~~~',
+    '~~~cards\n제목\n' + value + '\n~~~', '~~~cards\n<div>' + value + '</div>\n본문\n~~~',
+    '~~~browser\n' + value + '\n~~~', table(['항목', value])]) {
+    const hits = lint(fm + body).filter(f => /태그 변형/.test(f.msg));
+    assert.equal(hits.length, 1, body);
+    assert.ok(measureReading(fm + body).chars >= [...value].length, body);
+    assert.equal(volumeFindings(body.replace('[추정, 오차 큼]', '글'.repeat(6001))).length, 1, body);
+    const r = render(body, ['--no-lint']);
+    assert.ok(r.html.includes('&lt;code&gt;'), body);
+  }
+  for (const body of ['<pre><code>' + value + '</code></pre>', '<div><code>' + value + '</code></div>']) {
+    assert.equal(lint(fm + body).filter(f => /태그 변형/.test(f.msg)).length, 0);
+    assert.equal(measureReading(fm + body).chars, 0);
+  }
+  assert.equal(measureReading(fm + '<div><code>바깥<code>안쪽</code>' + '글'.repeat(6001) + '</code></div>').chars, 0);
+});
+test('링크: 긴 라벨·대괄호 주소는 보존하고 닫힘 실패도 한 번 소비', () => {
+  const {measureReading} = require('./lint.js');
+  assert.equal(lint(fm + '[추정, 오차 큼](http://[::1])').filter(f => /태그 변형/.test(f.msg)).length, 0);
+  assert.equal(measureReading(fm + '[이름](http://[::1])').chars, 2);
+  assert.equal(measureReading(fm + '[' + '['.repeat(1000) + '](x)').chars, 1000);
+});
+test('렌더 문맥: overflow 필드의 code도 읽고 inline td는 표가 아님', () => {
+  const {measureReading} = require('./lint.js'), value = '<code>' + '글'.repeat(6001) + '</code>';
+  for (const row of ['제목 | 설명 | ' + value, '제목 | 설명 | logic | ' + value]) {
+    assert.ok(measureReading(fm + '~~~flow\n' + row + '\n~~~').chars > 6000);
+  }
+  for (const row of ['제목 | 값 | 설명 | ' + value, '제목 | 값 | 설명 | 완료 | ' + value]) {
+    assert.ok(measureReading(fm + '~~~stats\n' + row + '\n~~~').chars > 6000);
+  }
+  assert.deepEqual(cellFindings('문장 <td>' + '글'.repeat(61) + '</td>'), []);
+});
+test('렌더 문맥: literal의 미완성 HTML은 다음 블록 주석을 삼키지 않음', () => {
+  const {measureReading} = require('./lint.js');
+  for (const start of ['~~~flow\n제목 | <!-- | logic\n~~~', '~~~cards\n<!--\n본문\n~~~']) {
+    const body = start + '\n<!--\n[추정, 오차 큼]\n' + '글'.repeat(6001) + '\n-->\n' + table(['항목', '글'.repeat(61)]);
+    assert.equal(lint(fm + body).filter(f => /태그 변형/.test(f.msg)).length, 0);
+    assert.ok(measureReading(fm + body).chars < 100);
+    assert.equal(cellFindings(body).length, 1);
+  }
+});
+for (const token of ['[', '<a ', '<a "', '<code>', '<pre>', '<!--', '`', '[x](', '![](', ']((', '<td>', '<thead>', '글']) {
+  test('닫힘 없는 마크업 CPU 증가율: ' + token, () => {
+    assertLinearTime(token, (n, reps) => {
+      const doc = fm + token.repeat(Math.ceil(n / token.length));
+      return cpuTime(repeat(reps, () => lint(doc)));
+    });
+  });
+}
 // 렌더 후 검사 — 브라우저가 없는 PC에서는 건너뜀
 const qa = path.join(__dirname, 'qa.js');
 const runQa = file => spawnSync(process.execPath, [qa, file], {encoding: 'utf8', timeout: 120000});
