@@ -22,6 +22,7 @@
  *   6   본문 문장 안에 file:line (근거: 줄·코드펜스·표 제외)
  *   7   표 셀이 백틱 코드만으로 채워짐
  *   8   H1 두 개 이상 / H2 7개 초과 / 섹션 본문 12줄 초과(코드·표·details 제외) / H2 전에 H3
+ *       (힌트) 8자 넘는 괄호 단서 12곳 이상 또는 두 개 든 줄 3줄 이상(조건은 근거 줄로) / 유보 두 겹("~고 봅니다 [추정]")
  *   9   <details> 열림/닫힘 짝이 안 맞음
  *   11  한 줄에 문장 2개 이상 (마침표 뒤 공백 없어도 잡음, 말줄임표는 제외)
  *   13  "## 배경" 없음·첫 섹션 아님 / 배경에 요청·현상 라벨 없음 / "비유하자면"·"그래서 이번에" 같은 이야기체 표현
@@ -33,6 +34,7 @@
  *       번역투(에 의해·되어지다·하기 위해서는·선택적·을 가진·자동 조사 "을(를)"),
  *       업무 관용투(하시기 바랍니다·하는 것이 가능·하도록 하겠습니다·을 진행합니다), 표기(파라메터·어플리케이션),
  *       용어 섞임(오류/에러·반환/리턴·파라미터/매개변수). 힌트: 사물 주어, 영어 낱말+하다, 해당·에 대한·를 통해·로 인해 4회 이상.
+ *       (힌트) 인용 표지 없는 따옴표 명사구 5곳 이상(강조용 따옴표), 한 섹션 문두 접속어(다만·그러나·그래서…) 3개 이상
  *       frontmatter summary(요약 상자)도 본문과 같이 본다. 따옴표 안은 인용이라 건너뜀. 기준은 references/ko-terms.md
  *   구조 코드펜스(``` ~~~) 안 닫힘 / 표 구분 행 없음·칸 수가 헤더와 다름(접힌 상세 안 포함) / 허용 안 되는 링크 주소
  *        각주·참조형 링크(미지원) / (힌트) 렌더러가 글자로 보여 주는 태그, (--plain만) 4칸 들여쓴 줄
@@ -43,6 +45,7 @@ const fs = require('fs');
 const ENDERS = /(다|요|음|함|됨|임|것|\.|:|：)\s*[.!?]?\s*$/;   // 문장/서술 끝으로 볼 패턴
 const FILE_LINE = /\b[\w./-]+\.(js|ts|tsx|jsx|py|java|kt|go|rs|rb|php|cs|c|cpp|h|xml|yml|yaml|json|sql|sh|md)\s*:\s*\d+/;
 const SOURCES_RE = /^\s*(근거|출처|basis|sources)\s*[:：]/i;
+const SOURCE_HEAD = /^##\s+(?:출처|참고(?: 자료)?|근거|sources|references)\s*$/i;   // 출처 목록 섹션 — 문체 검사 대상이 아님
 const BOM = String.fromCharCode(0xFEFF);
 // 렌더러(render.js)가 통과시키는 raw HTML 태그 — 나머지는 텍스트로 이스케이프된다. render.js가 이 목록을 그대로 쓴다
 const HTML_TAGS = /^(details|summary|div|span|figure|figcaption|img|p|ul|ol|li|table|thead|tbody|tr|th|td|caption|pre|code|blockquote|section|br|hr|strong|em|b|i|sub|sup|a)$/i;
@@ -625,6 +628,47 @@ function lint(src, opts = {}) {
       const desc = used.map(([w, c]) => `"${w}" ${c.n}회`).join('·');
       used.filter(([w]) => w !== ws[0]).forEach(([, c]) => warn(c.line, 14, `용어 섞임 ${desc} — 한 문서에서는 "${ws[0]}" 하나로 (references/ko-terms.md)`));
     });
+  }
+
+  // 2026-10-21: "글이 많고 AI가 쓴 느낌"이라는 평을 받은 보고서 한 건(출처 제외 9,350자)에서 잰 네 가지(전부 힌트).
+  // 그 문서: 강조용 따옴표 17곳, 8자 넘는 괄호 단서 42곳(두 개 든 줄 6줄), 이중 유보 4곳, 한 섹션 문두 접속어 3개.
+  // 임계값은 이 PC 보고서 677건의 상위 10~25% 선 — 대부분 AI가 쓴 글이라 좋은 글의 분포가 아니다(추정)
+  {
+    const QUOTE_MARK = /^(?:라고|라는|이라고|이라는|라며|이라며|이란|란|하고 (?:말|적|밝|물)|고 (?:말|밝|적|안내|보도|썼|했)|(?:으)?로 (?:표시|적혀|나옵|뜹)|(?:이|가) (?:뜹|나옵|찍|표시))/;
+    // "~할 수 있습니다"는 능력인지 가능성인지 글자로 못 가려서 넣지 않는다
+    const HEDGE2 = /(?:고 봅니다|(?:으)?로 보입니다|것 같습니다|추정됩니다|추정합니다|가능성이 (?:있|높)습니다|듯합니다)\.?\s*\[(?:추정|미확인|미검증)[^\]]*\]/;
+    const CONN = /(?:^|[.!?]\s+)(?:[-*]\s+)?(다만|그러나|하지만|그래서|따라서|또한|한편|그런데|게다가|더불어)(?=[\s,])/g;
+    const scare = [], parenLines = [];
+    let parenN = 0, hedge = null, hedgeN = 0, sec = { conn: [], line: start }, inSources = false;
+    const flushConn = () => {
+      if (sec.conn.length >= 3) warn(sec.line, 14, `문두 접속어 ${sec.conn.length}개(${[...new Set(sec.conn)].join('·')}) — 한 섹션에서 잇달아 쓰지 말고, 앞 문장과 합치거나 접속어 없이 사실만`, true);
+    };
+    for (let i = start; i < lines.length; i++) {
+      const fb = fenceAt[i];
+      if (fb && (i === fb.open || i === fb.close || !/^(flow|stats|cards)$/.test(fb.kind))) continue;
+      if (/^##\s/.test(lines[i])) { flushConn(); sec = { conn: [], line: i }; inSources = SOURCE_HEAD.test(lines[i]); continue; }
+      if (inSources || SOURCES_RE.test(lines[i]) || /^#/.test(lines[i])) continue;
+      const l = lines[i].replace(/`[^`]*`/g, '').replace(/\]\((?:[^()\s]|\([^()\s]*\))*\)/g, ']');
+      // 따옴표: 인용 표지("~라고·~라는", "~가 뜹니다")·말로 끝나는 글("이미 확인했어요", "모르겠다")·표 칸 전체가 인용·
+      // 인용문(>)·고치기 전후(→)는 인용으로 본다. 남는 것은 명사구 — 강조나 이름표.
+      // 사례: 2026-10-21 이 PC 보고서 677건 중 169건이 걸렸고, 표본 10건 중 7건이 페르소나 발화 인용이라 말끝 조건을 넣었다
+      if (!/^\s*>/.test(l) && !/→|->/.test(l)) for (const m of l.matchAll(/"([^"\n]{1,40})"|“([^”\n]{1,40})”/g)) {
+        const inner = m[1] ?? m[2], after = l.slice(m.index + m[0].length), before = l.slice(0, m.index);
+        // 한글이 없는 따옴표("All rights reserved")는 원문 그대로 옮긴 문구로 본다
+        if (/(?:[다요죠까네군지됨함음]|어|아|인가|는가|은가|나)[.?!…]*$/.test(inner) || !/[가-힣]/.test(inner) || QUOTE_MARK.test(after)) continue;
+        if (/\|\s*$/.test(before) && /^\s*\|/.test(after)) continue;
+        scare.push([i, inner]);
+      }
+      // 괄호 단서: 8자 이상, 영어 원어·숫자만 든 풀이("(엔드포인트)", "(기본값 10)")는 제외
+      const ps = [...l.matchAll(/\(([^()]{8,})\)/g)].filter(m => !/^[A-Za-z0-9 .,'&/:+%-]+$/.test(m[1]));
+      parenN += ps.length; if (ps.length >= 2) parenLines.push(i);
+      const h = l.match(HEDGE2); if (h) { hedgeN++; if (!hedge) hedge = [i, h[0]]; }
+      if (!/^\s*\|/.test(l)) for (const m of l.replace(/\*\*/g, '').matchAll(CONN)) sec.conn.push(m[1]);
+    }
+    flushConn();
+    if (scare.length >= 5) warn(scare[0][0], 14, `강조용 따옴표 ${scare.length}곳 — 남의 말을 옮긴 게 아니면 따옴표를 빼고, 꼭 강조할 말만 **굵게**: ${scare.slice(0, 4).map(([, q]) => `"${q}"`).join(' ')}`, true);
+    if (parenLines.length >= 3 || parenN >= 12) warn((parenLines[0] ?? start), 8, `괄호 단서 ${parenN}곳(두 개 이상 든 줄 ${parenLines.length}줄) — 표본·기간·집계 기준 같은 조건은 섹션 끝 "근거:" 줄이나 접힌 칸으로, 문장에는 결론과 수치만`, true);
+    if (hedge) warn(hedge[0], 8, `유보가 두 겹 "${hedge[1]}"${hedgeN > 1 ? ` 외 ${hedgeN - 1}곳` : ''} — 동사로 단정하고 [추정] 하나만 두거나, 태그 없이 "~로 봅니다"로`, true);
   }
 
   // 규칙 15(힌트): 그림이 나을 내용을 글로만 쓴 섹션

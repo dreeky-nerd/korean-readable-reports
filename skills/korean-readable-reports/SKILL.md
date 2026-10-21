@@ -57,7 +57,14 @@ easy.
    don't add hedges the source didn't have. Never pick a stronger verb than
    the work earned — 관찰, 추정, 확인, 검증, 완료 each need their own
    evidence (table in `references/ko-terms.md` §4). They are not one ranking:
-   "관찰 기록 작성 완료, 동작 검증 미실시" is a normal state. Hard limits: summary ≤ 3 sentences, ≤ 7 H2
+   "관찰 기록 작성 완료, 동작 검증 미실시" is a normal state.
+   **Conditions live in one place.** The sentence carries the claim and its
+   number; the sample, period, and basis behind it go on the section's
+   `근거:` line or into `<details>` — not a parenthesis after every number.
+   One parenthetical per sentence at most. Hedge once: either the verb ("~로
+   봅니다") or the tag (`[추정]`), not "~라고 봅니다 [추정]". Lint hints
+   when a document carries 12+ long parentheticals or 3+ lines holding two,
+   and on every doubled hedge. Hard limits: summary ≤ 3 sentences, ≤ 7 H2
    sections, ≤ 12 lines of prose per section — anything past that goes behind
    `<details>` or into an appendix.
 9. **Progressive disclosure.** Hide depth behind expandable sections (collapsible
@@ -153,6 +160,15 @@ easy.
     quotes ("…") is someone else's words and is skipped — quote a ticket title
     or a before-example instead of rewording it.
 
+    That is the only job of quotes: words someone said or wrote, with the
+    marker that says so ("~라고 밝혔습니다", "~라는 제목"). Not emphasis, not
+    a label, not a coined phrase — "가장 큰 영향"을 보장하지 않습니다 reads as
+    sarcasm or doubt. Drop the quotes; if one phrase in a paragraph truly
+    needs weight, make it **bold**. Lint hints at five or more quoted noun
+    phrases without a quote marker (spoken lines such as "이미 확인했어요",
+    table cells that are wholly a quote, and English source text don't
+    count).
+
     Four sentence frames are flagged as Korean AI tells — the first two
     reported in the same direction by two independent corpora, the last two
     from one small sample, all on essays and wiki text and none yet measured
@@ -164,6 +180,11 @@ easy.
     Wrap-up stock phrases are hinted on first use too: sentence-initial
     "결론적으로·요컨대·종합하면", "시사하는 바가 크다", "~할 때입니다" — the
     conclusion already lives in the summary box and each section's first line.
+    So is a chain of sentence-initial connectives in one section (three or
+    more of 다만·그러나·하지만·그래서·따라서·또한·한편…): "다만 A. 그러나 B.
+    그래서 C." walks the reader through the writer's reasoning. State the
+    conclusion, then the facts; merge a sentence into the one before it
+    rather than linking it with a connective.
     Two Claude habits are hinted on first use — measured in 15 raw Claude
     drafts against 18 real reports, where they never appeared: emoji in
     headings or sentences (use text labels such as 확인·추정 for status), and
@@ -252,7 +273,7 @@ easy.
    re-render; exit 2 means no browser was found — say so instead of claiming the
    check passed.
 6. If the draft still reads like a default agent report, read
-   `references/examples.md` (twelve before/after pairs, one per failure mode,
+   `references/examples.md` (thirteen before/after pairs, one per failure mode,
    plus how the same finding shifts per audience) and rewrite.
    `references/design-guide.md` holds the visual details (colors, chart
    types, Mermaid quirks) — *whether* to draw is decided by rule 15, not there.
@@ -281,6 +302,8 @@ easy.
 - [ ] `## 배경` comes first and is labeled request analysis (요청·현상 at least), not a story; any analogy is one clause beside a hard concept.
 - [ ] Korean reads native: no metaphor headings, translated verbs, colloquial intensifiers, announcing sentences, translationese (에 의해·하기 위해서는), or office habits (해당·진행합니다·하시기 바랍니다); one term per concept (references/ko-terms.md).
 - [ ] Every section was checked against the rule-15 table; ordered processing steps, exchanges, and architecture are drawn, not listed.
+- [ ] Quotes only around someone else's words; emphasis is bold, once per paragraph at most.
+- [ ] Conditions (sample, period, basis) sit on `근거:` lines or in `<details>`; one parenthetical per sentence; each hedge said once.
 - [ ] No unglossed jargon / coined names / bare formulas.
 - [ ] No `file:line` or code in body prose (moved to end-notes).
 - [ ] Table cells read as sentences; slop removed.

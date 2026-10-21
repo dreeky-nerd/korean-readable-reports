@@ -365,6 +365,49 @@ test('규칙 14: 마무리 틀(1회)과 번역투·보고서 말투(4회부터)�
   }
 });
 
+// ── 2026-10-21 추가: "글이 많고 AI가 쓴 느낌" 평을 받은 보고서 한 건에서 잰 네 가지 ──
+test('규칙 14: 강조용 따옴표 5곳부터 힌트, 인용 표지·전후 예문·완결 문장은 인용', () => {
+  const hint = doc => lint(fm + doc).filter(f => f.rule === 14 && /따옴표/.test(f.msg));
+  const scare = ['"가장 큰 영향"을 보장하지는 않습니다.', '"자료를 읽고 추리하는" 게임입니다.', '"PC에서 바로 실행"과 거리가 있습니다.', '"Boxleiter 방식" 배수는 다릅니다.', '"한국어 리뷰"는 작성 언어입니다.'];
+  const f = hint(scare.join('\n'));
+  assert.equal(f.length, 1); assert.ok(f[0].hint); assert.match(f[0].msg, /5곳/); assert.match(f[0].msg, /가장 큰 영향/);
+  assert.equal(hint(scare.slice(0, 4).join('\n')).length, 0, '4곳까지는 통과');
+  const quoted = ['회사는 "한 자릿수"라고 밝혔습니다.', '티켓 "로그인 오류"라는 제목입니다.', '담당자는 "내일 배포합니다."라고 했습니다.', '"해당 API" → "주문 조회 API"로 고칩니다.', '> "원문 인용"을 그대로 둡니다.', '화면에 "저장됨"이 뜹니다.'];
+  assert.equal(hint([...quoted, ...quoted].join('\n')).length, 0, '인용 표지가 있으면 강조가 아님');
+  // 페르소나·사용자 발화는 말끝으로 끝난다(표본 677건 중 걸린 169건의 표본 10건 중 7건)
+  const speech = ['페르소나는 "이미 확인했어요" 하고 넘어갔습니다.', '반응은 "어디로 좁혀야 하는지 모르겠다"였습니다.', '"네, 맞아요" 뒤에 멈췄습니다.', '상태는 "확인 안 됨"으로 남았습니다.', '"다음엔 뭘 하죠?" 질문이 나왔습니다.', '"무엇이 무너졌나" 질문입니다.', '라이선스는 "All rights reserved" 표기입니다.'];
+  assert.equal(hint(speech.join('\n')).length, 0, '발화 인용');
+  assert.equal(hint(Array(5).fill('| 김 대리 | "로그 위치" |').join('\n')).length, 0, '표 칸 전체가 인용');
+  assert.equal(hint(scare.map(s => '`' + s + '`').join('\n')).length, 0, '코드 안');
+});
+test('규칙 8: 괄호 단서가 많으면 힌트 — 조건은 근거 줄로', () => {
+  const hint = doc => lint(fm + doc).filter(f => f.rule === 8 && /괄호/.test(f.msg));
+  const heavy = '이용자 약 3천만 명(홍보 문구, 측정 시점 미공개)이고 비중은 1.37%(자발적 익명 설문 기준)입니다.';
+  const f = hint(Array(3).fill(heavy).join('\n'));
+  assert.equal(f.length, 1); assert.ok(f[0].hint); assert.match(f[0].msg, /3줄/);
+  assert.equal(hint(Array(2).fill(heavy).join('\n')).length, 0, '두 줄까지는 통과');
+  const light = '요청 URL(엔드포인트)을 부릅니다. 기본값(10)이 쓰입니다. 한 페이지 결과 수(기본값 10)입니다.';
+  assert.equal(hint(Array(6).fill(light).join('\n')).length, 0, '짧은 풀이·기본값 괄호');
+  assert.equal(hint('근거: 홍보 문구(측정 시점 미공개), 설문(자발적 익명 응답 기준)\n'.repeat(5)).length, 0, '근거 줄은 조건을 두는 곳');
+  const many = Array.from({length: 12}, (_, k) => `지표 ${k}는 올랐습니다(표본 ${k}명 기준 집계).`).join('\n');
+  assert.equal(hint(many).length, 1, '문서 전체 12곳');
+});
+test('규칙 8: 유보가 두 겹이면 힌트 — 동사와 태그 중 하나만', () => {
+  const hint = doc => lint(fm + doc).filter(f => f.rule === 8 && /두 겹/.test(f.msg));
+  // "~할 수 있습니다"는 능력인지 가능성인지 글자로 못 가려서 보지 않는다
+  for (const s of ['가장 싸고 빨리 모을 수 있다고 봅니다 [추정].', '공유가 줄 것 같습니다 [미확인].', '원인은 캐시로 보입니다 [추정]', '회귀로 추정됩니다. [미검증]'])
+    { const f = hint(s); assert.equal(f.length, 1, s); assert.ok(f[0].hint); }
+  for (const s of ['가장 싸고 빨리 모을 수 있습니다 [추정].', '원인은 캐시로 봅니다.', '재시작하면 복구할 수 있습니다.', '배포를 마쳤습니다 [완료].']) assert.equal(hint(s).length, 0, s);
+});
+test('규칙 14: 한 섹션의 문두 접속어 3개부터 힌트', () => {
+  const hint = doc => lint(fm + doc).filter(f => f.rule === 14 && /접속어/.test(f.msg));
+  const chain = '## 추천\n\nA안을 추천합니다.\n다만 영향은 보장하지 않습니다.\n그러나 수요는 B안에 있습니다.\n그래서 순서를 둡니다.';
+  const f = hint(chain); assert.equal(f.length, 1); assert.ok(f[0].hint); assert.match(f[0].msg, /다만·그러나·그래서/);
+  assert.equal(hint(chain.replace('그래서 순서를 둡니다.', '순서를 둡니다.')).length, 0, '두 개까지는 통과');
+  assert.equal(hint('## 가\n\n다만 하나.\n그러나 둘.\n\n## 나\n\n그래서 셋.\n또한 넷.').length, 0, '섹션마다 따로 센다');
+  assert.equal(hint('## 가\n\n다만화 제작사입니다.\n그래서울 지점입니다.\n또한국어 판입니다.').length, 0, '낱말 일부');
+});
+
 // ── 2026-10-19 추가: 날것의 Claude 글 15개와 이 PC 보고서 18건을 비교해 보고서에 0번인 버릇만 ──
 test('규칙 14: Claude 버릇 — 이모지·"결국 X입니다"·"중요한 건"은 힌트', () => {
   const hint = (doc, re) => lint(fm + doc).filter(f => f.rule === 14 && re.test(f.msg));

@@ -80,7 +80,7 @@ cp -r korean-readable-reports/skills/korean-readable-reports <project>/.claude/s
 | `…/scripts/qa.js` | 만든 HTML을 헤드리스 Chrome·Edge로 1280·768·390px에서 열어 넘침·깨진 #링크·안 열린 그림 검사(설치된 브라우저만 씀) |
 | `…/scripts/test.js` | 렌더러·lint 회귀 시험 |
 | `…/references/template.html` | 렌더러가 채우는 페이지 디자인 |
-| `…/references/examples.md` | 실패 유형별 고치기 전후 예시 12쌍, 독자별로 같은 내용을 다르게 쓰는 예 |
+| `…/references/examples.md` | 실패 유형별 고치기 전후 예시 13쌍, 독자별로 같은 내용을 다르게 쓰는 예 |
 | `…/references/design-guide.md` | 색, 차트 선택, Mermaid 주의점, 검증 기록 |
 | `…/references/ko-terms.md` | 한국어 용어·표현 기준 — 한국어 API 문서 249건(한국어 원문 221 · 번역판 28)을 비교해 정함 |
 | `…/references/reader-check.md` | 독자 회수 검사 — 맥락 없는 독자에게 문서만 주고 핵심 다섯 가지를 되짚게 하는 절차 |
