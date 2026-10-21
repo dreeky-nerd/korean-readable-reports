@@ -111,6 +111,14 @@ const TAG_RE = new RegExp('\\[(' + Object.keys(STATUS_TAGS).join('|') + ')\\]', 
 const NUL = String.fromCharCode(0);
 const NUL_RE = new RegExp(NUL + '(\\d+)' + NUL, 'g');
 const safeHref = u => safeUrl(u) ? u : '#';
+// 옆 보고서로 가는 상대 링크(본문 → "-근거.md")는 그 md가 있으면 렌더된 .html을 가리킨다 — HTML 독자가 md 원문을 열지 않게
+const siblingHtml = u => {
+  const m = u.match(/^([^:?#]+)\.md(#.*)?$/i);
+  if (!m || u.startsWith('/')) return u;
+  let file = m[1] + '.md';
+  try { file = decodeURIComponent(file); } catch {}
+  return fs.existsSync(path.resolve(path.dirname(inPath), file)) ? m[1] + '.html' + (m[2] || '') : u;
+};
 
 function inline(text) {
   const codes = [];
@@ -123,7 +131,7 @@ function inline(text) {
   // URL: esc()가 만든 엔티티를 되돌린 뒤 스킴 검사 → 다시 이스케이프. 괄호 한 겹 포함 허용
   const unesc = u => u.replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
   s = s.replace(/(!?)\[([^\]]+)\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, (_, img, t, u) => {
-    const h = safeHref(unesc(u));
+    const h = img ? safeHref(unesc(u)) : siblingHtml(safeHref(unesc(u)));
     if (img) return `<img src="${esc(h)}" alt="${esc(unesc(t).replace(/<[^>]*>/g, ''))}" loading="lazy">`;
     return h.charAt(0) === '#' ? `<a href="${esc(h)}">${t}</a>` : `<a href="${esc(h)}" target="_blank" rel="noopener noreferrer">${t}</a>`;
   });

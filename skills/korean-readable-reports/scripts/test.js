@@ -696,6 +696,14 @@ test('바탕화면 대체 경로도 원본·링크 보호', () => {
 });
 
 // ── 출력 파일 보호 ──────────────────────────────────────────────────────────
+test('옆 보고서 md 링크는 html로, 없는 파일·외부·이미지는 그대로', () => {
+  fs.writeFileSync(path.join(dir, 'case-근거.md'), fm + '# 근거');
+  const r = plain('# 제목\n\n[근거](case-근거.md#표) [인코딩](case-%EA%B7%BC%EA%B1%B0.md) [없음](nope.md) [외부](https://example.com/a.md) ![그림](case-근거.md)');
+  assert.ok(r.html.includes('href="case-근거.html#표"'), r.html.match(/<a [^>]*>근거/)?.[0]);
+  assert.ok(r.html.includes('href="case-%EA%B7%BC%EA%B1%B0.html"'));
+  assert.ok(r.html.includes('href="nope.md"')); assert.ok(r.html.includes('href="https://example.com/a.md"'));
+  assert.ok(r.html.includes('src="case-근거.md"'));
+});
 test('기본: 기존 출력 덮어씀 / --keep-existing: 보존, --force로만 교체', () => {
   const r = plain('# 제목\n본문', ['--strict']);
   assert.equal(run(r.input, '--plain', '--strict').status, 0);
