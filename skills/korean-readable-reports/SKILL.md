@@ -68,6 +68,10 @@ easy.
     period (md: literal newline; HTML: `<br>` after each sentence inside a
     `<p>`). A paragraph of three sentences is three lines. Applies to body
     prose, callouts, and `<details>` — not to table cells or code.
+    A line per sentence is not a short sentence per line: don't stack three
+    or more short facts about the same subject with no connecting word. Split
+    where the judgment changes, not by length — and when joining two
+    sentences, don't add a cause (그래서·때문에) the source doesn't state.
 12. **Deliver HTML too.** md is the source; always render an HTML copy and
     hand the reader the HTML. Use the renderer — never fill the template by
     hand:
@@ -169,7 +173,10 @@ easy.
     warning in every mode: they break copy, search, and diff.
 
     For a deeper pass on a Korean draft, the `humanize-korean` skill (if
-    installed) targets exactly these translationese patterns.
+    installed) targets exactly these translationese patterns. Use it only if
+    its `references/quick-rules.md` has the 서법 보존 (modality-preserving)
+    section — a copy without it has no explicit rule to keep the hedges and
+    `[미검증]` tags that rule 8 keeps.
 15. **Draw when the shape is the content — decide per section, unprompted.**
     Models default to prose and numbered lists; the reader should not have to
     ask for a picture. While writing each section, check what it describes:
@@ -218,7 +225,18 @@ easy.
    judge each one. They cover rule 15 ("this looks like a flow — draw it?")
    and consistency: a summary number missing from the body,
    "세 가지입니다" above a list of two, a "뒤에서 다루겠습니다" to follow up.
-4. `node <skill-dir>/scripts/render.js reports/<file>.md` — produces the `.html` next to it
+4. **Reader check** — for a report with 4+ H2 sections, `audience:
+   leadership | external`, or a decision request: give a fresh subagent the
+   md and nothing else from this conversation, and have it answer the five
+   common questions plus the one for its `audience` in
+   `references/reader-check.md`, quoting the line behind each answer. Where
+   an answer is partial, wrong, or "not in the document" but should be, fix
+   the nearest heading, summary, first line, or status before reaching for a
+   new paragraph, then re-lint. No subagent → compare your own answers
+   from the summary box alone against answers from the body. It shows the
+   point is in the document, not that the document reads well. Tell the user
+   whether it ran (skipped for short reports — say so).
+5. `node <skill-dir>/scripts/render.js reports/<file>.md` — produces the `.html` next to it
    (falls back to Desktop `reports/` if it can't write there) and runs lint first.
    Tell the reader the full path of the HTML. `--strict` exits 1 on any finding without writing
    the HTML (CI / pre-commit gate). Raw HTML is cleaned: only allowlisted tags and
@@ -233,12 +251,12 @@ easy.
    to load. Exit 1 → fix the md (usually a long unbroken name in a card) and
    re-render; exit 2 means no browser was found — say so instead of claiming the
    check passed.
-5. If the draft still reads like a default agent report, read
+6. If the draft still reads like a default agent report, read
    `references/examples.md` (twelve before/after pairs, one per failure mode,
    plus how the same finding shifts per audience) and rewrite.
    `references/design-guide.md` holds the visual details (colors, chart
    types, Mermaid quirks) — *whether* to draw is decided by rule 15, not there.
-6. Diagrams: a straight sequence with no branches (A→B→C…) is a ` ```flow `
+7. Diagrams: a straight sequence with no branches (A→B→C…) is a ` ```flow `
    block (one step per line: `title | description | role`), not Mermaid — it
    wraps to the page width with curved arrows. Use Mermaid for branches,
    loops, or architecture. Color flow/architecture nodes by role —
@@ -268,7 +286,8 @@ easy.
 - [ ] Table cells read as sentences; slop removed.
 - [ ] Depth is behind progressive disclosure.
 - [ ] Tone reads like explaining to a teammate.
-- [ ] Every sentence sits on its own line.
+- [ ] Every sentence sits on its own line, without stacking short facts that need a connecting word.
+- [ ] Reader check run (or skipped as a short report — said so); misses fixed at the nearest heading, summary, first line, or status first.
 - [ ] Lint run and clean; HTML rendered with `scripts/render.js`, `scripts/qa.js` exits 0 (or no browser — said so), and delivered.
 
 ## When NOT to apply

@@ -83,6 +83,7 @@ cp -r korean-readable-reports/skills/korean-readable-reports <project>/.claude/s
 | `…/references/examples.md` | 실패 유형별 고치기 전후 예시 12쌍, 독자별로 같은 내용을 다르게 쓰는 예 |
 | `…/references/design-guide.md` | 색, 차트 선택, Mermaid 주의점, 검증 기록 |
 | `…/references/ko-terms.md` | 한국어 용어·표현 기준 — 한국어 API 문서 249건(한국어 원문 221 · 번역판 28)을 비교해 정함 |
+| `…/references/reader-check.md` | 독자 회수 검사 — 맥락 없는 독자에게 문서만 주고 핵심 다섯 가지를 되짚게 하는 절차 |
 | `.claude-plugin/marketplace.json` | 이 저장소를 Claude Code 플러그인 마켓플레이스로 만드는 파일 |
 | `tools/package.js` | SKILL.md frontmatter를 검사한 뒤 claude.ai 업로드용 zip을 `dist/`에 만듦(`node tools/package.js`) |
 | `.github/workflows/package.yml` | main에 스킬이 바뀌면 zip을 만들어 Releases의 `latest`에 올림 |
