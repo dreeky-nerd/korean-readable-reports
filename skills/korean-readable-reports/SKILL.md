@@ -201,7 +201,8 @@ easy.
    fails without them), plus `project`, `branch`, `kind`, `summary` (optional;
    `summary: |` block scalar works), `theme` (`light` default | `dark` |
    `auto`; readers can still toggle). First blockquote after the H1 = summary
-   box when `summary` is absent.
+   box when `summary` is absent — write the summary in one place only, or it
+   renders twice.
 3. `node <skill-dir>/scripts/lint.js report.md` — machine checks for rules 1 (external),
    2, 4, 6, 7, 8, 9, 11, 13, 14, required frontmatter, and structural traps the
    renderer would otherwise swallow silently (unclosed fence, table column

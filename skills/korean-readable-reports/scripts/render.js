@@ -40,7 +40,7 @@
  *   ```lang       .code-dark 패널 (라벨 = 첫 토큰; shell-session, js title="x" 처럼 하이픈·속성 있어도 됨)
  *   | 표 |        .table-wrap. 헤더가 "상태"인 열 → .status, 첫 열이 짧으면 .key. 셀 안 파이프는 \| 로
  *   - 불릿        들여쓰기(2칸 이상)로 중첩 가능. 폭이 어긋나도 항목이 사라지지 않음
- *   [완료] [미검증] [실패] [블로커] [선재] [주의] [정보]  → 상태 태그 칩
+ *   [완료] [미검증] [추정] [실패] [블로커] [선재] [주의] [정보]  → 상태 태그 칩
  *   근거: … / 출처: …   줄 시작(들여쓰기 허용) → .sources 박스 (규칙 6)
  *   <details>     짝이 맞는 </details>까지 한 덩어리. 안쪽은 md로 다시 렌더(빈 줄·불릿·표 OK)
  *   raw HTML      줄 맨 앞이 허용 태그(details, div, figure, figcaption, img, p, ul, ol, table, pre, blockquote, section, br, hr)면
@@ -109,6 +109,8 @@ const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&
 const TAGS = {
   '완료': 'tag-done', '미검증': 'tag-unverified', '실패': 'tag-fail', '블로커': 'tag-fail',
   '선재': 'tag-preexisting', '주의': 'tag-caution', '정보': 'tag-info', '추천': 'tag-recommend',
+  // 추정은 근거로 미루어 본 것(미검증 = 확인 안 됨과 다름) — 회색. 사례: 2026-10-21 시나리오 6건 중 2건이 [추정]을 써서 글자 그대로 나왔다
+  '추정': 'tag-preexisting',
 };
 const TAG_RE = new RegExp('\\[(' + Object.keys(TAGS).join('|') + ')\\]', 'g');
 // 인라인 코드 자리표시자: NUL 문자를 소스에 원시 바이트로 박지 않고 실행 시 생성(git이 바이너리로 보지 않게)
@@ -247,7 +249,7 @@ function renderStats(lines) {
 // 근거 파일명이 중간에서 잘리고, 짧은 카드 아래가 비었다). 카드는 짧은 내용용이라 길면 한 줄에 하나로 편다.
 //   짧음(본문 60자 이하) grid 3열 · 중간(140자 이하, 또는 근거 줄 있음) half 2열 · 긺(140자 초과) wide 한 줄 하나(왼쪽 번호·제목, 오른쪽 본문)
 //   ```cards wide|half|grid 로 직접 고를 수도 있다
-const CARD_TAG_RE = /\[(완료|미검증|실패|블로커|선재|주의|정보|추천)\]/g;
+const CARD_TAG_RE = TAG_RE;   // match·replace에만 쓴다(test·exec는 g 플래그의 lastIndex가 남음)
 function renderCards(lines, info) {
   const groups = [];
   let cur = null;

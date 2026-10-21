@@ -16,7 +16,7 @@
  *       date는 실제 있는 날짜 YYYY-MM-DD / audience·theme 값
  *   1   audience: external(또는 --external) — 브랜치 경로(feature/…)·내부 호스트·개인 로컬 경로·IP·사번 패턴, redact: 목록(쉼표 구분).
  *       frontmatter·코드·접힌 상세까지 전부 보고, 찾은 문자열은 출력하지 않는다(CI 로그에 다시 새지 않게)
- *   2   요약 박스 문장 3개 초과 / 자기 문서 예고 / (힌트) 표·그림 예고·H2 첫 문장의 제목 반복·수정 과정
+ *   2   요약 박스 문장 3개 초과 / 요약이 두 번(frontmatter summary + 같은 내용의 H1 아래 인용문) / 자기 문서 예고 / (힌트) 표·그림 예고·H2 첫 문장의 제목 반복·수정 과정
  *       (힌트) 정합성 — 요약 박스 수치가 본문에 없음, 문장 끝 개수 예고("세 가지입니다")와 바로 아래 목록·flow·cards·표 항목 수가 다름, "뒤에서 다루겠습니다" 미룬 약속
  *   4   불릿이 서술어 없이 끝남(단편 의심) — 한국어: 다/요/음/함/됨/./: 로 안 끝나는 항목
  *   6   본문 문장 안에 file:line (근거: 줄·코드펜스·표 제외)
@@ -25,13 +25,14 @@
  *   9   <details> 열림/닫힘 짝이 안 맞음
  *   11  한 줄에 문장 2개 이상 (마침표 뒤 공백 없어도 잡음, 말줄임표는 제외)
  *   13  "## 배경" 없음·첫 섹션 아님 / 배경에 요청·현상 라벨 없음 / "비유하자면"·"그래서 이번에" 같은 이야기체 표현
- *   15  (힌트) 그림이 나을 내용을 글로만 씀 — 주어 있는 처리 단계 3개 이상 나열, 화살표 3단계 이상. --strict 실패 사유 아님
+ *   15  flow·mermaid 한 그림에 역할 색(ext…)과 상태 색(done…)을 섞음
+ *       (힌트) 그림이 나을 내용을 글로만 씀 — 주어 있는 처리 단계 3개 이상 나열, 화살표 3단계 이상. --strict 실패 사유 아님
  *   14  자연스러운 한국어 — 은유 소제목("요청이 지나가는 길", "~ 지도"), 의인화·번역투 동사(지나가다·조립하다·창구를 열다·뽑아내다),
  *       구어체 강조어(딱·진짜), 예고 문장("나누면 이렇습니다"), 괄호 비유 풀이("기계(코드)"),
  *       번역투(에 의해·되어지다·하기 위해서는·선택적·을 가진·자동 조사 "을(를)"),
  *       업무 관용투(하시기 바랍니다·하는 것이 가능·하도록 하겠습니다·을 진행합니다), 표기(파라메터·어플리케이션),
  *       용어 섞임(오류/에러·반환/리턴·파라미터/매개변수). 힌트: 사물 주어, 영어 낱말+하다, 해당·에 대한·를 통해·로 인해 4회 이상.
- *       따옴표 안은 인용이라 건너뜀. 기준은 references/ko-terms.md
+ *       frontmatter summary(요약 상자)도 본문과 같이 본다. 따옴표 안은 인용이라 건너뜀. 기준은 references/ko-terms.md
  *   구조 코드펜스(``` ~~~) 안 닫힘 / 표 구분 행 없음·칸 수가 헤더와 다름(접힌 상세 안 포함) / 허용 안 되는 링크 주소
  *        각주·참조형 링크(미지원) / (힌트) 렌더러가 글자로 보여 주는 태그, (--plain만) 4칸 들여쓴 줄
  *        flow·stats 칸이 정해진 수보다 많음 / 모르는 역할·상태 이름 / 빈 flow·stats·cards 블록
@@ -172,7 +173,7 @@ function lint(src, opts = {}) {
         if (!HTML_TAGS.test(tm[1])) { warn(i, '구조', `<${tm[1]}> 는 태그가 아니라 글자로 표시됨 — 의도한 태그면 Markdown이나 허용 태그(details·figure·img 등)로`, true); break; }
       }
       // 참조 정의 "[이름]: 주소" — 상태 태그로 시작하는 줄("[완료]: …")은 제외
-      if (/^\s*\[\^|\]\[[^\]]*\]|^\s*\[(?!(완료|미검증|실패|블로커|선재|주의|정보|추천)\])[^\]]+\]:\s*\S/.test(plainText)) warn(i, '구조', '각주·참조형 링크는 지원 안 함 — 인라인 링크 [글](주소)로');
+      if (/^\s*\[\^|\]\[[^\]]*\]|^\s*\[(?!(완료|미검증|실패|블로커|선재|주의|정보|추천|추정)])[^\]]+\]:\s*\S/.test(plainText)) warn(i, '구조', '각주·참조형 링크는 지원 안 함 — 인라인 링크 [글](주소)로');
       const opens = (plainText.match(/<details(\s|>)/gi) || []).length, closes = (plainText.match(/<\/details\s*>/gi) || []).length;
       if (opens) lastOpen = i;
       depth += opens;
@@ -204,6 +205,16 @@ function lint(src, opts = {}) {
     const ROLE = /^(ext|entry|logic|data|done|fail|caution|info|neutral)$/;
     const STATE = /^(done|완료|fail|실패|블로커|caution|주의|unverified|미검증|info|정보|neutral|중립|선재)$/i;
     const split = l => l.trim().replace(/\\\|/g, ' ').split('|').map(c => c.trim());   // 칸 수만 세므로 \| 는 공백으로
+    // 한 그림에 역할 색(누가 하나)과 상태 색(어떻게 됐나)을 섞지 않는다 — 분홍(외부)과 연빨강(실패)이 나란히 서면 구분이 안 된다.
+    // 사례: 2026-10-21 시나리오 6건 중 2건이 flow에 ext·logic과 fail·done을 섞음. Mermaid는 class A x / A:::x 로 붙인 이름을 본다
+    const ROLES = /^(ext|entry|logic|data)$/, STATUSES = /^(done|fail|caution|info|neutral)$/;
+    for (const fb of blocks) {
+      if (fb.kind !== 'flow' && fb.kind !== 'mermaid') continue;
+      const used = fb.kind === 'flow'
+        ? fb.body.map(([, l]) => (split(l)[2] || '').toLowerCase())
+        : fb.body.flatMap(([, l]) => [...(l.match(/^\s*class\s+\S+\s+([\w-]+)/) || []).slice(1), ...[...l.matchAll(/:::([\w-]+)/g)].map(m => m[1])]);
+      if (used.some(t => ROLES.test(t)) && used.some(t => STATUSES.test(t))) warn(fb.open, 15, `${fb.kind}에 역할 색(ext·entry·logic·data)과 상태 색(done·fail·caution·info·neutral)이 섞임 — 한 그림에는 한 종류만`);
+    }
     for (const fb of blocks) {
       if (!/^(flow|stats|cards)$/.test(fb.kind)) continue;
       const filled = fb.body.filter(([, l]) => l.trim());
@@ -307,6 +318,19 @@ function lint(src, opts = {}) {
     const n = countSentences(summary.replace(/\n/g, ' '));
     if (n > 3) warn(summaryLine, 2, `요약 박스 문장 ${n}개 — 3개 이하로 (무엇을/어떻게/결정할 것)`);
   } else warn(start, 2, '요약 박스 없음 — frontmatter summary: 또는 H1 아래 첫 인용문(>)');
+  // 요약이 두 번: frontmatter summary가 요약 상자가 되는데 H1 아래 인용문에 같은 글을 또 쓰면 상자 바로 밑에 인용으로 한 번 더 찍힌다.
+  // 사례: 2026-10-21 시나리오 6건 중 2건. 다른 내용의 인용(요청 원문 등)은 그대로 둔다
+  if (meta.summary) for (let i = start; i < lines.length; i++) {
+    if (inCode(i)) continue;
+    if (/^##\s/.test(lines[i])) break;
+    if (!/^>/.test(lines[i])) continue;
+    const squash = t => t.replace(/[\s>.,·]/g, '');
+    let j = i; const q = [];
+    while (j < lines.length && /^>/.test(lines[j])) q.push(lines[j++]);
+    const head = squash(meta.summary).slice(0, 20);
+    if (head && squash(q.join('')).includes(head)) warn(i, 2, '요약이 두 번 — frontmatter summary가 이미 요약 상자. H1 아래 같은 내용의 인용문(>)은 지우기');
+    break;
+  }
 
   // 정합성(힌트, 규칙 2): 요약과 본문, 예고와 목록이 서로 맞는지. 문장 품질 검사가 못 보는 내용 모순을 일부 잡는다.
   // 근거: hanlint의 countMismatch·promiseRecall 방식. 정확 일치만 보고 반올림은 사람이 판단
@@ -411,7 +435,7 @@ function lint(src, opts = {}) {
     const li = l.match(/^\s*([-*]|\d+\.)\s+(.*)$/);
     if (li) {
       const raw = li[2].trim();
-      const item = raw.replace(/`[^`]*`/g, '').replace(/\*\*/g, '').replace(/\[[^\]]+\]\([^)]*\)/g, 'x').replace(/\[(완료|미검증|실패|블로커|선재|주의|정보|추천)\]/g, '').trim();
+      const item = raw.replace(/`[^`]*`/g, '').replace(/\*\*/g, '').replace(/\[[^\]]+\]\([^)]*\)/g, 'x').replace(/\[(완료|미검증|실패|블로커|선재|주의|정보|추천|추정)]/g, '').trim();
       if (/^`[^`]+`$/.test(raw)) warn(i, 4, `불릿이 코드만 있음 "${raw}" — 무엇을 하는지 문장으로`);
       else if (item.length > 3 && !ENDERS.test(item)) warn(i, 4, `불릿이 서술어 없이 끝남 — 온전한 문장으로: "${item.slice(0, 40)}"`);
     }
@@ -564,13 +588,18 @@ function lint(src, opts = {}) {
       (w === '리턴' ? '(?!\\s+로스)' : ''), 'g')));
     const counts = COUNTED.map(() => ({ n: 0, line: -1 }));
     const mix = MIX.map(ws => ws.map(() => ({ n: 0, line: -1 })));
-    for (let i = start; i < lines.length; i++) {
+    // frontmatter summary(요약 상자)도 본문처럼 검사한다 — 가장 먼저 읽히는 곳.
+    // 사례: 2026-10-21 시나리오의 요약 "회신해 주시기 바랍니다"는 통과하고, 같은 문장이 본문에 있으면 경고였다
+    const sumAt = lines.slice(0, start).findIndex(l => /^summary:/.test(l));
+    const fmSummary = [];
+    if (sumAt > 0) { fmSummary.push(sumAt); for (let j = sumAt + 1; j < start - 1 && /^\s+\S/.test(lines[j]); j++) fmSummary.push(j); }
+    for (const i of [...fmSummary, ...Array.from({ length: lines.length - start }, (_, k) => start + k)]) {
       const l = unquoted[i], fb = fenceAt[i];
       // 글 블록(flow·stats·cards)의 안쪽은 검사, 펜스 줄 자체와 코드·mermaid는 건너뜀
       if (fb && (i === fb.open || i === fb.close || !/^(flow|stats|cards)$/.test(fb.kind))) continue;
       if (SOURCES_RE.test(l)) continue;
       // 추정: 표시 문구만 검사. 링크 목적지와 인용·코드는 제목/본문에서 같은 방식으로 제외한다.
-      const text = proseLines[i];
+      const text = i < start ? proseLines[i].replace(/^summary:\s*([|>][-+]?\s*$)?/, '') : proseLines[i];
       const em = text.match(EMOJI);
       if (em) { emoji.n += em.length; if (emoji.line < 0) emoji.line = i; }
       const h = text.match(/^#{2,4}\s+(.*)$/);

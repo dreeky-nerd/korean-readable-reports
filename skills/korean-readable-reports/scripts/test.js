@@ -654,6 +654,36 @@ test('글자색 대비 4.5:1 이상(라이트·다크), 파랑 글자는 --blue-
   }
   assert.ok(!/[\s;{]color:\s*var\(--blue\)/.test(css), '글자색에 --blue(채움용) 사용');
 });
+// 시나리오 시험(2026-10-21, 독자·문서 종류가 다른 6건)에서 lint·qa를 통과했지만 화면·본문에 남은 것
+test('규칙 2: frontmatter summary와 같은 인용문을 H1 아래 또 쓰면 경고, 다른 인용은 통과', () => {
+  const meta = fm.replace('---\n', '---\nsummary: |\n  배치가 평일마다 실패합니다.\n  시각을 되돌립니다.\n');
+  const dup = doc => lint(doc).filter(f => /요약이 두 번/.test(f.msg)).length;
+  assert.equal(dup(meta + '# 제목\n\n> 배치가 평일마다 실패합니다.\n> 시각을 되돌립니다.\n\n## 배경\n'), 1);
+  assert.equal(dup(meta + '# 제목\n\n> "검색이 느리다"는 요청입니다.\n\n## 배경\n'), 0);
+  assert.equal(dup(fm + '# 제목\n\n> 배치가 평일마다 실패합니다.\n\n## 배경\n'), 0);
+});
+test('규칙 14: frontmatter summary도 문체 검사(블록·한 줄), 줄 번호는 요약 줄', () => {
+  const block = fm.replace('---\n', '---\nsummary: |\n  회신해 주시기 바랍니다.\n');
+  const one = fm.replace('---\n', '---\nsummary: 회신해 주시기 바랍니다.\n');
+  for (const [doc, line] of [[block, 3], [one, 2]]) {
+    const hit = lint(doc + '# 제목\n').filter(f => f.rule === 14 && /주시기 바랍니다/.test(f.msg));
+    assert.deepEqual(hit.map(f => f.line), [line]);
+  }
+});
+test('규칙 15: 한 그림에 역할 색과 상태 색을 섞으면 경고(flow·mermaid)', () => {
+  const mixed = body => lint(fm + body, {plain: true}).filter(f => /섞임/.test(f.msg)).length;
+  assert.equal(mixed('```flow\n백업 | 잠금 | ext\n배치 | 실패 | fail\n```'), 1);
+  assert.equal(mixed('```flow\n백업 | 잠금 | ext\n배치 | 처리 | logic\n```'), 0);
+  assert.equal(mixed('```flow\n접수 | 제출 | done\n심사 | 반려 | fail\n```'), 0);
+  assert.equal(mixed('```mermaid\nflowchart LR\nA --> B\nclass A ext\nB:::fail\n```'), 1);
+  assert.equal(mixed('```mermaid\nflowchart LR\nA --> B\nclassDef x fill:#fff\nclass A,B ext\n```'), 0);
+});
+test('[추정]은 [미검증]처럼 태그 칩(본문·카드 제목)', () => {
+  const r = plain('# 제목\n\n원인은 업체 변경으로 보입니다 [추정].\n\n```cards\nH1. 업체 변경 [추정]\n본문입니다.\n```');
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.equal((r.html.match(/<span class="tag tag-preexisting">추정<\/span>/g) || []).length, 2);
+  assert.ok(!r.html.includes('[추정]'));
+});
 // 렌더 후 검사 — 브라우저가 없는 PC에서는 건너뜀
 const qa = path.join(__dirname, 'qa.js');
 const runQa = file => spawnSync(process.execPath, [qa, file], {encoding: 'utf8', timeout: 120000});
