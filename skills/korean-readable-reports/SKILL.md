@@ -38,7 +38,8 @@ easy.
    into a paragraph-long story, never put it in the summary box. No hard
    concept, no analogy.
 4. **Full sentences, not fragments.** "Method A skips the redraw when nothing
-   changed," not "A · time-axis · skip render+send."
+   changed," not "A · time-axis · skip render+send." Source lists (a `## 출처`
+   / `참고` / `Sources` section, or a bullet with a URL) are exempt.
 5. **Explain or drop jargon.** Gloss each technical term on first use; never
    ship your own coined names without a plain rewrite; turn formulas into words.
 6. **Evidence to the back.** No `file:line`, stack traces, or code mid-sentence.
@@ -50,7 +51,9 @@ easy.
    the least-recently-used first"). In Korean, a description cell ends as a
    noun phrase with conditions in parentheses — "한 페이지 결과 수(기본값 10)",
    not "한 페이지에 표시할 결과의 수입니다." (Korean-written API docs do this in
-   63% of tables, translated docs in 11%.)
+   63% of tables, translated docs in 11%.) Lint warns on a body cell over 60
+   characters or holding two sentences, `<details>` tables included: the
+   explanation goes under the table or on the `근거:` line.
 8. **Cut the slop.** Delete throat-clearing intros, hedging caveats, restated
    obviousness. Shorter is kinder. Cut only *unsupported* hedges: a "should",
    a "may", or a `[미검증]` that the source or evidence carries stays — and
@@ -66,7 +69,18 @@ easy.
    when a document carries 12+ long parentheticals or 3+ lines holding two,
    and on every doubled hedge. Hard limits: summary ≤ 3 sentences, ≤ 7 H2
    sections, ≤ 12 lines of prose per section — anything past that goes behind
-   `<details>` or into an appendix.
+   `<details>` or into an appendix. Folding hides text but doesn't shorten
+   the document: lint hints past 6,000 readable characters (tables and
+   `<details>` counted; sources, `근거:` lines, and code not) — cut repeats or
+   split the document. (6,000 is about the 75th percentile of 198 reports on
+   one PC, mostly AI-written — a review point, not a measured ideal.)
+   **Status badges are a fixed set:** `[완료]` `[미검증]` `[미확인]` `[실패]`
+   `[블로커]` `[선재]` `[주의]` `[정보]` `[추천]` `[추정]` — 미검증 = not
+   tested, 미확인 = looked but couldn't confirm, 추정 = inferred from
+   evidence. Anything else prints as plain brackets. Keep the explanation
+   outside: `[추정] 오차가 큽니다.`, not `[추정, 오차 큼]` (lint warns). A
+   document's own labels (`[판단]`, `[README 주장]`) get one hint: use a badge
+   if it is a status, or say the source type in words on the `근거:` line.
 9. **Progressive disclosure.** Hide depth behind expandable sections (collapsible
    `<details>` or nested headings): summary always visible, detail on demand.
 10. **Tone: teammate, not lecture.** Warm and direct, in the reader's polite
@@ -105,14 +119,15 @@ easy.
     ## 배경
     - **요청** — who asked for what, restated exactly (source, date).
     - **현상** — the observable problem, with frequency or impact in numbers.
-    - **원인** — root cause, or the leading hypothesis marked [미검증].
+    - **원인** — root cause, or the leading hypothesis marked [추정].
     - **요구사항** — conditions the result must meet (incl. what must NOT change).
     - **범위 밖** — what this work deliberately does not cover.
     - **판단 기준** — how success will be judged.
     ```
 
     `요청` and `현상` are required; drop the others only when they truly don't
-    apply. Unknown numbers or sources are marked [미검증], never filled in.
+    apply. Unknown numbers or sources are never filled in: [미확인] after a
+    check that came up empty, [미검증] when nothing was checked.
     Every report has a `## 배경` section and it comes first — an overview of
     how the system works belongs in the next section, not in its place.
 14. **Write native Korean, not translated English.** A professional Korean

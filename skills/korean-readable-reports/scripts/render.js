@@ -40,7 +40,7 @@
  *   ```lang       .code-dark 패널 (라벨 = 첫 토큰; shell-session, js title="x" 처럼 하이픈·속성 있어도 됨)
  *   | 표 |        .table-wrap. 헤더가 "상태"인 열 → .status, 첫 열이 짧으면 .key. 셀 안 파이프는 \| 로
  *   - 불릿        들여쓰기(2칸 이상)로 중첩 가능. 폭이 어긋나도 항목이 사라지지 않음
- *   [완료] [미검증] [추정] [실패] [블로커] [선재] [주의] [정보]  → 상태 태그 칩
+ *   [완료] [미검증] [미확인] [실패] [블로커] [선재] [주의] [정보] [추천] [추정] → 상태 태그 칩
  *   근거: … / 출처: …   줄 시작(들여쓰기 허용) → .sources 박스 (규칙 6)
  *   <details>     짝이 맞는 </details>까지 한 덩어리. 안쪽은 md로 다시 렌더(빈 줄·불릿·표 OK)
  *   raw HTML      줄 맨 앞이 허용 태그(details, div, figure, figcaption, img, p, ul, ol, table, pre, blockquote, section, br, hr)면
@@ -50,7 +50,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, FENCE_RE } = require('./lint.js');
+const { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, FENCE_RE, STATUS_TAGS } = require('./lint.js');
 
 const args = process.argv.slice(2);
 if (!args.length || args.includes('-h') || args.includes('--help')) {
@@ -106,13 +106,7 @@ const body = srcLines.slice(fmParsed.start).join('\n');
 
 // ── inline ─────────────────────────────────────────────────────────────────
 const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
-const TAGS = {
-  '완료': 'tag-done', '미검증': 'tag-unverified', '실패': 'tag-fail', '블로커': 'tag-fail',
-  '선재': 'tag-preexisting', '주의': 'tag-caution', '정보': 'tag-info', '추천': 'tag-recommend',
-  // 추정은 근거로 미루어 본 것(미검증 = 확인 안 됨과 다름) — 회색. 사례: 2026-10-21 시나리오 6건 중 2건이 [추정]을 써서 글자 그대로 나왔다
-  '추정': 'tag-preexisting',
-};
-const TAG_RE = new RegExp('\\[(' + Object.keys(TAGS).join('|') + ')\\]', 'g');
+const TAG_RE = new RegExp('\\[(' + Object.keys(STATUS_TAGS).join('|') + ')\\]', 'g');
 // 인라인 코드 자리표시자: NUL 문자를 소스에 원시 바이트로 박지 않고 실행 시 생성(git이 바이너리로 보지 않게)
 const NUL = String.fromCharCode(0);
 const NUL_RE = new RegExp(NUL + '(\\d+)' + NUL, 'g');
@@ -122,7 +116,7 @@ function inline(text) {
   const codes = [];
   let s = text.replace(/`([^`]+)`/g, (_, c) => { codes.push('<code>' + esc(c) + '</code>'); return NUL + (codes.length - 1) + NUL; });
   s = esc(s);
-  s = s.replace(TAG_RE, (_, t) => `<span class="tag ${TAGS[t]}">${t}</span>`);
+  s = s.replace(TAG_RE, (_, t) => `<span class="tag ${STATUS_TAGS[t]}">${t}</span>`);
   s = s.replace(/\*\*(\S(?:[^*\n]*?\S)?)\*\*/g, '<strong>$1</strong>');
   // 기울임: 여는 *는 앞이 글자가 아니고 뒤가 공백이 아닐 때, 닫는 *는 앞이 공백이 아닐 때만 — "3 * 4 * 5", "*.log" 보호
   s = s.replace(/(^|[^\w*])\*(\S(?:[^*\n]*?\S)?)\*(?![\w*])/g, '$1<em>$2</em>');

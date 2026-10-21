@@ -778,6 +778,148 @@ test('규칙 15(힌트): flow 단계에 실패 조건이 있으면 Mermaid 권�
   assert.equal(branch('```flow\n저장 | 주문을 저장합니다 | data\n재시도 | 저장에 실패하면 3번 재시도합니다 | logic\n```').length, 1);
   assert.equal(branch('```flow\n저장 | 주문을 저장합니다 | data\n알림 | 실패 건을 알립니다 | logic\n```').length, 0);
 });
+// ── 표 칸·분량·태그·출처 목록 회귀(2026-10-21) ─────────────────────────
+const cellFindings = body => lint(fm + body).filter(f => /표 칸 \d+자/.test(f.msg));
+const table = cells => '| 항목 | 설명 |\n| --- | --- |\n| ' + cells.join(' | ') + ' |';
+test('표 칸: 60자는 허용, 61자·두 문장은 경고', () => {
+  assert.equal(cellFindings(table(['이름', '가'.repeat(60)])).length, 0);
+  assert.equal(cellFindings(table(['이름', '가'.repeat(61)])).length, 1);
+  assert.match(cellFindings(table(['이름', '확인했다. 다시 본다.']))[0].msg, /문장 2개/);
+  assert.equal(cellFindings(table(['이름', '확인했다.'])).length, 0);
+});
+test('표 칸: details·첫 열도 검사하고 헤더·코드·URL은 제외', () => {
+  assert.equal(cellFindings('<details>\n<summary>상세</summary>\n\n' + table(['가'.repeat(61), '짧음']) + '\n</details>').length, 1);
+  assert.equal(cellFindings('| ' + '가'.repeat(70) + ' | 설명 |\n| --- | --- |\n| 이름 | 짧음 |').length, 0);
+  for (const value of ['`' + '가'.repeat(100) + '`', 'https://example.com/' + 'a'.repeat(100), '[주소](https://example.com/' + 'a'.repeat(100) + ')'])
+    assert.equal(cellFindings(table(['이름', value])).length, 0);
+  assert.equal(cellFindings('```md\n' + table(['이름', '가'.repeat(61)]) + '\n```').length, 0);
+  assert.equal(cellFindings(table(['이름', '가'.repeat(30) + '\\| ' + '나'.repeat(29)])).length, 1);
+});
+test('표 칸: 기본 규칙7 코드 전용 칸은 details에서도 검사', () => {
+  const hits = body => lint(fm + body).filter(f => /표 셀이 코드만/.test(f.msg));
+  assert.equal(hits('<details>\n<summary>상세</summary>\n\n' + table(['항목', '`call()`']) + '\n</details>').length, 1);
+  assert.equal(hits(table(['`key`', '일반 설명'])).length, 0);
+});
+test('출처 목록: 여섯 섹션·하위절 제외, 다음 동급 절부터 재검사', () => {
+  const hits = body => lint(fm + body).filter(f => f.rule === 4);
+  for (const name of ['출처', '참고', '근거', '참고 자료', 'Sources', 'References']) {
+    assert.equal(hits('## ' + name + '\n- 문서 제목\n### 세부\n- 다른 자료').length, 0, name);
+    assert.equal(hits('## ' + name + '\n- 문서 제목\n## 판단\n- 담당자 배정').length, 1, name);
+  }
+  assert.equal(hits('## 참고할 사항\n- 담당자 배정').length, 1);
+});
+test('출처 목록: URL 불릿은 규칙4만 제외, 일반 불릿은 유지', () => {
+  assert.equal(lint(fm + '- [문서](https://example.com) 문서 제목\n- 원문 https://example.com 문서 제목').filter(f => f.rule === 4).length, 0);
+  assert.ok(lint(fm + '## 출처\n- index.js:12 https://example.com 문서 제목').some(f => f.rule === 6));
+  assert.equal(lint(fm + '- 담당자 배정').filter(f => f.rule === 4).length, 1);
+});
+test('새 문체 검사: plain에서는 칸·분량·태그·불릿 경고 없음', () => {
+  const doc = fm + table(['이름', '가'.repeat(61)]) + '\n' + '글'.repeat(20000) + '\n[추정, 오차 큼]\n- 담당자 배정';
+  assert.deepEqual(lint(doc, {plain: true, renderer: true}), []);
+});
+const volumeFindings = body => lint(fm + body).filter(f => /전체 읽을 글/.test(f.msg));
+test('분량: 6000자 이하 허용, 6001자부터 힌트', () => {
+  assert.equal(volumeFindings('가'.repeat(6000)).length, 0);
+  const hits = volumeFindings('가'.repeat(6001));
+  assert.equal(hits.length, 1);
+  assert.match(hits[0].msg, /6001자/);
+  assert.equal(hits[0].hint, true);
+});
+test('분량: 표·details·요약·렌더용 블록을 합산', () => {
+  for (const body of [table(['항목', '글'.repeat(6001)]), '<details>\n<summary>상세</summary>\n' + '글'.repeat(6001) + '\n</details>',
+    '```cards\n제목\n' + '글'.repeat(6001) + '\n```', '```flow\n제목 | ' + '글'.repeat(6001) + ' | logic\n```'])
+    assert.equal(volumeFindings(body).length, 1);
+  assert.equal(lint(fm.replace('---\n', '---\nsummary: ' + '글'.repeat(6001) + '\n')).filter(f => /전체 읽을 글/.test(f.msg)).length, 1);
+});
+test('분량: 카드 안 근거 줄도 제외하고 펜스 안 HTML 주석은 코드로 보존', () => {
+  assert.equal(volumeFindings('```cards\n항목\n근거: ' + '글'.repeat(6001) + '\n```').length, 0);
+  assert.equal(volumeFindings('```js\n<!--\n```\n' + '글'.repeat(6001)).length, 1);
+});
+test('분량: 출처·근거·코드·주소·마크업 제외, 링크 이름은 포함', () => {
+  const long = '글'.repeat(6001);
+  for (const body of ['## 출처\n' + long, '## 참고\n' + long, '근거: ' + long, '```js\n' + long + '\n```', '`' + long + '`', 'https://example.com/' + long,
+    '[이름](https://example.com/' + long + ')', '<!--\n' + long + '\n-->', '<div class="' + long + '">짧음</div>'])
+    assert.equal(volumeFindings(body).length, 0, body.slice(0, 20));
+  assert.equal(volumeFindings('[' + long + '](https://example.com)').length, 1);
+  assert.equal(volumeFindings('## 출처\n' + long + '\n## 판단\n' + long).length, 1);
+  assert.equal(volumeFindings('가'.repeat(5999) + '😀').length, 0);
+});
+// C: 상태 태그는 고정 목록만 쓰고 설명을 괄호 밖에 둔다.
+test('태그 변형: 경고와 최소쌍, 원문 줄 번호', () => {
+  const cases = [
+    ['원인은 아직 모릅니다 [추정, 오차 큼].', '원인은 아직 모릅니다 [추정]. 오차가 큽니다.'],
+    ['응답은 3초입니다 [추정·실측 아님].', '응답은 3초입니다 [추정]. 실측하지 않았습니다.'],
+  ];
+  for (const [bad, good] of cases) {
+    const hits = body => lint(fm + '# 제목\n\n' + body).filter(f => /태그 변형/.test(f.msg));
+    assert.equal(hits(bad).length, 1, bad);
+    assert.equal(hits(bad)[0].hint, false, bad);
+    assert.equal(hits(bad)[0].line, 8, bad);
+    assert.equal(hits(good).length, 0, good);
+    assert.equal(lint(fm + '# 제목\n\n' + bad, {plain: true}).filter(f => /태그 변형/.test(f.msg)).length, 0, bad);
+  }
+});
+test('목록 밖 라벨: 문서당 힌트 한 번, 종류 수와 첫 줄', () => {
+  const hits = body => lint(fm + '# 제목\n\n' + body).filter(f => /라벨/.test(f.msg));
+  const f = hits('복구를 지원합니다 [README 주장].\n\n출시는 [판단] 다음 주입니다.\n\n[판단] 한 번 더.');
+  assert.equal(f.length, 1); assert.ok(f[0].hint); assert.equal(f[0].line, 8); assert.match(f[0].msg, /2종/);
+  assert.equal(hits('README에는 복구를 지원한다고 적혀 있습니다 [미확인].').length, 0);
+  assert.equal(lint(fm + '[판단] 다음 주입니다.', {plain: true}).filter(f => /라벨/.test(f.msg)).length, 0, 'plain');
+});
+test('태그 변형: 링크·각주·체크박스·코드는 대상 아님', () => {
+  const body = [
+    '[추정, 오차 큼](https://example.com)',
+    '[README 주장](https://example.com/readme)',
+    '![그림 설명](https://example.com/image.png)',
+    '각주입니다[^주석].',
+    '[^주석]: 각주 설명입니다.',
+    '- [ ] 확인합니다.',
+    '- [x] 완료했습니다.',
+    '`[추정, 오차 큼]`',
+    '```text\n[추정·실측 아님]\n```',
+  ].join('\n\n');
+  assert.equal(lint(fm + '# 제목\n\n' + body).filter(f => /태그 변형/.test(f.msg)).length, 0);
+});
+test('공용 상태 태그: 모든 이름은 배지, 미확인도 본문·카드에 렌더', () => {
+  const {STATUS_TAGS} = require('./lint.js');
+  assert.deepEqual(Object.keys(STATUS_TAGS), ['완료', '미검증', '미확인', '실패', '블로커', '선재', '주의', '정보', '추천', '추정']);
+  const tags = Object.keys(STATUS_TAGS).map(t => `[${t}]`).join(' ');
+  const r = plain('# 제목\n\n' + tags + '\n\n```cards\n검토 결과 ' + tags + '\n설명입니다.\n```');
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  for (const [tag, cls] of Object.entries(STATUS_TAGS)) {
+    assert.equal(r.html.split(`<span class="tag ${cls}">${tag}</span>`).length - 1, 2, tag);
+    assert.ok(!r.html.match(/<main\b[^>]*>([\s\S]*?)<\/main>/)[1].includes(`[${tag}]`), tag);
+    assert.ok(!lint(fm + `[${tag}]: 설명입니다.`, {plain: true}).some(f => /참조/.test(f.msg)), tag);
+  }
+});
+test('공용 상태 태그: 코드·목록 밖 대괄호는 배지로 바꾸지 않음', () => {
+  const r = plain('# 제목\n\n`[미확인]`\n\n[임의상태]');
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.ok(r.html.includes('<code>[미확인]</code>'));
+  assert.ok(r.html.includes('[임의상태]'));
+  assert.ok(!r.html.includes('<span class="tag tag-unverified">미확인</span>'));
+});
+test('분량: 상태 뱃지로 시작하는 문장은 참조 정의와 구별', () => {
+  assert.equal(volumeFindings('[완료]: ' + '글'.repeat(6001)).length, 1);
+  assert.equal(volumeFindings('[문서]: https://example.com/' + 'a'.repeat(6001)).length, 0);
+});
+test('태그 변형: HTML 주석·속성·주소 제외, 실제 글과 요약·카드는 검사', () => {
+  const hits = body => lint(fm + body).filter(f => /태그 변형/.test(f.msg));
+  for (const body of ['<div title="[추정, 오차 큼]">본문입니다.</div>', '<!--\n[README 주장]\n-->', 'https://example.com/[추정]'])
+    assert.equal(hits(body).length, 0);
+  for (const body of ['<div>[추정, 오차 큼]</div>', '<details>\n<summary>상세</summary>\n[추정·실측 아님]\n</details>', '```cards\n제목 [추정, 오차 큼]\n내용\n```'])
+    assert.equal(hits(body).length, 1);
+  assert.equal(lint(fm.replace('title: 시험 문서', 'summary: "[추정, 오차 큼]"\ntitle: 시험 문서')).filter(f => /태그 변형/.test(f.msg)).length, 1);
+});
+test('표 칸: raw HTML 본문도 검사, th·코드·주석은 제외', () => {
+  assert.equal(cellFindings('<table><tr><td>' + '글'.repeat(61) + '</td></tr></table>').length, 1);
+  assert.equal(cellFindings('<table><thead><tr><td>' + '글'.repeat(61) + '</td></tr></thead></table>').length, 0);
+  assert.equal(cellFindings('<table><tr><td><code>' + '글'.repeat(61) + '</code></td></tr></table>').length, 0);
+  assert.equal(cellFindings('<table><tr><th>' + '글'.repeat(61) + '</th></tr><tr><td>짧음</td></tr></table>').length, 0);
+  assert.equal(cellFindings('<details>\n<summary>상세</summary>\n<table><tr><td>확인했다.\n다시 본다.</td></tr></table>\n</details>').length, 1);
+  assert.equal(cellFindings('```html\n<table><tr><td>' + '글'.repeat(61) + '</td></tr></table>\n```').length, 0);
+  assert.equal(cellFindings('<!-- <table><tr><td>' + '글'.repeat(61) + '</td></tr></table> -->').length, 0);
+});
 // 렌더 후 검사 — 브라우저가 없는 PC에서는 건너뜀
 const qa = path.join(__dirname, 'qa.js');
 const runQa = file => spawnSync(process.execPath, [qa, file], {encoding: 'utf8', timeout: 120000});

@@ -18,10 +18,10 @@
  *       frontmatter·코드·접힌 상세까지 전부 보고, 찾은 문자열은 출력하지 않는다(CI 로그에 다시 새지 않게)
  *   2   요약 박스 문장 3개 초과 / 요약이 두 번(frontmatter summary + 같은 내용의 H1 아래 인용문) / 자기 문서 예고 / (힌트) 표·그림 예고·H2 첫 문장의 제목 반복·수정 과정
  *       (힌트) 정합성 — 요약 박스 수치가 본문에 없음, 본문의 추천안([추천]·"추천합니다")이 요약에 없음, 문장 끝 개수 예고("세 가지입니다")와 바로 아래 목록·flow·cards·표 항목 수가 다름, "뒤에서 다루겠습니다" 미룬 약속
- *   4   불릿이 서술어 없이 끝남(단편 의심) — 한국어: 다/요/음/함/됨/./: 로 안 끝나는 항목
+ *   4   출처 섹션·URL 불릿 외 서술어 없는 불릿 / 비표준 상태 태그 — 한국어: 다/요/음/함/됨/./: 로 안 끝나는 항목
  *   6   본문 문장 안에 file:line (근거: 줄·코드펜스·표 제외)
- *   7   표 셀이 백틱 코드만으로 채워짐
- *   8   H1 두 개 이상 / H2 7개 초과 / 섹션 본문 12줄 초과(코드·표·details 제외) / H2 전에 H3
+ *   7   표 본문 칸 60자 초과·2문장 이상(첫 열·details 포함) / 설명 칸이 코드만 있음
+ *   8   H1 두 개 이상 / H2 7개 초과 / 섹션 본문 12줄 초과(코드·표·details 제외) / H2 전에 H3 / 전체 읽을 글 6000자 초과(힌트)
  *       (힌트) 8자 넘는 괄호 단서 12곳 이상 또는 두 개 든 줄 3줄 이상(조건은 근거 줄로) / 유보 두 겹("~고 봅니다 [추정]")
  *   9   <details> 열림/닫힘 짝이 안 맞음
  *   11  한 줄에 문장 2개 이상 (마침표 뒤 공백 없어도 잡음, 말줄임표는 제외)
@@ -49,6 +49,16 @@ const SOURCE_HEAD = /^##\s+(?:출처|참고(?: 자료)?|근거|sources|reference
 const BOM = String.fromCharCode(0xFEFF);
 // 렌더러(render.js)가 통과시키는 raw HTML 태그 — 나머지는 텍스트로 이스케이프된다. render.js가 이 목록을 그대로 쓴다
 const HTML_TAGS = /^(details|summary|div|span|figure|figcaption|img|p|ul|ol|li|table|thead|tbody|tr|th|td|caption|pre|code|blockquote|section|br|hr|strong|em|b|i|sub|sup|a)$/i;
+
+// 상태 태그의 단일 목록: 렌더·불릿·요약·참조 정의가 함께 쓴다.
+// 미확인=찾아봤지만 확인 못 함, 미검증=검증 미실시. 의미는 구별하고 노랑만 공유(2026-10-21).
+const STATUS_TAGS = {
+  '완료': 'tag-done', '미검증': 'tag-unverified', '미확인': 'tag-unverified',
+  '실패': 'tag-fail', '블로커': 'tag-fail', '선재': 'tag-preexisting',
+  '주의': 'tag-caution', '정보': 'tag-info', '추천': 'tag-recommend', '추정': 'tag-preexisting',
+};
+const STATUS_RE = new RegExp('\\[(' + Object.keys(STATUS_TAGS).join('|') + ')\\]', 'g');
+const SOURCE_HEADING = /^(?:\d+[.)]\s*)?(?:출처|근거|참고(?:\s*(?:문헌|자료|링크))?|references|sources|basis)(?:\s*(?:및|·|\/|&)\s*(?:출처|근거|참고(?:\s*(?:문헌|자료|링크))?|references|sources|basis))*(?:\s*\([^)]*\))?\s*$/i;
 
 // 링크·이미지 주소: http(s)·mailto 또는 스킴 없는 상대 경로만. "//host", 공백·따옴표·꺾쇠가 든 주소는 거부(속성 탈출 방지)
 const safeUrl = u => !/[\u0000- <>"'`]/.test(u) && !u.startsWith('//') &&
@@ -100,6 +110,80 @@ function scanFences(lines, start) {
     else cur.body.push([i, lines[i]]);
   }
   return { at, blocks };
+}
+
+// 읽을 글만 센다: 표·접힌 글·요약·렌더용 블록 포함, 일반 코드·출처 제외.
+const SOURCES_LINE = /^\s*(?:>\s*)?(?:[-*+]\s*)?(?:\*\*)?(근거|출처|basis|sources)(?:\*\*)?\s*[:：]/i;
+function visibleText(text) {
+  return text
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<(pre|code)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, '')
+    .replace(/(`+)([^`]*?)\1/g, '')
+    .replace(/!\[[^\]]*\]\((?:[^()\s]|\([^()\s]*\))*\)/g, '')
+    .replace(/\[([^\]]+)\]\((?:[^()\s]|\([^()\s]*\))*\)/g, '$1')
+    .replace(/<https?:\/\/[^>]+>/gi, '')
+    .replace(/(?:https?:\/\/|mailto:)[^\s<>]+/gi, '')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;|&#160;/gi, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
+    .replace(/^\s{0,3}#{1,6}\s+/, '')
+    .replace(/^\s*(?:>\s*)+(?:[-*+]\s+)?/, '')
+    .replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+)/, '')
+    .replace(/^\[[ xX]\]\s*/, '')
+    .replace(/(?:\*\*|__|~~|(?<!\w)[*_]|[*_](?!\w))/g, '')
+    .replace(/\\([|*_`[\]<>])/g, '$1')
+    .replace(/\s+/g, ' ').trim();
+}
+const isSep = l => /^\s*\|?(\s*:?-+:?\s*\|)+\s*:?-*:?\s*\|?\s*$/.test(l) && /-/.test(l);
+function splitCells(l) {
+  return l.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '').split(/(?<!\\)\|/).map(visibleText);
+}
+const READABLE_BLOCK = /^(cards|browser|flow|stats)$/;
+// 줄 번호는 보존한다. 코드 안의 <!-- 가 본문까지 주석으로 삼키지 않게 코드를 먼저 가린다.
+function readingLines(lines, at) {
+  return lines.map((l, i) => at[i] && (!READABLE_BLOCK.test(at[i].kind) || at[i].open === i || at[i].close === i) ? '' : l)
+    .join('\n').replace(/<(pre|code)\b[^>]*>[\s\S]*?<\/\1\s*>/gi, m => '\n'.repeat((m.match(/\n/g) || []).length))
+    .replace(/<!--[\s\S]*?(?:-->|$)|<\/?[a-zA-Z](?:"[^"]*"|'[^']*'|[^'">])*>/g,
+      m => '\n'.repeat((m.match(/\n/g) || []).length)).split('\n');
+}
+function measureReading(src) {
+  const lines = src.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').split('\n');
+  const {meta, start, unclosed} = parseFrontmatter(lines);
+  const {at} = scanFences(lines, start), readable = readingLines(lines, at);
+  const chunks = [], cells = [], excluded = {sourceLines: 0, codeLines: 0, evidenceLines: 0};
+  let sourceDepth = 0, table = false;
+  if (meta.summary) chunks.push(visibleText(meta.summary));
+  for (let i = start; i < lines.length; i++) {
+    const l = readable[i], fb = at[i];
+    if (fb && (fb.open === i || fb.close === i)) { table = false; continue; }
+    if (fb && !READABLE_BLOCK.test(fb.kind)) { excluded.codeLines++; continue; }
+    if (!fb) {
+      const h = l.match(/^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
+      if (h) {
+        if (sourceDepth && h[1].length <= sourceDepth) sourceDepth = 0;
+        if (SOURCE_HEADING.test(visibleText(h[2]))) sourceDepth = h[1].length;
+      }
+    }
+    if (sourceDepth) { excluded.sourceLines++; table = false; continue; }
+    if (SOURCES_LINE.test(l)) { excluded.evidenceLines++; table = false; continue; }
+    if (fb && /^(flow|stats)$/.test(fb.kind)) {
+      chunks.push(...l.split(/(?<!\\)\|/).slice(0, fb.kind === 'flow' ? 2 : 3).map(visibleText));
+      continue;
+    }
+    const ref = l.match(/^\s*\[([^\]]+)\]:\s*\S/);
+    if (ref && !Object.hasOwn(STATUS_TAGS, ref[1])) continue;
+    if (/^\s*\|/.test(l)) {
+      if (isSep(l)) { table = true; continue; }
+      const cs = splitCells(l), header = !table && isSep(readable[i + 1] || '');
+      chunks.push(...cs);
+      if (!header && table) cs.forEach((text, col) => cells.push({line: i + 1, col, text, chars: [...text].length, sentences: countSentences(text)}));
+      continue;
+    }
+    table = false;
+    if (/^\s*(?:[-*_]\s*){3,}$/.test(l)) continue;
+    chunks.push(visibleText(l));
+  }
+  return {audience: meta.audience || 'missing', chars: chunks.reduce((n, t) => n + [...t].length, 0),
+    charsNoSpace: chunks.reduce((n, t) => n + [...t.replace(/\s/g, '')].length, 0), cells, excluded, unclosedFrontmatter: unclosed};
 }
 
 function lint(src, opts = {}) {
@@ -161,11 +245,29 @@ function lint(src, opts = {}) {
     }
   }
 
+  const checkCell = (i, raw, column = 0) => {
+    const c = raw.trim(), text = visibleText(c), n = [...text].length, sentences = countSentences(text);
+    if (/^`[^`]+`$/.test(c) && column > 0) warn(i, 7, `표 셀이 코드만 있음 "${c}" — 구절로 (예: "가장 오래 안 쓴 것부터 지운다")`);
+    if (n > 60 || sentences >= 2) warn(i, 7, `표 칸 ${n}자/문장 ${sentences}개 — 칸은 구절로, 설명은 표 아래나 근거 줄로`);
+  };
+  // raw HTML도 허용하므로 td는 같은 기준으로 본다(th는 머리글). 코드·주석의 가짜 td는 제외.
+  if (!plain) {
+    const html = lines.map((l, i) => inCode(i) ? '' : l).join('\n')
+      .replace(/<thead\b[^>]*>[\s\S]*?<\/thead\s*>/gi, m => '\n'.repeat((m.match(/\n/g) || []).length))
+      .replace(/<!--[\s\S]*?(?:-->|$)|(`+)([^`]*?)\1/g, m => '\n'.repeat((m.match(/\n/g) || []).length));
+    let cursor = 0, line = 0;
+    for (const m of html.matchAll(/<td\b(?:"[^"]*"|'[^']*'|[^'">])*?>([\s\S]*?)<\/td\s*>/gi)) {
+      line += (html.slice(cursor, m.index).match(/\n/g) || []).length;
+      checkCell(line, m[1]);
+      cursor = m.index;
+    }
+  }
+
   // ── 구조 검사(두 모드 공통): 표·링크·태그·details 짝 — 접힌 상세 안도 본다 ──
   {
     let tableHead = -1, tableStartLine = -1, depth = 0, lastOpen = -1, h1 = 0;
+    // 첫 열도 검사: 2026-10-21 실측 첫 열 27110칸 중 135칸이 긴 설명·복수 문장.
     const cellCount = l => l.trim().replace(/\\\|/g, ' ').replace(/^\||\|$/g, '').split('|').length;
-    const isSep = l => /^\s*\|?(\s*:?-+:?\s*\|)+\s*:?-*:?\s*\|?\s*$/.test(l) && /-/.test(l);
     for (let i = start; i < lines.length; i++) {
       const l = lines[i];
       if (inCode(i)) { tableHead = -1; continue; }
@@ -177,7 +279,7 @@ function lint(src, opts = {}) {
         if (!HTML_TAGS.test(tm[1])) { warn(i, '구조', `<${tm[1]}> 는 태그가 아니라 글자로 표시됨 — 의도한 태그면 Markdown이나 허용 태그(details·figure·img 등)로`, true); break; }
       }
       // 참조 정의 "[이름]: 주소" — 상태 태그로 시작하는 줄("[완료]: …")은 제외
-      if (/^\s*\[\^|\]\[[^\]]*\]|^\s*\[(?!(완료|미검증|실패|블로커|선재|주의|정보|추천|추정)])[^\]]+\]:\s*\S/.test(plainText)) warn(i, '구조', '각주·참조형 링크는 지원 안 함 — 인라인 링크 [글](주소)로');
+      if (/^\s*\[\^|\]\[[^\]]*\]/.test(plainText) || (/^\s*\[([^\]]+)\]:\s*\S/.test(plainText) && !Object.hasOwn(STATUS_TAGS, plainText.match(/^\s*\[([^\]]+)\]/)[1]))) warn(i, '구조', '각주·참조형 링크는 지원 안 함 — 인라인 링크 [글](주소)로');
       const opens = (plainText.match(/<details(\s|>)/gi) || []).length, closes = (plainText.match(/<\/details\s*>/gi) || []).length;
       if (opens) lastOpen = i;
       depth += opens;
@@ -193,6 +295,10 @@ function lint(src, opts = {}) {
           const n = cellCount(l);
           const where = i === tableStartLine + 1 ? '표 구분 행' : '표';
           if (n !== tableHead) warn(i, '구조', `${where} 칸 ${n}개, 헤더 ${tableHead}개 — 칸 수 맞추기 (셀 안 파이프는 \\| 로)`);
+          if (!plain && i > tableStartLine + 1 && !isSep(l)) {
+            const rawCells = l.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '').split(/(?<!\\)\|/);
+            rawCells.forEach((raw, ci) => checkCell(i, raw, ci));
+          }
         }
         continue;
       }
@@ -254,6 +360,34 @@ function lint(src, opts = {}) {
   }
 
   // ─────────────── 아래는 이 스킬의 문체 규칙(기본 모드만) ───────────────
+
+  // 2026-10-21 corpus.txt: 677경로/내용 고유198종. 고유 중앙4251·P75 6377·P90 10041자.
+  // 대부분 AI 초안이라 좋은 글의 분포가 아니다. 6000자는 P75 부근의 검토 힌트, 품질 판정 아님.
+  // 계기가 된 보고서(8451자)를 잡는다. leadership 1종·external 0종이라 독자별 차등 근거 부족.
+  const reading = measureReading(src);
+  if (reading.chars > 6000) warn(start, 8, `전체 읽을 글 ${reading.chars}자 — 6000자 초과, 중복을 줄이거나 별도 문서로 나누기 (표·접힌 글 포함)`, true);
+
+  // 짧은 대괄호 휴리스틱: 한글 시작 또는 README처럼 영문 이름+한글 설명. 뜻은 자동 교정하지 않는다.
+  const checkTags = (line, text) => {
+    const prose = text.replace(/(`+)([^`]*?)\1/g, '')
+      .replace(/!?\[[^\]]*\](?:\((?:[^()\s]|\([^()\s]*\))*\)|\[[^\]]*\])/g, '')
+      .replace(/(?:https?:\/\/|mailto:)[^\s<>]+/gi, '');
+    if (/^\s*\[\^?[^\]]+\]:/.test(prose) && !Object.hasOwn(STATUS_TAGS, (prose.match(/^\s*\[([^\]]+)\]/) || [])[1])) return;
+    for (const m of prose.matchAll(/(?<!\\)\[([^\]\n]{1,30})\]/g)) {
+      const tag = m[1];
+      if (Object.hasOwn(STATUS_TAGS, tag) || !/^(?:[가-힣]|[A-Za-z][\w.-]*\s+[가-힣])/.test(tag)) continue;
+      const base = Object.keys(STATUS_TAGS).find(t => tag.startsWith(t));
+      if (base) warn(line, 4, `태그 변형 — [${base}] 뱃지 하나만 쓰고 설명은 뱃지 밖에`);
+      else if (!labels.has(tag)) labels.set(tag, line);
+    }
+  };
+  // 상태 태그로 시작하지 않는 라벨([판단]·[게임제안]·[README 주장])은 문서마다 쓰는 자체 분류라 힌트 한 번.
+  // 사례: 2026-10-21 이 PC 보고서 고유 198종에서 상태 접두 변형 2곳, 자체 라벨 691곳 — 줄마다 경고하면 묻힌다
+  const labels = new Map();
+  const tagLines = readingLines(lines, fenceAt);
+  for (let i = start; i < lines.length; i++) checkTags(i, tagLines[i]);
+  if (meta.summary) checkTags(Math.max(0, lines.findIndex(l => /^summary:/.test(l))), meta.summary);
+  if (labels.size) warn([...labels.values()][0], 4, `배지 목록 밖 대괄호 라벨 ${labels.size}종(${[...labels.keys()].slice(0, 4).map(t => `[${t}]`).join('·')}) — 배지로 그려지지 않고 글자 그대로 나옴. 상태면 ${Object.keys(STATUS_TAGS).map(t => `[${t}]`).join('')} 중 하나로, 출처 종류면 근거 줄에 글로`, true);
 
   // 규칙 2·14 공용: 여러 줄 인용도 가리되 줄 번호는 보존한다.
   // 곧은따옴표는 줄바꿈 하나까지(문단을 줄마다 끊어 쓰면 인용이 두 줄에 걸친다), 홑따옴표는 아포스트로피와 겹쳐 한 줄 안에서만.
@@ -410,21 +544,22 @@ function lint(src, opts = {}) {
   }
 
   // 본문 스캔 (코드·표·접힌 상세는 건너뜀 — 표·details 구조는 위 공통 검사가 본다)
-  let inHtml = false, h1Count = 0;
+  let inHtml = false, h1Count = 0, sourceDepth = 0;
   let h2Count = 0, secLines = 0, secStart = -1, secName = '', h3BeforeH2 = false;
   const flushSec = () => { if (secStart >= 0 && secLines > 12) warn(secStart, 8, `"${secName}" 본문 ${secLines}줄 — 12줄 넘으면 <details>로 접기`); };
 
   for (let i = start; i < lines.length; i++) {
     const l = lines[i];
     if (inCode(i)) continue;
+    const heading = l.match(/^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
+    if (heading) {
+      if (sourceDepth && heading[1].length <= sourceDepth) sourceDepth = 0;
+      if (SOURCE_HEADING.test(visibleText(heading[2]))) sourceDepth = heading[1].length;
+    }
     if (/^<details/i.test(l)) inHtml = true;
     if (inHtml) { if (/<\/details>/i.test(l)) inHtml = false; continue; }
 
-    if (/^\s*\|/.test(l)) {
-      const cells = l.trim().replace(/^\||\|$/g, '').split('|').map(c => c.trim());
-      cells.forEach((c, ci) => { if (/^`[^`]+`$/.test(c) && ci > 0) warn(i, 7, `표 셀이 코드만 있음 "${c}" — 구절로 (예: "가장 오래 안 쓴 것부터 지운다")`); });
-      continue;
-    }
+    if (/^\s*\|/.test(l)) continue;
     if (!l.trim()) continue;
 
     if (/^#\s/.test(l) && ++h1Count === 2) warn(i, 8, 'H1(#)이 두 번 — 문서 제목은 하나, 나머지는 ##로 (렌더러가 섹션으로 강등함)');
@@ -442,9 +577,9 @@ function lint(src, opts = {}) {
 
     // 규칙 4: 불릿 단편
     const li = l.match(/^\s*([-*]|\d+\.)\s+(.*)$/);
-    if (li) {
+    if (li && !sourceDepth && !/(?:https?:\/\/|mailto:)/i.test(l)) {
       const raw = li[2].trim();
-      const item = raw.replace(/`[^`]*`/g, '').replace(/\*\*/g, '').replace(/\[[^\]]+\]\([^)]*\)/g, 'x').replace(/\[(완료|미검증|실패|블로커|선재|주의|정보|추천|추정)]/g, '').trim();
+      const item = raw.replace(/`[^`]*`/g, '').replace(/\*\*/g, '').replace(/\[[^\]]+\]\([^)]*\)/g, 'x').replace(STATUS_RE, '').trim();
       if (/^`[^`]+`$/.test(raw)) warn(i, 4, `불릿이 코드만 있음 "${raw}" — 무엇을 하는지 문장으로`);
       else if (item.length > 3 && !ENDERS.test(item)) warn(i, 4, `불릿이 서술어 없이 끝남 — 온전한 문장으로: "${item.slice(0, 40)}"`);
     }
@@ -726,7 +861,7 @@ function report(file, F) {
   return errs.length;
 }
 
-module.exports = { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, FENCE_RE };
+module.exports = { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, FENCE_RE, STATUS_TAGS, measureReading };
 
 if (require.main === module) {
   const args = process.argv.slice(2);
