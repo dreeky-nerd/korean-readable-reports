@@ -430,6 +430,10 @@ test('괄호 단서: 근거 줄·접힌 칸·출처 절은 조건을 두는 곳�
     assert.equal(hint(doc).length, 0, doc.slice(0, 30));
   assert.equal(hint('본문입니다' + p).length, 1);
 });
+test('닫는 괄호 없는 유보 반복·긴 경로 토큰도 선형 시간', () => {
+  assertLinearTime('유보 두 겹', (n, reps) => cpuTime(repeat(reps, () => lint(fm + '고 봅니다 [추정'.repeat(n / 8)))));
+  assertLinearTime('file:line', (n, reps) => cpuTime(repeat(reps, () => lint(fm + 'a/'.repeat(n / 2)))));
+});
 test('근거 줄이 길면 힌트 — 조건 모음이 새 문단이 되지 않게', () => {
   const hint = doc => lint(fm + doc).filter(x => /근거 줄/.test(x.msg));
   const long = '근거: ' + '이용자 약 3천만 명은 홍보 문구이며 측정 시점은 공개되지 않았습니다. '.repeat(6);

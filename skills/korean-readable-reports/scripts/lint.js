@@ -43,7 +43,7 @@
 const fs = require('fs');
 
 const ENDERS = /(다|요|음|함|됨|임|것|\.|:|：)\s*[.!?]?\s*$/;   // 문장/서술 끝으로 볼 패턴
-const FILE_LINE = /\b[\w./-]+\.(js|ts|tsx|jsx|py|java|kt|go|rs|rb|php|cs|c|cpp|h|xml|yml|yaml|json|sql|sh|md)\s*:\s*\d+/;
+const FILE_LINE = /(?<![\w./-])[\w./-]+\.(js|ts|tsx|jsx|py|java|kt|go|rs|rb|php|cs|c|cpp|h|xml|yml|yaml|json|sql|sh|md)\s*:\s*\d+/;
 const SOURCES_RE = /^\s*(근거|출처|basis|sources)\s*[:：]/i;
 const BOM = String.fromCharCode(0xFEFF);
 // 렌더러(render.js)가 통과시키는 raw HTML 태그 — 나머지는 텍스트로 이스케이프된다. render.js가 이 목록을 그대로 쓴다
@@ -888,7 +888,7 @@ function lint(src, opts = {}) {
     // 말로 끝나는 따옴표는 발화·문구 인용("이미 확인했어요", "확인 안 됨", "무엇이 무너졌나"). 명사("이미지", "데이터")는 강조로 본다
     const SPOKEN = /(?:습니다|니다|어요|아요|여요|해요|예요|에요|이요|네요|군요|지요|나요|가요|죠|까|다|됨|함|음|는가|은가|인가|[었았였했졌갔왔봤됐]나)[.?!…]*$/;
     // "~할 수 있습니다"는 능력인지 가능성인지 글자로 못 가려서 넣지 않는다
-    const HEDGE2 = /(?:고 봅니다|(?:으)?로 보입니다|것 같습니다|추정됩니다|추정합니다|가능성이 (?:있|높)습니다|듯합니다)\.?\s*\[(?:추정|미확인|미검증)[^\]]*\]/;
+    const HEDGE2 = /(?:고 봅니다|(?:으)?로 보입니다|것 같습니다|추정됩니다|추정합니다|가능성이 (?:있|높)습니다|듯합니다)\.?\s*\[(?:추정|미확인|미검증)[^\]\n]{0,30}\]/;
     const CONN = /(?:^|[.!?]\s+)(?:[-*]\s+)?(다만|그러나|하지만|그래서|따라서|또한|한편|그런데|게다가|더불어)(?=[\s,])/g;
     const scare = [], parenLines = [], longBasis = [];
     let parenN = 0, hedge = null, hedgeN = 0, sec = { conn: [], line: start }, sourceDepth = 0, details = 0, comment = false;
@@ -899,13 +899,14 @@ function lint(src, opts = {}) {
     const sumAt = lines.slice(0, start).findIndex(l => /^summary:/.test(l)), order = [];
     if (sumAt > 0) { order.push(sumAt); for (let j = sumAt + 1; j < start - 1 && /^\s+\S/.test(lines[j]); j++) order.push(j); }
     for (let i = start; i < lines.length; i++) order.push(i);
-    const noCode = t => t.replace(/<code\b[^>]*>.*?<\/code\s*>/gi, '').replace(/`[^`]*`/g, '');
+    // 닫는 짝이 없으면 정규식을 돌리지 않는다 — 닫힘 없는 <code>가 이어진 줄에서 시작점마다 끝까지 찾는 것을 막는다
+    const noCode = t => (/<\/code/i.test(t) ? t.replace(/<code\b[^>]*>.*?<\/code\s*>/gi, '') : t).replace(/`[^`]*`/g, '');
     for (const i of order) {
       const fb = fenceAt[i];
       if (fb && (i === fb.open || i === fb.close || !/^(flow|stats|cards)$/.test(fb.kind))) continue;
       let raw = i < start ? lines[i].replace(/^summary:\s*([|>][-+]?\s*$)?/, '') : lines[i];
       // HTML 주석은 화면에 없다 — 한 줄 안 주석은 지우고, 여러 줄 주석은 건너뛴다
-      raw = raw.replace(/<!--.*?-->/g, '');
+      if (raw.includes('-->')) raw = raw.replace(/<!--.*?-->/g, '');
       if (comment) { if (raw.includes('-->')) comment = false; continue; }
       if (raw.includes('<!--')) { comment = true; raw = raw.slice(0, raw.indexOf('<!--')); }
       const h = raw.match(/^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*$/);
