@@ -25,7 +25,9 @@ easy.
 2. **Point first (BLUF).** Each section opens with the takeaway in one plain
    sentence — understandable from that line alone. The document-level summary
    box is at most three short sentences: what it does / how it's used / what
-   to decide. One modifier per noun — no stacked qualifiers ("with evidence
+   to decide. If the document recommends an option, the box names it ("B안을
+   추천합니다") — a reader who stops at the box must still know what to pick.
+   One modifier per noun — no stacked qualifiers ("with evidence
    and reference links and…"), no analogy, no restating the title.
    Open with the finding itself; do not repeat the heading or announce
    "This section covers…".
@@ -190,6 +192,12 @@ easy.
     sentence says it), and a procedure the reader performs ("넣습니다 →
     재시작합니다") — that stays a numbered list. Lint prints a hint when a
     section lists 3+ processing steps with subjects but has no diagram.
+
+    A failure or retry path is a branch. "저장에 실패하면 재시도하고, 그래도
+    실패하면 알림" is a Mermaid `flowchart`: the normal path ends at its last
+    success step, and the failure path leaves from the step that fails.
+    Appending the failure steps to a ` ```flow ` makes every item look like
+    it goes through them (lint hints when a flow step says "실패하면").
 
 ## Workflow
 

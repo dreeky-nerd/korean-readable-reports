@@ -684,6 +684,22 @@ test('[추정]은 [미검증]처럼 태그 칩(본문·카드 제목)', () => {
   assert.equal((r.html.match(/<span class="tag tag-preexisting">추정<\/span>/g) || []).length, 2);
   assert.ok(!r.html.includes('[추정]'));
 });
+test('규칙 2(힌트): 본문의 추천안이 요약 상자에 없음', () => {
+  const rec = (summary, body) => lint(fm.replace('---\n', `---\nsummary: ${summary}\n`) + '# 제목\n\n' + body)
+    .filter(f => /추천안이 있는데/.test(f.msg));
+  assert.equal(rec('세 방안을 비교했습니다.', '팀은 B안을 추천합니다.').length, 1);
+  assert.ok(rec('세 방안을 비교했습니다.', '팀은 B안을 추천합니다.')[0].hint);
+  assert.equal(rec('세 방안을 비교했습니다.', '- B안 [추천]').length, 1);
+  assert.equal(rec('B안을 추천합니다.', '팀은 B안을 추천합니다.').length, 0);
+  // cards의 [추천]은 보지 않는다(요약이 "추천" 없이 고른 안을 쓰는 경우가 흔함), 코드 안도 제외
+  assert.equal(rec('1위는 B안입니다.', '```cards\nA안\n본문입니다.\n\nB안 [추천]\n본문입니다.\n```').length, 0);
+  assert.equal(rec('세 방안을 비교했습니다.', '```text\n추천합니다\n```').length, 0);
+});
+test('규칙 15(힌트): flow 단계에 실패 조건이 있으면 Mermaid 권유', () => {
+  const branch = body => lint(fm + body).filter(f => /실패 조건/.test(f.msg));
+  assert.equal(branch('```flow\n저장 | 주문을 저장합니다 | data\n재시도 | 저장에 실패하면 3번 재시도합니다 | logic\n```').length, 1);
+  assert.equal(branch('```flow\n저장 | 주문을 저장합니다 | data\n알림 | 실패 건을 알립니다 | logic\n```').length, 0);
+});
 // 렌더 후 검사 — 브라우저가 없는 PC에서는 건너뜀
 const qa = path.join(__dirname, 'qa.js');
 const runQa = file => spawnSync(process.execPath, [qa, file], {encoding: 'utf8', timeout: 120000});
