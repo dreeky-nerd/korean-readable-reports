@@ -218,6 +218,12 @@ easy.
    proposals) render with `--plain` — structure/safety lint only, quotes stay
    quotes, soft line breaks. Flags are listed at the top of `scripts/render.js`;
    `node <skill-dir>/scripts/test.js` is the regression suite.
+   Then run `node <skill-dir>/scripts/qa.js <file>.html`: it opens the HTML in
+   headless Chrome/Edge at 1280, 768 and 390px and reports text spilling out of
+   (or clipped inside) its box, `#links` with no target, and images that failed
+   to load. Exit 1 → fix the md (usually a long unbroken name in a card) and
+   re-render; exit 2 means no browser was found — say so instead of claiming the
+   check passed.
 5. If the draft still reads like a default agent report, read
    `references/examples.md` (twelve before/after pairs, one per failure mode,
    plus how the same finding shifts per audience) and rewrite.
@@ -254,7 +260,7 @@ easy.
 - [ ] Depth is behind progressive disclosure.
 - [ ] Tone reads like explaining to a teammate.
 - [ ] Every sentence sits on its own line.
-- [ ] Lint run and clean; HTML rendered with `scripts/render.js` and delivered.
+- [ ] Lint run and clean; HTML rendered with `scripts/render.js`, `scripts/qa.js` exits 0 (or no browser — said so), and delivered.
 
 ## When NOT to apply
 

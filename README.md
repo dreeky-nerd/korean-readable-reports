@@ -77,6 +77,7 @@ cp -r korean-readable-reports/skills/korean-readable-reports <project>/.claude/s
 | `skills/korean-readable-reports/SKILL.md` | 에이전트가 따르는 규칙·작업 순서·체크리스트 |
 | `…/scripts/render.js` | md를 HTML 한 장으로 렌더(라이트·다크, 목차, Mermaid, 전용 블록), lint도 함께 실행 |
 | `…/scripts/lint.js` | 기계로 검사할 수 있는 규칙 검사 |
+| `…/scripts/qa.js` | 만든 HTML을 헤드리스 Chrome·Edge로 1280·768·390px에서 열어 넘침·깨진 #링크·안 열린 그림 검사(설치된 브라우저만 씀) |
 | `…/scripts/test.js` | 렌더러·lint 회귀 시험 |
 | `…/references/template.html` | 렌더러가 채우는 페이지 디자인 |
 | `…/references/examples.md` | 실패 유형별 고치기 전후 예시 12쌍, 독자별로 같은 내용을 다르게 쓰는 예 |
@@ -103,6 +104,7 @@ node scripts/lint.js report.md            # 규칙 검사 + 필수 frontmatter +
 node scripts/render.js report.md          # md → report.html, lint도 실행
 node scripts/render.js report.md --strict # 경고가 있으면 HTML을 만들지 않고 exit 1 (CI·pre-commit). 힌트는 실패로 안 침
 node scripts/render.js plan.md --plain    # 문체 규칙 없이 렌더만 — 기획서·제안서처럼 형식이 다른 문서용
+node scripts/qa.js report.html            # 렌더 후 검사 — 화면 폭별 넘침. exit 1 = 문제, 2 = 브라우저 없음
 node scripts/test.js                      # 회귀 시험(임시 폴더에만 씀)
 ```
 

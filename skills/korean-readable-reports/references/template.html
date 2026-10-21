@@ -23,7 +23,7 @@
 <style>
   /* ── 팔레트(design-guide.md §1, 토스 계열 — 사용자가 고른 보고서 색감) ─────── */
   :root {
-    --blue: #3182f6;   --blue-1: #e8f3ff;   --blue-7: #1b64da;
+    --blue: #3182f6;   --blue-1: #e8f3ff;   --blue-7: #1957c2;
     --green: #00a971;  --green-1: #e6f7ef;  --green-7: #007a52;
     --yellow: #fdbf11; --yellow-1: #fff2cf; --yellow-7: #843215;
     --red: #e0333f;    --red-1: #fdebec;    --red-7: #b4232e;
@@ -72,8 +72,12 @@
     line-height: 1.7;
     -webkit-font-smoothing: antialiased;
     letter-spacing: -0.005em;
+    /* 한국어는 어절 단위로 줄바꿈 — 넘칠 때만 낱말 안에서 끊는다(anywhere는 표 칸 최소 폭을 줄여 글자 단위로 쪼개므로 안 씀) */
+    word-break: keep-all; overflow-wrap: break-word;
   }
-  a { color: var(--blue); text-decoration: none; }
+  /* Pretendard에는 기울임꼴이 없어 브라우저가 글자를 억지로 기울인다 — 기울임 대신 약간 굵게 */
+  em { font-style: normal; font-weight: 600; }
+  a { color: var(--blue-7); text-decoration: none; }
   a:hover { text-decoration: underline; }
   code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-1); padding: 1px 6px; border-radius: 6px; }
   p { margin: 0.6em 0 1em; }
@@ -89,7 +93,7 @@
   }
   .topbar-inner { max-width: 1200px; margin: 0 auto; padding: 10px 24px; display: flex; align-items: center; gap: 14px; }
   .topbar-title { font-weight: 700; font-size: 0.95em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
-  .topbar-kicker { font-family: var(--mono); font-size: 0.72em; font-weight: 700; letter-spacing: .06em; color: var(--blue); padding: 3px 8px; border-radius: 6px; background: var(--blue-1); }
+  .topbar-kicker { font-family: var(--mono); font-size: 0.72em; font-weight: 700; letter-spacing: .06em; color: var(--blue-7); padding: 3px 8px; border-radius: 6px; background: var(--blue-1); }
   .progress { position: absolute; left: 0; bottom: -1px; height: 2px; width: 0; background: linear-gradient(90deg, var(--blue), var(--green)); transition: width .1s linear; }
 
   /* ── 히어로(제목·메타·BLUF) ─────────────────────────────────────────────────── */
@@ -97,7 +101,7 @@
   /* 히어로는 본문(.layout)과 같은 1200px 틀 — 제목과 본문의 왼쪽 시작점을 맞춘다. 글 폭만 본문과 같은 --content-w로 */
   .hero-inner { position: relative; max-width: 1200px; margin: 0 auto; padding: 56px 24px 40px; }
   .hero-inner > * { max-width: var(--content-w); }
-  .eyebrow { font-family: var(--mono); font-size: 0.78em; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--blue); margin-bottom: 10px; }
+  .eyebrow { font-family: var(--mono); font-size: 0.78em; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--blue-7); margin-bottom: 10px; }
   h1 { font-size: clamp(1.7em, 3.6vw, 2.4em); line-height: 1.25; letter-spacing: -0.02em; margin: 0 0 16px; font-weight: 800; }
   .meta-row { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 22px; }
   .pill {
@@ -131,13 +135,13 @@
   .toc ol { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--line); }
   .toc li a { display: block; padding: 5px 12px; color: var(--muted); border-left: 2px solid transparent; margin-left: -2px; }
   .toc li a:hover { color: var(--ink); text-decoration: none; }
-  .toc li a.active { color: var(--blue); border-left-color: var(--blue); font-weight: 700; }
+  .toc li a.active { color: var(--blue-7); border-left-color: var(--blue); font-weight: 700; }
 
   /* ── 섹션·제목 ─────────────────────────────────────────────────────────────── */
   section.sec { margin: 0 0 40px; }
   /* 절 번호는 제목 위 작은 글씨(eyebrow) */
   h2 { font-size: 1.35em; letter-spacing: -0.015em; margin: 0 0 14px; padding-top: 8px; display: flex; flex-direction: column; align-items: flex-start; gap: 4px; font-weight: 800; }
-  h2::before { content: counter(sec, decimal-leading-zero); counter-increment: sec; font-family: var(--mono); font-size: 0.6em; font-weight: 700; letter-spacing: .04em; color: var(--blue); }
+  h2::before { content: counter(sec, decimal-leading-zero); counter-increment: sec; font-family: var(--mono); font-size: 0.6em; font-weight: 700; letter-spacing: .04em; color: var(--blue-7); }
   h3 { font-size: 1.08em; margin: 1.2em 0 0.4em; font-weight: 700; }
   .note { color: var(--muted); font-size: 0.9em; }
   .sources { margin-top: 14px; padding: 10px 14px; border-radius: var(--radius-sm); background: var(--surface-2); border: 1px dashed var(--line); font-size: 0.86em; color: var(--muted); }
@@ -275,7 +279,7 @@
   .card-head { display: flex; flex-direction: column; align-items: flex-start; gap: 6px; padding: 13px 16px 12px; background: var(--surface-2); border-bottom: 1px solid var(--line); }
   .card-tags { display: flex; flex-wrap: wrap; gap: 4px; }
   .card-tags .tag { font-size: 0.74em; }
-  .card-no { font-family: var(--mono); font-size: 0.78em; font-weight: 700; color: var(--blue); letter-spacing: .04em; }
+  .card-no { font-family: var(--mono); font-size: 0.78em; font-weight: 700; color: var(--blue-7); letter-spacing: .04em; }
   .card-title { margin: 0; font-size: 1em; font-weight: 800; line-height: 1.45; word-break: keep-all; overflow-wrap: break-word; }
   .card-body { flex: 1; display: flex; flex-direction: column; padding: 13px 16px 14px; font-size: 0.95em; line-height: 1.7; word-break: keep-all; overflow-wrap: break-word; }
   .card-body > * { margin: 0 0 0.55em; }
@@ -346,9 +350,12 @@
       --bg: #fff; --surface: #fff; --surface-2: #e9edf2; --line: #c6ccd6;
       --ink: #191f28; --muted: #4b5563; --gray-1: #e9edf2; --gray: #c6ccd6; --gray-6: #6b7280; --gray-7: #4b5563;
       --blue-1: #e8f3ff; --green-1: #e6f7ef; --yellow-1: #fff2cf; --red-1: #fdebec; --orange-1: #fff4e5;
-      --blue-7: #1b64da; --green-7: #007a52; --yellow-7: #843215; --red-7: #b4232e; --orange-7: #8a4f08;
+      --blue-7: #1957c2; --green-7: #007a52; --yellow-7: #843215; --red-7: #b4232e; --orange-7: #8a4f08;
       --role-ext: #f8d9ea; --role-entry: #e4e0f7; --role-logic: #cfe8f3; --role-data: #cfeeea; --flow-shadow: #191f28;
+      --code-bg: #f3f5f8; --code-text: #191f28; --code-muted: #4b5563;
     }
+    /* 브라우저 기본값(배경 그래픽 끔)이면 색 바탕이 빠져 흰 글자(요약 라벨·추천 태그)가 흰 종이에 사라진다 */
+    :root { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
     body { background: #fff; }
     .block, .callout, .table-wrap { box-shadow: none; }
   }

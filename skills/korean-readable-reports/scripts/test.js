@@ -638,5 +638,42 @@ test('문서별 테마 기본값', () => {
   const dark = plain('# 제목\n본문', ['--strict'], fm.replace('---\n', '---\ntheme: dark\n'));
   assert.equal(dark.status, 0, dark.stdout + dark.stderr); assert.ok(dark.html.includes('data-theme-default="dark"'));
 });
+// 2026-10-21: 링크색 #3182f6이 회색 바탕에서 2.67:1이었다(design-guide §1의 AA 규칙 위반). 글자로 쓰는 파랑은 --blue-7만
+test('글자색 대비 4.5:1 이상(라이트·다크), 파랑 글자는 --blue-7', () => {
+  const css = fs.readFileSync(path.join(__dirname, '..', 'references', 'template.html'), 'utf8');
+  const block = sel => { const i = css.indexOf(sel + ' {'); return css.slice(i, css.indexOf('}', i)); };
+  const tok = (b, name) => (b.match(new RegExp(`--${name}:\\s*(#[0-9a-f]{6})`, 'i')) || [])[1];
+  const lum = h => [1, 3, 5].map(i => parseInt(h.substr(i, 2), 16) / 255).map(v => v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4).reduce((s, v, k) => s + v * [0.2126, 0.7152, 0.0722][k], 0);
+  const ratio = (a, b) => { const [x, y] = [lum(a), lum(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); };
+  const light = block(':root'), dark = block(':root[data-theme="dark"]');
+  for (const [name, b, fb] of [['라이트', light, light], ['다크', dark, light]]) {
+    const t = n => tok(b, n) || tok(fb, n);
+    for (const fg of ['ink', 'blue-7']) for (const bg of ['bg', 'surface', 'surface-2']) {
+      assert.ok(ratio(t(fg), t(bg)) >= 4.5, `${name} --${fg} on --${bg}: ${ratio(t(fg), t(bg)).toFixed(2)}`);
+    }
+  }
+  assert.ok(!/[\s;{]color:\s*var\(--blue\)/.test(css), '글자색에 --blue(채움용) 사용');
+});
+// 렌더 후 검사 — 브라우저가 없는 PC에서는 건너뜀
+const qa = path.join(__dirname, 'qa.js');
+const runQa = file => spawnSync(process.execPath, [qa, file], {encoding: 'utf8', timeout: 120000});
+test('qa: 렌더한 보고서는 세 폭 모두 넘침 없음', () => {
+  if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');
+  const r = render('# 제목\n\n## 배경\n\n**요청** — 확인.\n\n```cards\n[추천] 긴 이름 카드\n`InvoiceMailStatusNotifyTasklet`의 INV_ITEM_HIST_DETAIL_BACKUP 테이블을 본다.\n\n둘째 카드\n짧은 본문.\n```\n\n```stats\n대상 | INV317_K42P_LONG | 근거 InvoiceBatchJob.xml:11-23 | 완료\n건수 | 12건 | | 중립\n```\n');
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const q = runQa(r.output);
+  assert.equal(q.status, 0, q.stdout + q.stderr);
+  assert.equal((q.stdout.match(/넘침 0곳/g) || []).length, 3, q.stdout);
+});
+test('qa: 칸 밖으로 나간 글자·대상 없는 #링크는 exit 1', () => {
+  if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');
+  const f = path.join(dir, 'qa-bad.html');
+  fs.writeFileSync(f, '<!doctype html><html><head><meta charset="utf-8"></head><body><main>' +
+    '<div class="box" style="width:120px;white-space:nowrap">줄바꿈 없이 아주 길게 이어지는 문장이 상자 밖으로 나간다</div>' +
+    '<p id="here"><a href="#here">있음</a> <a href="#없는곳">없음</a></p></main></body></html>');
+  const q = runQa(f);
+  assert.equal(q.status, 1, q.stdout + q.stderr);
+  assert.ok(/div\.box/.test(q.stdout) && /#없는곳/.test(q.stdout) && !/#here/.test(q.stdout), q.stdout);
+});
 console.log(`${passed} passed, ${failed} failed${skipped ? `, ${skipped} skipped` : ''}; artifacts: ${dir}`);
 process.exit(failed ? 1 : 0);
