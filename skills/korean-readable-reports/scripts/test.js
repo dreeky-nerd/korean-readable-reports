@@ -408,6 +408,35 @@ test('규칙 14: 한 섹션의 문두 접속어 3개부터 힌트', () => {
   assert.equal(hint('## 가\n\n다만화 제작사입니다.\n그래서울 지점입니다.\n또한국어 판입니다.').length, 0, '낱말 일부');
 });
 
+test('새 문체 힌트 4종: 인용·코드·주석 안은 세지 않고, summary는 셈 (검수 2026-10-21)', () => {
+  const rule = (doc, re, f = fm) => lint(f + doc).filter(x => re.test(x.msg));
+  assert.equal(rule('담당자는 "원인은 캐시로 보입니다 [추정]"이라고 말했습니다.', /두 겹/).length, 0, '인용 안 유보');
+  assert.equal(rule('<code>원인은 캐시로 보입니다 [추정]</code>', /두 겹/).length, 0, 'HTML code 안');
+  assert.equal(rule('담당자는 "첫 결과입니다. 다만 적습니다. 그러나 납니다. 그래서 유지합니다."라고 말했습니다.', /접속어/).length, 0, '인용 안 접속어');
+  assert.equal(rule('<!--\n다만 하나.\n그러나 둘.\n그래서 셋.\n-->', /접속어/).length, 0, 'HTML 주석');
+  const f = rule('', /두 겹/, fm.replace('title: 시험 문서', 'summary: 원인은 캐시로 보입니다 [추정]\ntitle: 시험 문서'));
+  assert.equal(f.length, 1, 'frontmatter summary'); assert.equal(f[0].line, 2);
+});
+test('강조용 따옴표: 명사 말끝은 강조, "~이라 답했다"는 인용', () => {
+  const hint = doc => lint(fm + doc).filter(x => /강조용 따옴표/.test(x.msg));
+  assert.equal(hint(Array(5).fill('"이미지"를 강조합니다.').join('\n')).length, 1, '이미지');
+  assert.equal(hint(Array(5).fill('"데이터"를 봅니다.').join('\n')).length, 1, '데이터');
+  assert.equal(hint(Array(5).fill('담당자는 "배포 일정"이라 답했습니다.').join('\n')).length, 0, '이라 답했다');
+});
+test('괄호 단서: 근거 줄·접힌 칸·출처 절은 조건을 두는 곳이라 세지 않음', () => {
+  const hint = doc => lint(fm + doc).filter(x => /괄호 단서/.test(x.msg));
+  const p = '(한국어로여덟글자이상)'.repeat(12);
+  for (const doc of ['<details>\n<summary>상세</summary>\n\n' + p + '\n\n</details>', '**근거:** ' + p, '- 근거: ' + p, '## 결과\n\n### 출처\n\n' + p])
+    assert.equal(hint(doc).length, 0, doc.slice(0, 30));
+  assert.equal(hint('본문입니다' + p).length, 1);
+});
+test('근거 줄이 길면 힌트 — 조건 모음이 새 문단이 되지 않게', () => {
+  const hint = doc => lint(fm + doc).filter(x => /근거 줄/.test(x.msg));
+  const long = '근거: ' + '이용자 약 3천만 명은 홍보 문구이며 측정 시점은 공개되지 않았습니다. '.repeat(6);
+  const f = hint(long); assert.equal(f.length, 1); assert.ok(f[0].hint);
+  assert.equal(hint('근거: 홍보 문구, 측정 시점 미공개. 설문 언어 항목, 2026년 9월.').length, 0);
+});
+
 // ── 2026-10-19 추가: 날것의 Claude 글 15개와 이 PC 보고서 18건을 비교해 보고서에 0번인 버릇만 ──
 test('규칙 14: Claude 버릇 — 이모지·"결국 X입니다"·"중요한 건"은 힌트', () => {
   const hint = (doc, re) => lint(fm + doc).filter(f => f.rule === 14 && re.test(f.msg));

@@ -74,6 +74,13 @@ easy.
    `<details>` counted; sources, `근거:` lines, and code not) — cut repeats or
    split the document. (6,000 is about the 75th percentile of 198 reports on
    one PC, mostly AI-written — a review point, not a measured ideal.)
+   **Keeping every fact is not the same as putting every fact here.** The
+   report holds what the reader needs to decide or act; research detail that
+   doesn't change that (per-item tables, every policy clause, side cases)
+   goes to a companion file such as `<name>-근거.md`, linked from the
+   report — nothing is deleted, the tags and conditions travel with it. A
+   `근거:` line is one or two short sentences; more conditions than that go
+   in bullets or `<details>` (lint hints past 200 characters).
    **Status badges are a fixed set:** `[완료]` `[미검증]` `[미확인]` `[실패]`
    `[블로커]` `[선재]` `[주의]` `[정보]` `[추천]` `[추정]` — 미검증 = not
    tested, 미확인 = looked but couldn't confirm, 추정 = inferred from
