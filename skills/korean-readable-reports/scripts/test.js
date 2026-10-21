@@ -32,6 +32,28 @@ const plain = (body, args = [], metadata) => render(body, ['--plain', ...args], 
 const run = (...args) => spawnSync(process.execPath, [renderer, ...args], {encoding: 'utf8'});
 const rules = (doc, opts) => lint(doc, opts).map(f => f.rule);
 
+// 스케줄 대기는 빼고, 10배 입력의 CPU 증가율을 본다(선형이면 약 10배, 2차면 약 100배).
+// 작은 입력은 1ms 안팎이라 시계 눈금(Windows는 약 15ms)보다 작다 — 누적 50ms가 넘을 때까지
+// 반복 횟수를 늘리고, 큰 입력도 같은 횟수만 한 구간에서 잰다. measure(n, reps)는 reps번의 CPU 합(µs).
+function cpuTime(fn) {
+  const start = process.cpuUsage();
+  fn();
+  const used = process.cpuUsage(start);
+  return used.user + used.system;
+}
+function assertLinearTime(name, measure, n = 5000) {
+  let reps = 1, small;
+  while ((small = measure(n, reps)) < 50000 && reps < 1024) reps *= 2;
+  let best = Infinity, detail = '';
+  for (let round = 0; round < 3 && best >= 25; round++) {   // 부하로 한 번 흔들려도 다시 잰다
+    if (round) small = measure(n, reps);
+    const large = measure(n * 10, reps);
+    if (large / small < best) { best = large / small; detail = `${small}→${large}µs, ${reps}회`; }
+  }
+  assert.ok(best < 25, `${name}: 입력 10배에 CPU ${best.toFixed(1)}배 (${detail}, 한도 25배)`);
+}
+const repeat = (reps, fn) => () => { for (let i = 0; i < reps; i++) fn(); };
+
 // ── lint: 기본 모드와 --plain 모드 ─────────────────────────────────────────
 test('plain: 개조식·긴 목차·여러 문장 허용', () => {
   const doc = fm + '# 제목\n' + Array.from({length: 9}, (_, i) => '\n## 항목 ' + i + '\n\n- 담당자 배정\n\n확인했다. 예외가 있다.').join('\n');
@@ -401,7 +423,7 @@ test('정합성 힌트: 요약 수치·개수 약속·미룬 약속', () => {
   assert.deepEqual(lint(fm + '| 표현 | 예 |\n| --- | --- |\n| 바랍니다 | "확인하시기 바랍니다" → "확인해 주세요" |\n| 진행 | "검증을 진행합니다" → "검증합니다" |').filter(f => f.rule === 14), []);
   { const d = '> 지연은 340ms입니다.\n\n## 결과\n\n수치는 없습니다.'; assert.equal(got(d, /요약 수치/).length, 1, '첫 줄 인용 요약'); }
   { const f = got(doc('지연 340ms.', '## 결과\n\n없음.'), /요약 수치/); assert.equal(f[0].line, 5, 'frontmatter summary 줄을 가리킴'); }
-  { const t = Date.now(); lint(doc('a', '1'.repeat(50000) + '개x')); assert.ok(Date.now() - t < 1500, (Date.now() - t) + 'ms'); }
+  assertLinearTime('정합성 lint', (n, reps) => cpuTime(repeat(reps, () => lint(doc('a', '1'.repeat(n) + '개x')))));
   // 미룬 약속: 한 번 알림
   const later = got(doc('a', '## 배경\n\n자세한 원인은 뒤에서 다루겠습니다.\n\n## 원인\n\n아래에서 설명하겠습니다.'), /미룬 약속/);
   assert.equal(later.length, 1); assert.ok(later[0].hint);
@@ -571,11 +593,24 @@ test('속성 값에 > 가 있는 summary', () => {
   assert.ok(r.html.includes('<summary title="A &gt; B">제목글</summary>'), r.html.match(/<details>[\s\S]*?<\/details>/)?.[0]);
 });
 test('raw HTML 정리가 긴 입력에서 느려지지 않음', () => {
-  // 프로세스 시작 시간은 PC마다 다르다(보안 프로그램이 도는 Windows는 2초 가까이) — 작은 문서 렌더를 기준으로 차이만 본다
-  const t0 = Date.now(); render('# 제목\n\n본문', ['--no-lint']); const base = Date.now() - t0;
-  const t = Date.now(); const r = render('# 제목\n\n<div><' + 'a'.repeat(50000) + '"x></div>', ['--no-lint']); const took = Date.now() - t;
-  assert.equal(r.status, 0); assert.ok(took - base < 1000, took + 'ms (기준 ' + base + 'ms)');
-  const t2 = Date.now(); lint(fm + '<' + 'a'.repeat(50000)); lint(fm + '<' + 'a'.repeat(50000), {plain: true}); assert.ok(Date.now() - t2 < 500, 'lint ' + (Date.now() - t2) + 'ms');
+  // 자식 안에서 재서 Node 시작·스케줄 대기를 제외한다. render.js는 require할 때 한 번 실행되므로 캐시를 지우고 반복한다.
+  // 모듈 로드·컴파일(약 60ms)은 입력과 무관한 고정비라 작은 입력이 작으면 2차 증가를 가린다 — 5만 자와 50만 자를 비교한다.
+  const benchmark = `const reps = Number(process.env.KRR_REPS), start = process.cpuUsage();
+    for (let i = 0; i < reps; i++) { delete require.cache[require.resolve(process.argv[1])]; require(process.argv[1]); }
+    const used = process.cpuUsage(start); console.log('KRR_CPU_US ' + (used.user + used.system));`;
+  assertLinearTime('raw HTML render', (n, reps) => {
+    const input = path.join(dir, 'perf-' + n + '.md');
+    fs.writeFileSync(input, fm + '# 제목\n\n<div><' + 'a'.repeat(n) + '"x></div>');
+    const r = spawnSync(process.execPath, ['-e', benchmark, renderer, input, '--offline', '--no-lint'],
+      {encoding: 'utf8', timeout: 60000, env: {...process.env, KRR_REPS: String(reps)}});
+    assert.equal(r.status, 0, r.error?.message || r.stdout + r.stderr);
+    const match = r.stdout.match(/^KRR_CPU_US (\d+)$/m);
+    assert.ok(match, r.stdout + r.stderr);
+    return Number(match[1]);
+  }, 50000);
+  for (const [name, opts] of [['기본', {}], ['plain', {plain: true}]]) {
+    assertLinearTime('raw HTML lint ' + name, (n, reps) => cpuTime(repeat(reps, () => lint(fm + '<' + 'a'.repeat(n), opts))));
+  }
 });
 test('바탕화면 대체 경로도 원본·링크 보호', () => {
   // 쓸 수 없는 위치(-o 대상 폴더가 파일)에서 바탕화면 reports/로 넘어갈 때, 그 경로가 원본 md면 거부
