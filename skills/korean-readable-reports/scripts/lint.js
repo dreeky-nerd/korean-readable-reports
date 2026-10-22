@@ -1004,7 +1004,27 @@ function report(file, F) {
   return errs.length;
 }
 
-module.exports = { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, FENCE_RE, STATUS_TAGS, measureReading };
+// 독자 회수 검사(references/reader-check.md) 대상인지 — 판정을 쓰는 모델에게 맡기지 않는다.
+// 사례: 2026-10-22 시나리오 3건(H2 4~5개, 결정 요청)이 모두 "짧은 문서"라며 건너뜀. 대상이 아니면 빈 배열
+function readerCheckNeed(src) {
+  const lines = src.replace(/\r\n/g, '\n').split('\n');
+  const { meta, start } = parseFrontmatter(lines);
+  const { at } = scanFences(lines, start);
+  const prose = i => i >= start && (!at[i] || at[i].kind === 'cards');
+  const why = [];
+  const h2 = lines.filter((l, i) => i >= start && !at[i] && /^##\s/.test(l)).length;
+  if (h2 >= 4) why.push(`H2 ${h2}개`);
+  if (/^(leadership|external)$/i.test((meta.audience || '').trim())) why.push(`audience ${meta.audience.trim()}`);
+  // 결정 요청: 요약 상자(frontmatter 또는 첫 H2 앞 인용문)가 결정·승인을 청하거나, 본문에 [추천]이 있음
+  const h2At = lines.findIndex((l, i) => i >= start && !at[i] && /^##\s/.test(l));
+  const quote = lines.filter((l, i) => i >= start && (h2At < 0 || i < h2At) && !at[i] && /^>/.test(l)).join(' ');
+  if (/결정|정해 주|승인|골라 주|선택해 주/.test(meta.summary || quote) || lines.some((l, i) => prose(i) && /\[추천\]/.test(l))) why.push('결정 요청');
+  return why;
+}
+const readerCheckLine = src => { const why = readerCheckNeed(src);
+  return why.length ? `독자 회수 검사 대상(${why.join(' · ')}) — 필수: references/reader-check.md 절차대로 새 서브에이전트에게 md 내용만 주고 질문에 답하게 한 뒤, 한 일을 사용자에게 알리기` : ''; };
+
+module.exports = { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, FENCE_RE, STATUS_TAGS, measureReading, readerCheckNeed, readerCheckLine };
 
 if (require.main === module) {
   const args = process.argv.slice(2);
@@ -1015,5 +1035,6 @@ if (require.main === module) {
   catch (e) { console.error(`lint: 입력 파일을 읽을 수 없음 — ${file} (${e.code || e.message})`); process.exit(2); }
   const opts = { plain: args.includes('--plain'), renderer: args.includes('--renderer'), readerReview: args.includes('--reader-review'), external: args.includes('--external') };
   const errors = report(file, lint(src, opts));
+  if (!opts.plain && readerCheckLine(src)) console.log(readerCheckLine(src));
   process.exit(args.includes('--strict') && errors ? 1 : 0);
 }

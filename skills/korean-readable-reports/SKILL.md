@@ -78,7 +78,9 @@ easy.
    report holds what the reader needs to decide or act; research detail that
    doesn't change that (per-item tables, every policy clause, side cases)
    goes to a companion file such as `<name>-근거.md`, linked from the
-   report — nothing is deleted, the tags and conditions travel with it. A
+   report — nothing is deleted, the tags and conditions travel with it.
+   Render the companion too: the report's HTML links to its `.html`, and
+   `qa.js` flags a link to a file that doesn't exist. A
    `근거:` line is one or two short sentences; more conditions than that go
    in bullets or `<details>` (lint hints past 200 characters).
    **Status badges are a fixed set:** `[완료]` `[미검증]` `[미확인]` `[실패]`
@@ -268,8 +270,10 @@ easy.
    judge each one. They cover rule 15 ("this looks like a flow — draw it?")
    and consistency: a summary number missing from the body,
    "세 가지입니다" above a list of two, a "뒤에서 다루겠습니다" to follow up.
-4. **Reader check** — for a report with 4+ H2 sections, `audience:
-   leadership | external`, or a decision request: give a fresh subagent the
+4. **Reader check** — lint (and render) prints `독자 회수 검사 대상(…)` for a
+   report with 4+ H2 sections, `audience: leadership | external`, or a
+   decision request. When that line is printed the check is required, not a
+   judgment call — length does not exempt it. Give a fresh subagent the
    md and nothing else from this conversation, and have it answer the five
    common questions plus the one for its `audience` in
    `references/reader-check.md`, quoting the line behind each answer. Where
@@ -278,7 +282,7 @@ easy.
    new paragraph, then re-lint. No subagent → compare your own answers
    from the summary box alone against answers from the body. It shows the
    point is in the document, not that the document reads well. Tell the user
-   whether it ran (skipped for short reports — say so).
+   that it ran and what it changed — or that lint printed no reader-check line.
 5. `node <skill-dir>/scripts/render.js reports/<file>.md` — produces the `.html` next to it
    (falls back to Desktop `reports/` if it can't write there) and runs lint first.
    Tell the reader the full path of the HTML. `--strict` exits 1 on any finding without writing
@@ -290,8 +294,8 @@ easy.
    `node <skill-dir>/scripts/test.js` is the regression suite.
    Then run `node <skill-dir>/scripts/qa.js <file>.html`: it opens the HTML in
    headless Chrome/Edge at 1280, 768 and 390px and reports text spilling out of
-   (or clipped inside) its box, `#links` with no target, and images that failed
-   to load. Exit 1 → fix the md (usually a long unbroken name in a card) and
+   (or clipped inside) its box, `#links` with no target, links to local files
+   that don't exist, and images that failed to load. Exit 1 → fix the md (usually a long unbroken name in a card) and
    re-render; exit 2 means no browser was found — say so instead of claiming the
    check passed.
 6. If the draft still reads like a default agent report, read
@@ -332,7 +336,7 @@ easy.
 - [ ] Depth is behind progressive disclosure.
 - [ ] Tone reads like explaining to a teammate.
 - [ ] Every sentence sits on its own line, without stacking short facts that need a connecting word.
-- [ ] Reader check run (or skipped as a short report — said so); misses fixed at the nearest heading, summary, first line, or status first.
+- [ ] Reader check run whenever lint printed `독자 회수 검사 대상`; misses fixed at the nearest heading, summary, first line, or status first.
 - [ ] Lint run and clean; HTML rendered with `scripts/render.js`, `scripts/qa.js` exits 0 (or no browser — said so), and delivered.
 
 ## When NOT to apply

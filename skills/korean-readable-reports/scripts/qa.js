@@ -11,6 +11,7 @@
  *             가로 스크롤이 원래 허용된 곳(표·코드·Mermaid)과 말줄임(…) 처리된 상단 제목은 뺀다
  *     앵커    #링크가 가리키는 id가 없음(목차·본문 링크)
  *     이미지  불러오지 못한 그림
+ *     파일    상대 링크가 가리키는 파일이 없음(옆 보고서 md를 렌더하지 않아 .html이 없는 경우 등)
  *   브라우저 위치를 바꾸려면 KRR_BROWSER=경로
  *
  * 사례: 2026-09-30 flow 설명의 `InvoiceMailStatusNotifyTasklet의`가 카드 밖으로 37px 삐져나온 것을 눈으로 보고서야 찾았다
@@ -95,6 +96,15 @@ function measure(browser, file) {
   }
 }
 
+// 파일 링크: render.js는 옆 보고서 md 링크를 .html로 바꾸는데, 그 md를 렌더하지 않으면 독자는 빈 페이지를 연다.
+// 브라우저 없이 파일이 있는지만 본다(주소·#앵커·메일 링크 제외)
+function missingFiles(file) {
+  const dir = path.dirname(path.resolve(file));
+  const hrefs = [...fs.readFileSync(file, 'utf8').matchAll(/<a\s[^>]*?href="([^"#?][^"]*)"/gi)].map(m => m[1].replace(/&amp;/g, '&'));
+  return [...new Set(hrefs.filter(h => !/^[a-z][\w+.-]*:|^\/\//i.test(h)).map(h => h.replace(/[#?].*$/, '')))]
+    .filter(h => { let p = h; try { p = decodeURIComponent(h); } catch (e) { /* 그대로 */ } return !fs.existsSync(path.resolve(dir, p)); });
+}
+
 function main() {
   const file = process.argv[2];
   if (!file || !fs.existsSync(file)) { console.error('사용: node qa.js report.html'); return 2; }
@@ -116,9 +126,12 @@ function main() {
   if (anchors.size) console.log(`  가리키는 곳이 없는 #링크 ${anchors.size}개: ${[...anchors].map(a => '#' + a).join(', ')}`);
   if (images.size) console.log(`  불러오지 못한 그림 ${images.size}개: ${[...images].join(', ')}`);
   problems += anchors.size + images.size;
+  const files = missingFiles(file);
+  if (files.length) console.log(`  없는 파일로 가는 링크 ${files.length}개: ${files.join(', ')} — 옆 보고서(-근거.md 등)면 그 md도 렌더하기`);
+  problems += files.length;
   if (failed) return 2;
   return problems ? 1 : 0;
 }
 
 if (require.main === module) process.exit(main());
-module.exports = {findBrowser};
+module.exports = {findBrowser, missingFiles};

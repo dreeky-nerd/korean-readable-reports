@@ -1067,5 +1067,31 @@ test('qa: 칸 밖으로 나간 글자·대상 없는 #링크는 exit 1', () => {
   assert.equal(q.status, 1, q.stdout + q.stderr);
   assert.ok(/div\.box/.test(q.stdout) && /#없는곳/.test(q.stdout) && !/#here/.test(q.stdout), q.stdout);
 });
+// 2026-10-22 시나리오 재실행: 대상 문서 3건이 독자 검사를 "짧은 문서"라며 건너뜀, 근거 파일 링크는 렌더하지 않으면 깨짐
+test('독자 회수 검사 대상은 lint가 판정해 출력(H2 4개·리더·외부·결정 요청), --plain은 출력 안 함', () => {
+  const {readerCheckNeed} = require('./lint.js');
+  const h2 = n => Array.from({length: n}, (_, i) => `\n## 절 ${i}\n\n내용입니다.\n`).join('');
+  assert.deepEqual(readerCheckNeed(fm + '# 제목\n' + h2(3)), []);
+  assert.deepEqual(readerCheckNeed(fm + '# 제목\n' + h2(4)), ['H2 4개']);
+  assert.deepEqual(readerCheckNeed(fm.replace('team', 'leadership') + '# 제목\n'), ['audience leadership']);
+  assert.deepEqual(readerCheckNeed(fm + '# 제목\n\n> 11/1까지 결정해 주세요.\n' + h2(1)), ['결정 요청']);
+  assert.deepEqual(readerCheckNeed(fm + '# 제목\n\n```cards\nB안 [추천]\n본문입니다.\n```\n'), ['결정 요청']);
+  assert.deepEqual(readerCheckNeed(fm + '# 제목\n\n```text\n## 코드 안 제목\n[추천]\n```\n'), []);
+  assert.ok(/독자 회수 검사 대상\(H2 4개\)/.test(render('# 제목\n' + h2(4)).stdout));
+  assert.ok(!/독자 회수 검사/.test(plain('# 제목\n' + h2(4)).stdout));
+});
+test('qa: 렌더하지 않은 옆 보고서로 가는 링크는 exit 1, 렌더하면 통과', () => {
+  if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');
+  const side = path.join(dir, 'case-side-근거.md');
+  fs.writeFileSync(side, fm + '# 근거\n\n## 배경\n\n- **요청** — 요청입니다.\n- **현상** — 현상입니다.\n');
+  const r = render('# 제목\n\n본문입니다.\n\n근거: [상세 근거](case-side-근거.md)\n');
+  assert.ok(r.html.includes('href="case-side-근거.html"'), r.html.match(/href="[^"]*근거[^"]*"/g));
+  let q = runQa(r.output);
+  assert.equal(q.status, 1, q.stdout + q.stderr);
+  assert.ok(/없는 파일로 가는 링크 1개: case-side-근거\.html/.test(q.stdout), q.stdout);
+  assert.equal(run(side, '--offline').status, 0);
+  q = runQa(r.output);
+  assert.equal(q.status, 0, q.stdout + q.stderr);
+});
 console.log(`${passed} passed, ${failed} failed${skipped ? `, ${skipped} skipped` : ''}; artifacts: ${dir}`);
 process.exit(failed ? 1 : 0);

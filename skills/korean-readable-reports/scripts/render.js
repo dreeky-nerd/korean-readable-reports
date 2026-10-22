@@ -50,7 +50,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, FENCE_RE, STATUS_TAGS } = require('./lint.js');
+const { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, FENCE_RE, STATUS_TAGS, readerCheckLine } = require('./lint.js');
 
 const args = process.argv.slice(2);
 if (!args.length || args.includes('-h') || args.includes('--help')) {
@@ -94,6 +94,7 @@ if (src.startsWith(BOM)) src = src.slice(1);
 // lint 먼저 — --strict 실패면 HTML을 쓰지 않는다(이전 HTML이 최신인 척 남지 않게, 기존 파일도 그대로)
 if (doLint) {
   const errors = report(inPath, lint(src, { plain, renderer: true, readerReview: args.includes('--reader-review'), external: args.includes('--external') }));
+  if (!plain && readerCheckLine(src)) console.log(readerCheckLine(src));
   console.log('');
   if (strict && errors) { console.error('render: lint 경고가 있어 HTML을 만들지 않음 (--strict)'); process.exit(1); }
 }
