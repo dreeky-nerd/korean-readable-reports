@@ -28,11 +28,14 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release view latest >/dev/null 2>&1 || gh release create latest \
-            --title "claude.ai 업로드용 스킬 묶음" \
-            --notes "korean-readable-reports.zip을 claude.ai 스킬 설정에서 업로드하세요. main의 스킬이 바뀔 때마다 자동으로 다시 만듭니다."
+          NOTES="korean-readable-reports.zip을 claude.ai 스킬 설정에서 업로드하세요. main의 스킬이 바뀔 때마다 자동으로 다시 만듭니다. 이번 묶음: 커밋 ${GITHUB_SHA::7}"
+          gh release view latest >/dev/null 2>&1 || gh release create latest --title "claude.ai 업로드용 스킬 묶음" --notes "$NOTES"
           gh release upload latest dist/korean-readable-reports.zip --clobber
           # 이름이 바뀐 옛 zip 등 지금 만든 것 말고는 지운다
           for a in $(gh release view latest --json assets -q '.assets[].name'); do
             [ "$a" = "korean-readable-reports.zip" ] || gh release delete-asset latest "$a" -y
           done
+          # 태그도 이 커밋으로 옮긴다 — 안 옮기면 릴리스의 "Source code" 묶음과 커밋 표시가 처음 만든 날(10/14)에 머문다
+          git tag -f latest "$GITHUB_SHA"
+          git push -f origin refs/tags/latest
+          gh release edit latest --title "claude.ai 업로드용 스킬 묶음" --notes "$NOTES"
