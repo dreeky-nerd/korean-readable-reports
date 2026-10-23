@@ -91,8 +91,8 @@ lint는 태그처럼 보이는 짧은 대괄호를 경고하는 휴리스틱이�
 ```html
 <pre class="mermaid">
 graph LR
-  A[요청] --> B[필터]
-  B --> C[(Redis)]
+  A[요청] --> B[대출 서비스]
+  B --> C[(대출 DB)]
 </pre>
 <script type="module">
   import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@11.17.2/dist/mermaid.esm.min.mjs';  // 버전 고정 — 실제 초기화 코드는 template.html

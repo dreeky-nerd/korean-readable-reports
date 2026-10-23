@@ -320,7 +320,7 @@ test('규칙 14: 측정된 한국어 AI 문형 4종은 힌트(경고 아님)', (
   assert.equal(hint('핵심은 재시도 횟수입니다.\n\n문제는 타임아웃 설정입니다.', /분열문/).length, 1);
   assert.equal(hint('문제는 없었습니다.\n\n문제는 없었습니다.', /분열문/).length, 0);
   // 범위 상승 "단순한 X를 넘어": 1회부터
-  assert.equal(hint('단순한 캐시를 넘어 세션 저장소로 씁니다.', /범위 상승/).length, 1);
+  assert.equal(hint('단순한 목록을 넘어 대출 기록 저장소로 씁니다.', /범위 상승/).length, 1);
   assert.equal(hint('요청 수가 한도를 넘어 실패했습니다.', /범위 상승/).length, 0);
   // 코드·따옴표 안은 남의 말 — 여러 줄 인용과 「」도
   assert.equal(hint('"캐시가 아니라 DB" 라는 제목\n\n`A가 아니라 B`', /부정 대구/).length, 0);
