@@ -29,6 +29,8 @@
  *   15  flow·mermaid 한 그림에 역할 색(ext…)과 상태 색(done…)을 섞음
  *       (힌트) 그림이 나을 내용을 글로만 씀 — 주어 있는 처리 단계 3개 이상 나열, 화살표 3단계 이상. --strict 실패 사유 아님
  *       (힌트) flow 단계에 실패 조건("실패하면") — 갈라지는 흐름은 Mermaid
+ *       (힌트) 흐름 그림 + 고치는 이야기인데 svg 없음 → 전후 그림 / 기준값 줄("기준은 30,000원입니다")과 같은 단위 숫자 2개 이상,
+ *              또는 같은 단위 숫자를 나란히 놓은 표(3~8행)인데 bars 없음 → 막대
  *   14  자연스러운 한국어 — 은유 소제목("요청이 지나가는 길", "~ 지도"), 의인화·번역투 동사(지나가다·조립하다·창구를 열다·뽑아내다),
  *       구어체 강조어(딱·진짜), 예고 문장("나누면 이렇습니다"), 괄호 비유 풀이("기계(코드)"),
  *       번역투(에 의해·되어지다·하기 위해서는·선택적·을 가진·자동 조사 "을(를)"),
@@ -38,7 +40,9 @@
  *       frontmatter summary(요약 상자)도 본문과 같이 본다. 따옴표 안은 인용이라 건너뜀. 기준은 references/ko-terms.md
  *   구조 코드펜스(``` ~~~) 안 닫힘 / 표 구분 행 없음·칸 수가 헤더와 다름(접힌 상세 안 포함) / 허용 안 되는 링크 주소
  *        각주·참조형 링크(미지원) / (힌트) 렌더러가 글자로 보여 주는 태그, (--plain만) 4칸 들여쓴 줄
- *        flow·stats 칸이 정해진 수보다 많음 / 모르는 역할·상태 이름 / 빈 flow·stats·cards 블록
+ *        flow·stats 칸이 정해진 수보다 많음 / 모르는 역할·상태 이름 / 빈 flow·stats·cards·svg·bars 블록
+ *        svg: <svg> 루트·viewBox·aria-label 없음, 렌더러가 지우는 태그·속성(fill·style·marker 등), 스타일 없는 class
+ *        bars: 숫자 없는 막대 값, 모르는 색(:bad·:chg·:mute 외), 칸 5개 이상
  */
 const fs = require('fs');
 
@@ -58,6 +62,47 @@ const STATUS_TAGS = {
 };
 const STATUS_RE = new RegExp('\\[(' + Object.keys(STATUS_TAGS).join('|') + ')\\]', 'g');
 const SOURCE_HEADING = /^(?:\d+[.)]\s*)?(?:출처|근거|참고(?:\s*(?:문헌|자료|링크))?|references|sources|basis)(?:\s*(?:및|·|\/|&)\s*(?:출처|근거|참고(?:\s*(?:문헌|자료|링크))?|references|sources|basis))*(?:\s*\([^)]*\))?\s*$/i;
+
+// ```svg 블록: 렌더러가 남기는 SVG 태그·속성(render.js가 이 목록을 그대로 쓴다). 색·선 모양은 class로만 —
+// fill·stroke·style을 직접 쓰면 다크 모드에서 안 바뀌고 그림 색 세 가지(회색·빨강·주황)를 벗어난다. 화살촉은 class="ln"이 붙인다
+const SVG_TAGS = /^(svg|g|rect|circle|ellipse|line|polyline|polygon|path|text|tspan|title|desc)$/i;
+const SVG_ATTRS = /^(viewbox|width|height|x|y|x1|y1|x2|y2|cx|cy|r|rx|ry|d|points|dx|dy|transform|class|text-anchor|dominant-baseline|role|aria-label)$/i;
+const FIG_CLASSES = /^(node|ln|lbl|t1|t2|bad|chg|mute|bare)$/;
+
+// ```bars 블록 해석(lint·render 공용). 한 줄 = "라벨 | 값들 | 보조 설명 | 결과", 값들 = "대출 14일 + 유예 3일:chg".
+// "기준선 17 | 연체 기준 17일" 줄은 세로 기준선. 끝의 :bad·:chg·:mute = 빨강·주황·점선(그림 색). lines = [[줄 번호, 글]]
+const BAR_TONE = /^(bad|chg|mute)$/;
+function parseBars(lines) {
+  const rows = [], errors = [];
+  let threshold = null;
+  const tone = (s, ln) => {
+    const m = s.match(/:([a-z]+)\s*$/i);
+    if (!m) return [s.trim(), ''];
+    if (!BAR_TONE.test(m[1])) errors.push([ln, `색 ":${m[1]}" — :bad(빨강)·:chg(주황)·:mute(점선) 중 하나`]);
+    return [s.slice(0, m.index).trim(), BAR_TONE.test(m[1]) ? m[1] : ''];
+  };
+  for (const [ln, l] of lines) {
+    if (!l.trim()) continue;
+    const f = l.trim().replace(/\\\|/g, '\0').split('|').map(c => c.trim().replace(/\0/g, '|'));
+    const t = f[0].match(/^기준선\s+(\d[\d,]*(?:\.\d+)?)$/);
+    if (t) { threshold = { value: parseFloat(t[1].replace(/,/g, '')), label: f[1] || `기준 ${t[1]}`, line: ln }; continue; }
+    if (f.length > 4) errors.push([ln, `bars 칸 ${f.length}개 — "라벨 | 값들 | 보조 설명 | 결과"까지 4칸`]);
+    const segs = [];
+    for (const part of (f[1] || '').split('+')) {
+      if (!part.trim()) continue;
+      const [body, cls] = tone(part, ln);
+      const m = body.length <= 200 && body.match(/^(.*?)\s*(\d[\d,]*(?:\.\d+)?)\s*([^\s\d+]*)$/);
+      if (!m || /-\s*$/.test(m[1])) { errors.push([ln, `막대 값 "${body}" — "이름 숫자단위" 꼴(예: 대출 14일), 음수는 못 그림`]); continue; }
+      // 32000원처럼 쉼표 없이 쓴 큰 수는 보여 줄 때만 32,000원으로
+      const shown = /^\d{4,}$/.test(m[2]) ? m[2].replace(/\B(?=(\d{3})+(?!\d))/g, ',') : m[2];
+      segs.push({ name: m[1].trim(), value: parseFloat(m[2].replace(/,/g, '')), num: shown + m[3], cls, text: `${m[1].trim()} ${shown}${m[3]}`.trim() });
+    }
+    if (!segs.length && !errors.some(e => e[0] === ln)) errors.push([ln, '막대 값이 없음 — 두 번째 칸에 "이름 숫자"(여러 개면 + 로 잇기)']);
+    const [result, resultCls] = tone(f[3] || '', ln);
+    rows.push({ line: ln, title: f[0], sub: f[2] || '', result, resultCls, segs, total: segs.reduce((a, s) => a + s.value, 0) });
+  }
+  return { threshold, rows, errors };
+}
 
 // 링크·이미지 주소: http(s)·mailto 또는 스킴 없는 상대 경로만. "//host", 공백·따옴표·꺾쇠가 든 주소는 거부(속성 탈출 방지)
 const safeUrl = u => !/[\u0000- <>"'`]/.test(u) && !u.startsWith('//') &&
@@ -445,10 +490,34 @@ function lint(src, opts = {}) {
         : fb.body.flatMap(([, l]) => [...(l.match(/^\s*class\s+\S+\s+([\w-]+)/) || []).slice(1), ...[...l.matchAll(/:::([\w-]+)/g)].map(m => m[1])]);
       if (used.some(t => ROLES.test(t)) && used.some(t => STATUSES.test(t))) warn(fb.open, 15, `${fb.kind}에 역할 색(ext·entry·logic·data)과 상태 색(done·fail·caution·info·neutral)이 섞임 — 한 그림에는 한 종류만`);
     }
+    const FIG_HINT = 'node·ln·lbl·t1·t2 + bad·chg·mute·bare';
     for (const fb of blocks) {
-      if (!/^(flow|stats|cards)$/.test(fb.kind)) continue;
+      if (!/^(flow|stats|cards|svg|bars)$/.test(fb.kind)) continue;
       const filled = fb.body.filter(([, l]) => l.trim());
       if (!filled.length) { warn(fb.open, '구조', `빈 \`\`\`${fb.kind} 블록 — 내용이 없으면 지우기`); continue; }
+      if (fb.kind === 'bars') { for (const [ln, msg] of parseBars(filled).errors) warn(ln, '구조', msg); continue; }
+      if (fb.kind === 'svg') {
+        // 렌더러가 지울 태그·속성과 스타일이 없는 class를 미리 알린다 — 지워진 뒤엔 그림이 왜 검은지 알 수 없다
+        const s = filled.map(([, l]) => l).join('\n').replace(/<!--[\s\S]*?-->/g, '');
+        const tags = new Set(), attrs = new Set(), classes = new Set();
+        for (const m of s.matchAll(/<([a-zA-Z][\w:-]*)([^<>]*)>/g)) {
+          if (!SVG_TAGS.test(m[1])) tags.add(m[1]);
+          for (const a of m[2].matchAll(/([^\s=\/"'>]+)\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+))/g)) {
+            if (!SVG_ATTRS.test(a[1]) && !/^xmlns/i.test(a[1])) attrs.add(a[1]);
+            if (/^class$/i.test(a[1])) (a[2] ?? a[3] ?? a[4]).split(/\s+/).filter(c => c && !FIG_CLASSES.test(c)).forEach(c => classes.add(c));
+          }
+        }
+        const root = s.match(/<svg\b([^<>]*)>/i);
+        if (!root) warn(fb.open, '구조', '```svg 블록에 <svg> 루트가 없음 — <svg viewBox="0 0 1000 300" aria-label="…">로 감싸기');
+        else {
+          if (!/\bviewbox\s*=/i.test(root[1])) warn(fb.open, '구조', '<svg>에 viewBox 없음 — 좌표 기준이 없으면 폭에 맞춰 줄지 않음(예: viewBox="0 0 1000 300")');
+          if (!/\baria-label\s*=/i.test(root[1])) warn(fb.open, '구조', '<svg>에 aria-label 없음 — 그림이 무엇을 보여 주는지 한 줄(화면낭독기용)');
+        }
+        if (tags.size) warn(fb.open, '구조', `렌더러가 지우는 태그: ${[...tags].join(', ')} — 화살촉은 class="ln"이 붙이므로 marker·defs가 필요 없음`);
+        if (attrs.size) warn(fb.open, '구조', `렌더러가 지우는 속성: ${[...attrs].join(', ')} — 색·선 모양은 class로(${FIG_HINT})`);
+        if (classes.size) warn(fb.open, '구조', `모르는 class: ${[...classes].join(', ')} — 스타일이 안 입혀짐. 쓸 수 있는 것: ${FIG_HINT}`);
+        continue;
+      }
       if (fb.kind === 'cards') continue;
       const flow = fb.kind === 'flow', fixed = flow ? 3 : 4, ok = flow ? ROLE : STATE;
       const name = flow ? '역할' : '상태';
@@ -965,7 +1034,7 @@ function lint(src, opts = {}) {
     open(start, '(머리말)');
     for (let i = start; i < lines.length; i++) {
       const l = lines[i], fb = fenceAt[i];
-      if (fb) { if (i === fb.open && /^(flow|mermaid)$/.test(fb.kind)) sec.diagram = true; continue; }
+      if (fb) { if (i === fb.open && /^(flow|mermaid|svg)$/.test(fb.kind)) sec.diagram = true; continue; }
       const h = l.match(/^#{2,3}\s+(.*)$/);
       if (h) { open(i, h[1].trim()); continue; }
       if (ORD.test(l)) {
@@ -984,6 +1053,41 @@ function lint(src, opts = {}) {
     for (const fb of blocks) {
       const hit = fb.kind === 'flow' && fb.body.find(([, l]) => FAIL_IF.test(l));
       if (hit) warn(hit[0], 15, '```flow 단계에 실패 조건 — 갈라지는 흐름이면 Mermaid flowchart로 정상 경로와 실패 경로를 나눠 그리기', true);
+    }
+    // 그림 블록(svg·bars)은 짚어 주지 않으면 쓰지 않는다 — 2026-10-23 시나리오 2건이 원인·수정 문서에서 flow·표·카드만 썼다
+    // (고치는 곳이 흐름 한 지점인 문서, "무료 배송 기준 30,000원" vs 27,000원·32,000원, 두 주의 단계별 비율 표)
+    const has = k => blocks.some(b => b.kind === k);
+    const prose = i => i >= start && !fenceAt[i];
+    const FIX = /고치면|고친 뒤|고친 후|수정하면|수정 후|수정 방안|고치는 방법|바꾸면|되돌리면|해결 방안/;
+    const flowFig = blocks.find(b => b.kind === 'flow' || b.kind === 'mermaid');
+    if (flowFig && !has('svg') && lines.some((l, i) => prose(i) && FIX.test(l)))
+      warn(flowFig.open, 15, '흐름 그림 + 고치는 이야기 — 고치는 곳이 이 흐름 안에 있으면 고치기 전·후를 ```svg 두 장으로(같은 좌표, 깨진 곳 bad·바뀌는 곳 chg). 뼈대는 design-guide §10', true);
+    if (!has('bars')) {
+      const UNIT = '(원|%|점|일|건|명|ms|초|분|시간)';
+      // 문턱값으로 말한 것만 — "지급액 기준으로는 8.8%", "카드결제 기준 5,000원 상품"의 기준은 '~로 따지면'이라 뺀다(실제 보고서 오탐)
+      const LIMIT = new RegExp(`(기준|목표|한도|상한|하한)(?:선|치|값)?(?:은|는|이|가)?\\s*[:：]?\\s*(\\d[\\d,.]*)\\s*${UNIT}(?=\\s*(?:이상|이하|초과|미만|입니다|이에요|예요|이다|이고|이며|인데|[.,)]|$))`);
+      const NUM = new RegExp(`(\\d[\\d,.]*)\\s*${UNIT}`, 'g');
+      const NUM_CELL = /^\d[\d,.]*\s*(%|원|건|명|점|일|ms|초|분)$/;
+      let secStart = start, hinted = false;
+      for (let i = start; i < lines.length && !hinted; i++) {
+        if (/^##\s/.test(lines[i])) secStart = i;
+        if (!prose(i)) continue;
+        const m = lines[i].match(LIMIT);
+        if (m) {
+          // 같은 섹션(다음 H2 전까지)에 같은 단위 숫자가 기준값 말고 2개 이상
+          let end = i + 1; while (end < lines.length && !/^##\s/.test(lines[end])) end++;
+          const others = new Set();
+          for (let j = secStart; j < end; j++) if (prose(j)) for (const n of lines[j].matchAll(NUM)) if (n[2] === m[3] && n[1] !== m[2]) others.add(n[1]);
+          if (others.size >= 2) { warn(i, 15, `기준값(${m[2]}${m[3]})과 비교하는 숫자 ${others.size}개 — 기준을 넘는지가 결론이면 \`\`\`bars(기준선 ${m[2]} | 라벨)로. design-guide §10`, true); hinted = true; }
+        }
+        // 숫자를 나란히 놓은 표(3~8행, 행마다 같은 단위 숫자 칸 2개 이상) — 차이가 곧 결론이면 막대가 한눈에 보인다
+        if (/^\s*\|/.test(lines[i]) && (i === start || !/^\s*\|/.test(lines[i - 1])) && /^\s*\|?\s*:?-+/.test(lines[i + 1] || '')) {
+          let j = i + 2; const rows = [];
+          while (j < lines.length && /^\s*\|/.test(lines[j])) rows.push(splitCells(lines[j++]));
+          const numeric = rows.filter(r => r.filter(c => NUM_CELL.test(c.trim())).length >= 2).length;
+          if (rows.length >= 3 && rows.length <= 8 && numeric === rows.length) { warn(i, 15, '숫자를 나란히 비교하는 표 — 차이 자체가 결론이면 ```bars 막대를 표 위에(기준값이 있으면 기준선). 표는 근거로 남겨도 됨', true); hinted = true; }
+        }
+      }
     }
   }
 
@@ -1024,7 +1128,7 @@ function readerCheckNeed(src) {
 const readerCheckLine = src => { const why = readerCheckNeed(src);
   return why.length ? `독자 회수 검사 대상(${why.join(' · ')}) — 필수: references/reader-check.md 절차대로 새 서브에이전트에게 md 내용만 주고 질문에 답하게 한 뒤, 한 일을 사용자에게 알리기` : ''; };
 
-module.exports = { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, FENCE_RE, STATUS_TAGS, measureReading, readerCheckNeed, readerCheckLine };
+module.exports = { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, FENCE_RE, STATUS_TAGS, measureReading, readerCheckNeed, readerCheckLine };
 
 if (require.main === module) {
   const args = process.argv.slice(2);

@@ -44,10 +44,15 @@
     --radius: 14px;
     --radius-sm: 8px;
     --mono: "Cascadia Mono", "JetBrains Mono", Consolas, ui-monospace, monospace;
-    --content-w: 860px;
+    --content-w: 1060px;
     /* 역할 색(```flow 카드·Mermaid 역할 클래스 공통): 상태 색(초록·빨강·주황·노랑)과 겹치지 않게 */
     --role-ext: #f8d9ea; --role-entry: #e4e0f7; --role-logic: #cfe8f3; --role-data: #cfeeea;
     --flow-shadow: var(--ink);
+    /* 그림 색(```svg·```bars·```cards compare·●○○): 회색 = 보통, 빨강 = 문제, 주황 = 바뀌는 곳·추천. 이 세 가지뿐.
+       -ink는 글자용(흰 바탕 대비 4.5 이상), 나머지는 선·채움용 */
+    --fig-node: #eef0f2; --fig-edge: #9aa1a9; --fig-mute: #5f6670; --fig-seg: #c3c8cf;
+    --fig-bad: #d6332f; --fig-bad-bg: #fdeceb; --fig-bad-ink: #b4232e;
+    --fig-chg: #e8710a; --fig-chg-bg: #fff1e0; --fig-chg-ink: #a84f00;
   }
   /* 다크는 선택 사항 — head 스크립트가 data-theme="dark"를 붙였을 때만 (토글·theme: dark|auto) */
   :root[data-theme="dark"] {
@@ -59,6 +64,8 @@
     --shadow-sm: 0 1px 2px rgba(0,0,0,.4); --shadow-md: 0 6px 16px rgba(0,0,0,.45);
     --role-ext: #3d1a2e; --role-entry: #28253f; --role-logic: #123a4f; --role-data: #123633;
     --flow-shadow: #05060a;
+    --fig-node: #2a2f35; --fig-edge: #6a7078; --fig-mute: #a2a8b4; --fig-seg: #4a5058;
+    --fig-bad-bg: #3b2020; --fig-bad-ink: #f0706a; --fig-chg-bg: #3d2a12; --fig-chg-ink: #f6a04d;
   }
 
   /* ── 기본 ───────────────────────────────────────────────────────────────── */
@@ -91,15 +98,15 @@
     -webkit-backdrop-filter: saturate(180%) blur(12px);
     border-bottom: 1px solid var(--line);
   }
-  .topbar-inner { max-width: 1200px; margin: 0 auto; padding: 10px 24px; display: flex; align-items: center; gap: 14px; }
+  .topbar-inner { max-width: calc(var(--content-w) + 48px); margin: 0 auto; padding: 10px 24px; display: flex; align-items: center; gap: 14px; }
   .topbar-title { font-weight: 700; font-size: 0.95em; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex: 1; }
   .topbar-kicker { font-family: var(--mono); font-size: 0.72em; font-weight: 700; letter-spacing: .06em; color: var(--blue-7); padding: 3px 8px; border-radius: 6px; background: var(--blue-1); }
   .progress { position: absolute; left: 0; bottom: -1px; height: 2px; width: 0; background: linear-gradient(90deg, var(--blue), var(--green)); transition: width .1s linear; }
 
   /* ── 히어로(제목·메타·BLUF) ─────────────────────────────────────────────────── */
   .hero { position: relative; }
-  /* 히어로는 본문(.layout)과 같은 1200px 틀 — 제목과 본문의 왼쪽 시작점을 맞춘다. 글 폭만 본문과 같은 --content-w로 */
-  .hero-inner { position: relative; max-width: 1200px; margin: 0 auto; padding: 56px 24px 40px; }
+  /* 히어로는 본문(.layout)과 같은 틀 — 제목과 본문의 왼쪽 시작점을 맞춘다 */
+  .hero-inner { position: relative; max-width: calc(var(--content-w) + 48px); margin: 0 auto; padding: 56px 24px 40px; }
   .hero-inner > * { max-width: var(--content-w); }
   .eyebrow { font-family: var(--mono); font-size: 0.78em; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--blue-7); margin-bottom: 10px; }
   h1 { font-size: clamp(1.7em, 3.6vw, 2.4em); line-height: 1.25; letter-spacing: -0.02em; margin: 0 0 16px; font-weight: 800; }
@@ -126,16 +133,9 @@
     font-size: 0.72em; font-weight: 700; letter-spacing: .04em; line-height: 1.7;
   }
 
-  /* ── 본문 레이아웃(넓은 화면에서 우측 목차) ──────────────────────────────── */
-  .layout { max-width: 1200px; margin: 0 auto; padding: 32px 24px 96px; display: grid; grid-template-columns: minmax(0, var(--content-w)) 1fr; gap: 40px; justify-content: center; }
+  /* ── 본문 레이아웃: 한 단. 우측 목차는 v2.6에서 뺐다 — 그림·표가 1060px 폭을 다 쓰게(design-guide §9 v2.6) ── */
+  .layout { max-width: calc(var(--content-w) + 48px); margin: 0 auto; padding: 32px 24px 96px; }
   main { min-width: 0; counter-reset: sec; }
-  .toc { position: sticky; top: 76px; align-self: start; font-size: 0.86em; display: none; }
-  @media (min-width: 1100px) { .toc { display: block; } }
-  .toc-title { font-family: var(--mono); font-size: 0.75em; font-weight: 700; letter-spacing: .08em; color: var(--muted); text-transform: uppercase; margin-bottom: 8px; }
-  .toc ol { list-style: none; margin: 0; padding: 0; border-left: 2px solid var(--line); }
-  .toc li a { display: block; padding: 5px 12px; color: var(--muted); border-left: 2px solid transparent; margin-left: -2px; }
-  .toc li a:hover { color: var(--ink); text-decoration: none; }
-  .toc li a.active { color: var(--blue-7); border-left-color: var(--blue); font-weight: 700; }
 
   /* ── 섹션·제목 ─────────────────────────────────────────────────────────────── */
   section.sec { margin: 0 0 40px; }
@@ -239,6 +239,55 @@
   .flow-lines { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 0; }
   @media (max-width: 640px) { .flow-step { flex-basis: 100%; } }
 
+  /* ```svg · ```bars — 직접 그린 그림(2026-10-23, 사용자가 고른 보고서의 손그림 흐름도·기준선 막대 참고).
+     색은 class로만 준다(render.js가 fill·stroke·style 속성을 지운다) — 다크 모드에서 변수로 같이 바뀐다.
+     viewBox대로 폭에 맞춰 줄되 820px 아래로는 줄이지 않고 가로 스크롤 — 1100 폭 그림을 390px 휴대폰 폭에 다 넣으면
+     13.5px 글자가 5px가 되고, 640px까지만 줄여도 8px라 못 읽었다(2026-10-23 실측) */
+  .fig { margin: 1em 0; padding: 18px 20px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow-sm); overflow-x: auto; }
+  .fig > svg { display: block; width: 100%; min-width: 820px; height: auto; }
+  .fig text { fill: var(--ink); font-size: 15px; }
+  .fig .t1 { font-size: 17px; font-weight: 700; }
+  .fig .t2 { font-size: 13.5px; fill: var(--fig-mute); }
+  .fig .lbl { font-size: 13.5px; font-weight: 700; fill: var(--fig-mute); }
+  .fig text.bad { fill: var(--fig-bad-ink); font-weight: 700; }
+  .fig text.chg { fill: var(--fig-chg-ink); font-weight: 700; }
+  .fig .node { fill: var(--fig-node); stroke: var(--fig-edge); stroke-width: 1.6; }
+  .fig .node.bad { fill: var(--fig-bad-bg); stroke: var(--fig-bad); stroke-width: 2.2; stroke-dasharray: 7 5; }
+  .fig .node.chg { fill: var(--fig-chg-bg); stroke: var(--fig-chg); stroke-width: 3.5; }
+  .fig .node.mute { fill: none; stroke-dasharray: 7 5; }
+  .fig .ln { fill: none; stroke: var(--fig-edge); stroke-width: 2.6; marker-end: url(#fig-arr); }
+  .fig .ln.bad { stroke: var(--fig-bad); stroke-dasharray: 8 6; marker-end: url(#fig-arr-bad); }
+  .fig .ln.chg { stroke: var(--fig-chg); stroke-width: 3.4; marker-end: url(#fig-arr-chg); }
+  .fig .ln.mute { stroke: var(--fig-mute); stroke-dasharray: 2 6; marker-end: url(#fig-arr-mute); }
+  .fig .ln.bare { marker-end: none; }
+  /* 화살촉은 body 첫머리의 숨은 <svg class="fig-defs">에 한 벌만 — 그림마다 marker를 쓰지 않는다 */
+  .fig-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
+  #fig-arr path { fill: var(--fig-edge); } #fig-arr-bad path { fill: var(--fig-bad); }
+  #fig-arr-chg path { fill: var(--fig-chg); } #fig-arr-mute path { fill: var(--fig-mute); }
+  /* ```bars: 막대 조각(seg)·조각 안 값(sv)·기준선(thr)·행 제목(b-title)·보조 설명(b-sub)·결과(b-res).
+     조각 안 글자는 대비 4.5 이상: 회색 조각 = 본문색, 주황 = 검정, 빨강 = 흰색(테마와 무관하게 고정) */
+  .fig .seg { fill: var(--fig-seg); stroke: var(--surface); stroke-width: 2; }
+  .fig .seg.chg { fill: var(--fig-chg); } .fig .seg.bad { fill: var(--fig-bad); }
+  .fig .seg.mute { fill: none; stroke: var(--fig-edge); stroke-dasharray: 5 4; }
+  .fig .sv { font-size: 14px; font-weight: 700; }
+  .fig .sv.chg { fill: #191f28; } .fig .sv.bad { fill: #fff; }
+  .fig .thr { stroke: var(--fig-chg); stroke-width: 2.5; stroke-dasharray: 6 5; }
+  .fig .thr-l { font-size: 14px; }
+  .fig .b-title, .fig .b-res { font-size: 15px; font-weight: 700; }
+  .fig .b-sub { font-size: 13px; fill: var(--fig-mute); }
+
+  /* ```cards compare — 받는 문구·화면을 고치기 전/후로 나란히. 제목 줄 = 작은 설명. [실패]·[블로커] 빨강, [추천]·[완료] 주황 */
+  .pair { display: flex; flex-wrap: wrap; gap: 16px; margin: 1em 0; }
+  .bubble { flex: 1 1 300px; min-width: 0; padding: 12px 16px; border: 2px solid var(--line); border-radius: var(--radius); background: var(--fig-node); }
+  .bubble > small { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; color: var(--muted); font-size: 0.82em; font-weight: 700; margin-bottom: 4px; }
+  .bubble > small .tag { font-size: 0.9em; }
+  .bubble > :not(small) { margin: 0 0 0.4em; }
+  .bubble > :last-child { margin-bottom: 0; }
+  .bubble.bad { border-color: var(--fig-bad); background: var(--fig-bad-bg); }
+  .bubble.chg { border-color: var(--fig-chg); background: var(--fig-chg-bg); }
+  /* ●●○ 정도 표시 — 글자는 그대로 두고 간격·색만 */
+  .dots { letter-spacing: 2px; color: var(--fig-chg); white-space: nowrap; }
+
   /* ```stats — 핵심 수치 카드(Start Bootstrap SB Admin 2 숫자 카드 + HTML5 UP Stellar 숫자 띠 참고).
      왼쪽 색 띠 = 상태(요약 박스와 같은 강조 문법). 숫자는 본문보다 크게, 자릿수 정렬 */
   .stats { display: grid; grid-template-columns: repeat(var(--cols, 4), minmax(0, 1fr)); gap: 14px; margin: 1em 0; }
@@ -322,7 +371,7 @@
   .evidence-card figcaption { color: var(--muted); font-size: 0.86em; margin-top: 8px; }
 
   /* ── 하단 ─────────────────────────────────────────────────────────────────── */
-  .footer { max-width: 1200px; margin: 0 auto; padding: 18px 24px 40px; color: var(--muted); font-size: 0.82em; border-top: 1px solid var(--line); }
+  .footer { max-width: calc(var(--content-w) + 48px); margin: 0 auto; padding: 18px 24px 40px; color: var(--muted); font-size: 0.82em; border-top: 1px solid var(--line); }
 
   @media (max-width: 640px) {
     .hero-inner { padding: 36px 16px 28px; }
@@ -343,7 +392,7 @@
   :root[data-theme="dark"] .theme-toggle .icon-moon { display: none; }
 
   @media print {
-    .topbar, .toc, .code-dark .copy { display: none !important; }
+    .topbar, .code-dark .copy { display: none !important; }
     /* 다크로 보고 있어도 인쇄는 항상 흰 종이 */
     :root[data-theme] {
       color-scheme: light;
@@ -353,6 +402,8 @@
       --blue-7: #1957c2; --green-7: #007a52; --yellow-7: #843215; --red-7: #b4232e; --orange-7: #8a4f08;
       --role-ext: #f8d9ea; --role-entry: #e4e0f7; --role-logic: #cfe8f3; --role-data: #cfeeea; --flow-shadow: #191f28;
       --code-bg: #f3f5f8; --code-text: #191f28; --code-muted: #4b5563;
+      --fig-node: #eef0f2; --fig-edge: #9aa1a9; --fig-mute: #5f6670; --fig-seg: #c3c8cf;
+      --fig-bad-bg: #fdeceb; --fig-bad-ink: #b4232e; --fig-chg-bg: #fff1e0; --fig-chg-ink: #a84f00;
     }
     /* 브라우저 기본값(배경 그래픽 끔)이면 색 바탕이 빠져 흰 글자(요약 라벨·추천 태그)가 흰 종이에 사라진다 */
     :root { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
@@ -362,6 +413,12 @@
 </style>
 </head>
 <body>
+<svg class="fig-defs" aria-hidden="true" focusable="false"><defs>
+  <marker id="fig-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z"/></marker>
+  <marker id="fig-arr-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z"/></marker>
+  <marker id="fig-arr-chg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z"/></marker>
+  <marker id="fig-arr-mute" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z"/></marker>
+</defs></svg>
 
 <header class="topbar">
   <div class="topbar-inner">
@@ -446,11 +503,6 @@
 </section>
 
 </main>
-
-<nav class="toc" aria-label="목차">
-  <div class="toc-title">목차</div>
-  <ol id="toc-list"></ol>
-</nav>
 </div>
 
 <div class="footer">{{작성자·생성 도구 한 줄 — 예: 작성 {{작업일}} · korean-readable-reports}}</div>
@@ -466,25 +518,10 @@
     printState.forEach(function (s) { s[0].open = s[1]; });
     printState = [];
   });
-  // 목차 자동 생성 + 현재 위치 강조 + 상단 진행바 + 코드 복사 버튼 (전부 선택 기능, 꺼져도 문서는 읽힘)
+  // 상단 진행바 + 코드 복사 버튼 (전부 선택 기능, 꺼져도 문서는 읽힘)
   (function () {
-    var list = document.getElementById('toc-list');
-    var heads = Array.prototype.slice.call(document.querySelectorAll('main h2'));
-    var secs = heads.map(function (h, i) {
-      var sec = h.closest('section') || h;
-      if (!sec.id) sec.id = 'sec-' + (i + 1);
-      var li = document.createElement('li');
-      var a = document.createElement('a');
-      a.href = '#' + sec.id; a.textContent = h.textContent.trim();
-      li.appendChild(a); list.appendChild(li);
-      return sec;
-    });
-    var links = list.querySelectorAll('a');
     var bar = document.getElementById('progress');
     function onScroll() {
-      var cur = 0;   // getBoundingClientRect 기준 — offsetParent 가 body 가 아니어도 안 어긋남
-      secs.forEach(function (sec, i) { if (sec.getBoundingClientRect().top <= 90) cur = i; });
-      links.forEach(function (a, i) { a.classList.toggle('active', i === cur); });
       var d = document.documentElement;
       var p = d.scrollTop / (d.scrollHeight - d.clientHeight) * 100;
       bar.style.width = (isFinite(p) ? p : 0) + '%';

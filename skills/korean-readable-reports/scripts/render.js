@@ -36,6 +36,11 @@
  *   ```stats      핵심 수치 카드 격자. 한 줄 = "라벨 | 값 | 보조 설명 | 상태"(완료·실패·주의·미검증·중립 또는 영문)
  *                 flow·stats 칸 안의 글자 | 는 \| . 칸이 많거나 모르는 역할·상태 이름은 설명 뒤에 붙여 보여 줌(버리지 않음)
  *   ```cards      항목 카드 격자(같은 높이). 빈 줄로 카드 구분, 첫 줄 제목([완료]·[추천] 태그 가능), 나머지 본문(불릿·근거: 가능)
+ *   ```cards compare  같은 형식을 말풍선으로 나란히(받는 문구·화면의 전후). [실패]·[블로커] 빨강, [추천]·[완료] 주황
+ *   ```svg        직접 그린 그림. <svg viewBox aria-label> 하나. 허용 태그·속성(lint.js SVG_TAGS·SVG_ATTRS)만 남기고
+ *                 색은 class로(node·ln·lbl·t1·t2 + bad·chg·mute·bare — 템플릿 .fig). 화살촉은 class="ln"이 붙인다
+ *   ```bars       가로 막대(누적 가능) + 기준선. 한 줄 = "라벨 | 값1 + 값2:chg | 보조 설명 | 결과", "기준선 17 | 연체 기준"
+ *   ●●○           2~5개 연속이면 정도 표시(간격·주황)
  *   ```browser URL  웹 페이지 원문 인용을 브라우저 창(주소창 + 창 점 3개) 안에 넣음. 본문은 md(#### 제목·불릿·**굵게** 가능)
  *   ```lang       .code-dark 패널 (라벨 = 첫 토큰; shell-session, js title="x" 처럼 하이픈·속성 있어도 됨)
  *   | 표 |        .table-wrap. 헤더가 "상태"인 열 → .status, 첫 열이 짧으면 .key. 셀 안 파이프는 \| 로
@@ -50,7 +55,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, FENCE_RE, STATUS_TAGS, readerCheckLine } = require('./lint.js');
+const { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, FENCE_RE, STATUS_TAGS, readerCheckLine } = require('./lint.js');
 
 const args = process.argv.slice(2);
 if (!args.length || args.includes('-h') || args.includes('--help')) {
@@ -126,6 +131,7 @@ function inline(text) {
   let s = text.replace(/`([^`]+)`/g, (_, c) => { codes.push('<code>' + esc(c) + '</code>'); return NUL + (codes.length - 1) + NUL; });
   s = esc(s);
   s = s.replace(TAG_RE, (_, t) => `<span class="tag ${STATUS_TAGS[t]}">${t}</span>`);
+  s = s.replace(/[●○]{2,5}/g, d => `<span class="dots">${d}</span>`);
   s = s.replace(/\*\*(\S(?:[^*\n]*?\S)?)\*\*/g, '<strong>$1</strong>');
   // 기울임: 여는 *는 앞이 글자가 아니고 뒤가 공백이 아닐 때, 닫는 *는 앞이 공백이 아닐 때만 — "3 * 4 * 5", "*.log" 보호
   s = s.replace(/(^|[^\w*])\*(\S(?:[^*\n]*?\S)?)\*(?![\w*])/g, '$1<em>$2</em>');
@@ -238,7 +244,7 @@ function renderStats(lines) {
   // 값 글자 크기: 숫자 카드(1.85em)는 "42건"처럼 짧은 값용. 값에 긴 이름("INV_ITEM_HIST")이 오면 그 크기로는 카드 폭을 넘어
   // 글자 중간에서 잘린다(2026-09-30 실측: 4열 카드 본문 폭 약 167px). 가장 긴 단어의 폭을 어림해 한 개라도 넘으면
   // 블록 전체를 작은 글자(is-text)로 — 한 줄 안에서 값 크기가 들쭉날쭉하지 않게
-  const inner = (860 - 14 * (cols - 1)) / cols - 37;                 // 본문 최대 폭 860px 기준 카드 안쪽 폭
+  const inner = (1060 - 14 * (cols - 1)) / cols - 37;                // 본문 최대 폭 1060px(템플릿 --content-w) 기준 카드 안쪽 폭
   const wordEm = w => [...w].reduce((a, c) => a + (/[가-힣ㄱ-ㅎ一-鿿]/.test(c) ? 1 : /[A-Z0-9%]/.test(c) ? 0.7 : /[a-z]/.test(c) ? 0.6 : 0.5), 0);
   const values = items.map(f => (f[1] || '').replace(/[`*]/g, ''));
   const widest = Math.max(0, ...values.flatMap(v => v.split(/\s+/)).map(wordEm));
@@ -268,6 +274,15 @@ function renderCards(lines, info) {
   const forced = (info.match(/\b(wide|half|grid)\b/) || [])[1];
   const n = groups.length;
   if (!n) return '';   // 빈 블록 — --cols:0 으로 CSS가 무효가 되지 않게 아예 안 만든다(lint가 알림)
+  // compare: 받는 문구·화면을 전후로 나란히 놓는 말풍선. 색은 태그로 정하고 태그 글자도 남긴다(색만으로 구분하지 않게)
+  if (/\bcompare\b/.test(info)) {
+    return `<div class="pair">\n${groups.map(g => {
+      const tags = g[0].match(CARD_TAG_RE) || [];
+      const tone = tags.some(t => /실패|블로커/.test(t)) ? ' bad' : tags.some(t => /추천|완료/.test(t)) ? ' chg' : '';
+      const cap = g[0].replace(CARD_TAG_RE, '').replace(/\s{2,}/g, ' ').trim();
+      return `<div class="bubble${tone}"><small>${tags.map(inline).join('')}${inline(cap)}</small>${renderBlocks(g.slice(1), true).join('\n')}</div>`;
+    }).join('\n')}\n</div>`;
+  }
   let layout = forced || (maxLen > 140 ? 'wide' : (maxLen > 60 || hasSources) ? 'half' : 'grid');
   // 마지막 줄에 카드 하나만 남지 않게(실측: 2열에 3개면 세 번째가 혼자 반쪽). half는 짝수일 때만, 홀수·1개면 wide
   if (!forced && layout === 'half' && n % 2 === 1) layout = 'wide';
@@ -344,25 +359,79 @@ const decodeEnt = v => v.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);?/gi, 
   : { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[e.toLowerCase()]);
 // 태그 하나 = < 부터 따옴표 밖의 > 까지 (alt="A > B" 의 > 에서 끊지 않게)
 const TAG_CHUNK = /<(?:[^>"']|"[^"]*"|'[^']*')*>?/g;
-function sanitizeHtml(html) {
+// svg=true: ```svg 블록용 — SVG 허용 목록을 쓰고 <rect … /> 의 / 를 살린다(SVG 안에서 / 가 빠지면 뒤 도형이 전부 그 rect의 자식이 되어 안 보인다)
+function sanitizeHtml(html, svg = false) {
+  const tagOk = svg ? SVG_TAGS : HTML_TAGS, attrOk = svg ? SVG_ATTRS : ATTR_OK;
   return html.replace(TAG_CHUNK, raw => {
     // > 로 안 끝난 조각은 바로 글자로 — 아래 정규식이 실패할 때 되짚기가 입력 길이의 제곱으로 늘지 않게
     const m = raw.endsWith('>') && raw.match(/^<(\/?)([a-zA-Z][\w-]*)(?![\w-])((?:[^>"']|"[^"]*"|'[^']*')*)>$/);
-    if (!m || !HTML_TAGS.test(m[2])) return esc(raw);
+    if (!m || !tagOk.test(m[2])) return esc(raw);
     const [, slash, name] = m;
     if (slash) return `</${name.toLowerCase()}>`;
     const attrs = [];
     for (const a of m[3].matchAll(/([^\s=\/"'>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g)) {
       const key = a[1].toLowerCase();
-      if (!ATTR_OK.test(key)) continue;
+      if (!attrOk.test(key)) continue;
       let v = a[2] ?? a[3] ?? a[4];
       if (v === undefined) { attrs.push(key); continue; }
       v = decodeEnt(v);
       if ((key === 'src' || key === 'href') && !safeUrl(v)) v = '#';
       attrs.push(`${key}="${esc(v)}"`);
     }
-    return `<${name.toLowerCase()}${attrs.length ? ' ' + attrs.join(' ') : ''}>`;
+    const close = svg && /\/\s*$/.test(m[3]) ? ' /' : '';
+    return `<${name.toLowerCase()}${attrs.length ? ' ' + attrs.join(' ') : ''}${close}>`;
   });
+}
+
+// ```svg 블록: 직접 그린 그림을 .fig 상자에 넣는다. 주석은 버리고, <svg>를 안 닫았으면 닫는다(안 닫으면 뒤의 본문이 전부 그림 속으로 들어가 안 보인다)
+function renderSvg(lines) {
+  let s = sanitizeHtml(lines.join('\n').replace(/<!--[\s\S]*?-->/g, ''), true).trim();
+  if (!s) return '';
+  s = s.replace(/<svg(?![^>]*\srole=)/, '<svg role="img"');
+  const open = (s.match(/<svg[\s>]/g) || []).length - (s.match(/<\/svg>/g) || []).length;
+  return `<div class="fig">\n${s}${'</svg>'.repeat(Math.max(0, open))}\n</div>`;
+}
+
+// ```bars 블록 → 가로 막대 SVG. 라벨 칸·결과 칸 폭은 글자 수로 어림하고, 조각 안 값은 들어갈 때만 쓴다(안 들어가면 숫자만, 그것도 안 되면 생략 —
+// 마우스를 올리면 <title>로 보임). 막대는 항상 0에서 시작(design-guide §4)
+// ponytail: 글자 폭은 어림(한글 1em·영숫자 0.6em) — 실제와 다르면 qa.js가 넘침·겹침으로 알린다
+const textEm = s => [...s].reduce((a, c) => a + (/[가-힣ㄱ-ㅎ一-鿿]/.test(c) ? 1 : /[A-Z0-9%]/.test(c) ? 0.66 : /\s/.test(c) ? 0.3 : 0.58), 0);
+function renderBars(lines) {
+  const { threshold, rows } = parseBars(lines.map((l, i) => [i, l]));
+  if (!rows.length) return '';
+  const W = 1000, ROW = 64, BAR = 40;
+  const labelW = Math.min(320, Math.max(110, ...rows.map(r => Math.max(textEm(r.title) * 15, textEm(r.sub) * 13))) + 24);
+  const resW = Math.min(300, Math.max(0, ...rows.map(r => r.result ? textEm(r.result) * 15 + 16 : 0)));
+  const bw = W - labelW - resW - 8, max = Math.max(threshold ? threshold.value : 0, ...rows.map(r => r.total)) || 1;
+  const top = threshold ? 34 : 8, H = top + rows.length * ROW;
+  const X = v => labelW + bw * v / max, n = v => +v.toFixed(1);
+  const out = [];
+  // 기준선은 막대보다 먼저 그려 막대 뒤로 숨긴다 — 위에 그리면 조각 안 값 글자를 가로지른다
+  if (threshold) {
+    const x = X(threshold.value), half = textEm(threshold.label) * 14 / 2;
+    const anchor = x + half > W ? 'end' : x - half < 0 ? 'start' : 'middle';
+    out.push(`<line class="thr" x1="${n(x)}" y1="${top - 12}" x2="${n(x)}" y2="${H}"/>`,
+      `<text class="thr-l chg" x="${n(x)}" y="${top - 18}" text-anchor="${anchor}">${esc(threshold.label)}</text>`);
+  }
+  rows.forEach((r, i) => {
+    const y = top + i * ROW;
+    out.push(r.sub ? `<text class="b-title" x="0" y="${y + 24}">${esc(r.title)}</text><text class="b-sub" x="0" y="${y + 44}">${esc(r.sub)}</text>`
+      : `<text class="b-title" x="0" y="${y + 33}">${esc(r.title)}</text>`);
+    let acc = 0;
+    for (const s of r.segs) {
+      const x = X(acc), w = X(acc + s.value) - x; acc += s.value;
+      out.push(`<rect class="seg${s.cls ? ' ' + s.cls : ''}" x="${n(x)}" y="${y + 8}" width="${n(w)}" height="${BAR}"><title>${esc(s.text)}</title></rect>`);
+      const label = textEm(s.text) * 14 + 12 <= w ? s.text : textEm(s.num) * 14 + 8 <= w ? s.num : '';
+      if (label) out.push(`<text class="sv${s.cls ? ' ' + s.cls : ''}" x="${n(x + w / 2)}" y="${y + 33}" text-anchor="middle">${esc(label)}</text>`);
+    }
+    // 결과 글자가 기준선에 걸치면 기준선 뒤에서 시작한다(시나리오: "배송비 3,000원 부과"의 숫자를 점선이 가름). 결과 칸(resW) 안이라 넘치지 않는다
+    let rx = X(r.total) + 12;
+    if (threshold && r.result) { const tx = X(threshold.value); if (tx > rx - 4 && tx < rx + textEm(r.result) * 15) rx = tx + 10; }
+    if (r.result) out.push(`<text class="b-res${r.resultCls ? ' ' + r.resultCls : ''}" x="${n(rx)}" y="${y + 34}">${esc(r.result)}</text>`);
+  });
+  const desc = rows.map(r => `${r.title}${r.sub ? `(${r.sub})` : ''} ${r.segs.map(s => s.text).join(' + ')}${r.result ? ` → ${r.result}` : ''}`).join('; ')
+    + (threshold ? `; 기준선 ${threshold.label}` : '');
+  return `<div class="fig"><svg viewBox="0 0 ${W} ${H + 4}" role="img" aria-label="${esc('막대그래프: ' + desc)}">\n${out.join('\n')}\n</svg></div>`;
 }
 
 // raw HTML 덩어리: 첫 줄 태그의 열림/닫힘 짝이 맞을 때까지 모은다(빈 줄에 끊지 않음). 안쪽 코드펜스의 태그는 세지 않는다
@@ -428,6 +497,8 @@ function renderBlocks(lines, nested) {
       else if (lang === 'stats') out.push(softBreak(renderStats(buf)));
       else if (lang === 'cards') out.push(softBreak(renderCards(buf, info)));
       else if (lang === 'browser') out.push(renderBrowser(buf, info));
+      else if (lang === 'svg') out.push(renderSvg(buf));
+      else if (lang === 'bars') out.push(renderBars(buf));
       else out.push(`<div class="code-dark"><div class="panel-label">${esc(lang || 'code')}</div><pre>${esc(buf.join('\n'))}</pre></div>`);
       continue;
     }

@@ -587,7 +587,9 @@ test('plain: 자동 줄바꿈·선택 강제 개행 / 기본: 줄마다 <br>', (
 });
 test('plain: 기준일 없으면 오늘 날짜를 지어내지 않음', () => {
   const r = plain('# 제목\n본문', [], '---\ntitle: 시험\naudience: team\n---\n');
-  assert.ok(r.html.includes('기준일 미기재')); assert.ok(!r.html.includes(new Date().toISOString().slice(0, 10)));
+  // 템플릿 CSS·JS 주석의 사례 날짜("2026-10-23 실측")가 오늘이면 걸리므로 보이는 부분만 본다
+  const visible = r.html.replace(/<(style|script)\b[\s\S]*?<\/\1>/g, '');
+  assert.ok(visible.includes('기준일 미기재')); assert.ok(!visible.includes(new Date().toISOString().slice(0, 10)));
 });
 
 // ── 보안 ────────────────────────────────────────────────────────────────────
@@ -1056,6 +1058,77 @@ test('qa: 렌더한 보고서는 세 폭 모두 넘침 없음', () => {
   const q = runQa(r.output);
   assert.equal(q.status, 0, q.stdout + q.stderr);
   assert.equal((q.stdout.match(/넘침 0곳/g) || []).length, 3, q.stdout);
+});
+// 2026-10-23 사용자가 고른 보고서(손그림 흐름도·기준선 막대·전후 말풍선)를 따라 그림 블록을 넣었다
+const svgFig = t => '```svg\n<svg viewBox="0 0 600 200" aria-label="시험 흐름">\n<rect class="node" x="10" y="10" width="160" height="80" rx="12"/>\n' + t
+  + '\n<rect class="node" x="300" y="10" width="160" height="80" rx="12"/>\n<text class="t1" x="380" y="55" text-anchor="middle">둘째</text>\n<path class="ln" d="M170 50 H298"/>\n</svg>\n```\n';
+const barsBlock = '```bars\n기준선 50 | 기준 50\n가 | 값 40 + 값 30:chg | 보조 | 결과\n```\n';
+test('svg 블록: 허용 태그·속성만 남기고 / 와 role을 붙여 .fig에 넣음, 안 닫은 <svg>는 닫음', () => {
+  const r = render('# 제목\n\n```svg\n<svg viewBox="0 0 400 100" aria-label="흐름" onload="alert(1)" style="x">\n<!-- 주석 -->\n'
+    + '<rect class="node bad" x="0" y="0" width="100" height="50" fill="red"/>\n<script>alert(1)</script>\n<text class="t1" x="50" y="30">A &lt; B</text>\n```\n\n본문입니다.\n');
+  const fig = r.html.match(/<div class="fig">[\s\S]*?<\/div>/)[0];
+  assert.ok(fig.includes('<svg role="img" viewbox="0 0 400 100" aria-label="흐름">'), fig);
+  assert.ok(fig.includes('<rect class="node bad" x="0" y="0" width="100" height="50" />'), fig);
+  assert.ok(!/onload|style=|fill=|<script|주석/.test(fig), fig);
+  assert.ok(/<\/svg>\n<\/div>$/.test(fig), fig);
+  assert.ok(r.html.includes('<p>본문입니다.</p>'));
+});
+test('svg 블록 lint: viewBox·aria-label 없음, 지우는 태그·속성, 모르는 class', () => {
+  const struct = doc => lint(fm + '# 제목\n\n' + doc).filter(f => f.rule === '구조').map(f => f.msg).join('\n');
+  const msgs = struct('```svg\n<svg>\n<defs><marker id="a"/></defs>\n<rect class="node box" fill="red" x="0"/>\n</svg>\n```\n');
+  for (const re of [/viewBox 없음/, /aria-label 없음/, /지우는 태그: defs, marker/, /지우는 속성: id, fill/, /모르는 class: box/]) assert.ok(re.test(msgs), msgs);
+  assert.equal(struct(svgFig('<text class="t1 chg" x="90" y="55">첫째</text>')), '');
+});
+test('bars 블록: 누적 막대 길이·기준선·결과 색, 좁은 조각은 값을 title로, 설명(aria-label)', () => {
+  const r = render('# 제목\n\n```bars\n기준선 80 | 기준 80일\n지금 | 대출 70 + 연장 30:chg | 연장함 | 100일:chg\n바꾸면 | 대출 100:bad | | 연체:bad\n작은 값 | 큰 조각 99 + 작은 조각 1\n```\n');
+  const fig = r.html.match(/<div class="fig"><svg[\s\S]*?<\/svg><\/div>/)[0];
+  const w = [...fig.matchAll(/<rect class="seg[^"]*" x="[\d.]+" y="\d+" width="([\d.]+)"/g)].map(m => +m[1]);
+  assert.equal(w.length, 5);
+  assert.ok(Math.abs(w[0] / (w[0] + w[1]) - 0.7) < 0.01 && Math.abs(w[2] - w[0] - w[1]) < 0.2, JSON.stringify(w));
+  assert.ok(/<line class="thr"/.test(fig) && fig.includes('>기준 80일</text>'), fig);
+  assert.ok(fig.includes('class="b-res chg"') && fig.includes('class="b-res bad"'), fig);
+  assert.ok(!fig.includes('>작은 조각 1</text>') && fig.includes('<title>작은 조각 1</title>'), fig);
+  assert.ok(fig.includes('aria-label="막대그래프: 지금(연장함) 대출 70 + 연장 30 → 100일; '), fig);
+  // 시나리오(2026-10-23): 기준선이 결과 글자 숫자를 가로지름, 32000원이 쉼표 없이 나옴
+  const r2 = render('# 제목\n\n```bars\n기준선 30000 | 무료 배송 기준\n메일 금액 | 32000원:bad | | 오해\n실제 결제 | 27000원:chg | | 배송비 3,000원 부과\n```\n');
+  const thr = +r2.html.match(/<line class="thr" x1="([\d.]+)"/)[1], res = +r2.html.match(/<text class="b-res" x="([\d.]+)"[^>]*>배송비/)[1];
+  assert.ok(res > thr, `결과 글자 x ${res}가 기준선 x ${thr} 뒤여야 함`);
+  assert.ok(r2.html.includes('>32,000원</text>') && r2.html.includes('<title>27,000원</title>'));
+});
+// 2026-10-23 시나리오 2건이 그림 블록을 안 씀 → 힌트로 짚는다. 실제 보고서 오탐("지급액 기준으로는 8.8%")은 막는다
+test('힌트: 흐름+고치는 이야기 → svg, 기준값과 숫자 → bars, 숫자 나란히 표 → bars (이미 그렸으면 안 냄)', () => {
+  const hint = doc => lint(fm + '# 제목\n\n' + doc).filter(f => f.hint && f.rule === 15).map(f => f.msg).join('\n');
+  const flow = '## 원인\n\n```flow\n주문 | 생성 | logic\n메일 | 발송 | logic\n```\n\n## 수정 방안\n\n메일만 고치면 됩니다.\n';
+  assert.ok(/고치기 전·후를 ```svg/.test(hint(flow)));
+  assert.ok(!/고치기 전·후/.test(hint(flow + '\n' + svgFig('<text class="t1" x="90" y="55">첫째</text>'))));
+  const limit = '## 배송비\n\n무료 배송 기준은 30,000원입니다.\n할인 전 32,000원, 할인 후 27,000원입니다.\n';
+  assert.ok(/기준값\(30,000원\)과 비교하는 숫자 2개/.test(hint(limit)), hint(limit));
+  assert.ok(!/기준값/.test(hint('## 세금\n\n세율은 22%, 3.3%이고 지급액 기준으로는 8.8%입니다.\n카드결제 기준 5,000원 상품 115건, 9,900원 상품 58건입니다.\n')));
+  const table = '## 단계\n\n| 단계 | 9/8 주 | 10/13 주 |\n|---|---|---|\n| 시작 | 14.8% | 14.6% |\n| 인증 | 78% | 61% |\n| 완료 | 72% | 71% |\n';
+  assert.ok(/숫자를 나란히 비교하는 표/.test(hint(table)));
+  assert.ok(!/숫자를 나란히/.test(hint(table + '\n' + barsBlock)));
+});
+test('bars 블록 lint: 숫자 없는 값·모르는 색·칸 5개', () => {
+  const msgs = lint(fm + '# 제목\n\n```bars\n가 | 많음\n나 | 대출 14일:red\n다 | 1 | 2 | 3 | 4\n```\n').filter(f => f.rule === '구조').map(f => f.msg).join('\n');
+  assert.ok(/막대 값 "많음"/.test(msgs) && /색 ":red"/.test(msgs) && /bars 칸 5개/.test(msgs), msgs);
+});
+test('cards compare는 말풍선(실패 빨강·추천 주황, 태그 글자 유지), ●○○는 정도 표시, 우측 목차 없음', () => {
+  const r = render('# 제목\n\n```cards compare\n받는 문자 [실패]\n1권 중 0권 반납\n\n고친 뒤 [추천]\n1권 중 1권 반납\n\n영향 없음\n그대로입니다.\n```\n\n영향 범위 ●○○ 한 곳입니다.\n');
+  assert.ok(r.html.includes('<div class="bubble bad"><small><span class="tag tag-fail">실패</span>받는 문자</small>'), r.html.match(/<div class="pair">[\s\S]{0,400}/)[0]);
+  assert.ok(r.html.includes('<div class="bubble chg"><small><span class="tag tag-recommend">추천</span>고친 뒤</small>'));
+  assert.ok(r.html.includes('<div class="bubble"><small>영향 없음</small>'));
+  assert.ok(r.html.includes('<span class="dots">●○○</span>'));
+  assert.ok(!/class="toc"|toc-list/.test(r.html) && /--content-w: 1060px/.test(r.html));
+});
+test('qa: 그림 안 글자가 상자 밖으로 나가거나 겹치면 exit 1, 고친 그림·막대는 통과', () => {
+  if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');
+  const bad = render('# 제목\n\n' + svgFig('<text class="t1" x="90" y="55" text-anchor="middle">상자보다 훨씬 긴 첫째 단계 이름</text>\n<text class="lbl" x="380" y="57">겹침</text>'));
+  let q = runQa(bad.output);
+  assert.equal(q.status, 1, q.stdout + q.stderr);
+  assert.ok(/상자 밖으로 나감 \d+px\s+"상자보다 훨씬 긴/.test(q.stdout) && /글자끼리 겹침 \d+px\s+"겹침 \/ 둘째"/.test(q.stdout), q.stdout.split('\n').slice(4).join('\n'));
+  const good = render('# 제목\n\n' + svgFig('<text class="t1" x="90" y="55" text-anchor="middle">첫째</text>') + '\n' + barsBlock);
+  q = runQa(good.output);
+  assert.equal(q.status, 0, q.stdout + q.stderr);
 });
 test('qa: 칸 밖으로 나간 글자·대상 없는 #링크는 exit 1', () => {
   if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');

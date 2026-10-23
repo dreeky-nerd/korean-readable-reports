@@ -11,6 +11,7 @@
  *             가로 스크롤이 원래 허용된 곳(표·코드·Mermaid)과 말줄임(…) 처리된 상단 제목은 뺀다
  *     앵커    #링크가 가리키는 id가 없음(목차·본문 링크)
  *     이미지  불러오지 못한 그림
+ *     그림    ```svg·```bars 안 글자가 자기 상자·그림 밖으로 나감, 다른 상자나 글자와 겹침(폭과 무관하게 한 번만 보고)
  *     파일    상대 링크가 가리키는 파일이 없음(옆 보고서 md를 렌더하지 않아 .html이 없는 경우 등)
  *   브라우저 위치를 바꾸려면 KRR_BROWSER=경로
  *
@@ -61,7 +62,29 @@ function measure(f, w) {
   var anchors = [].map.call(doc.querySelectorAll('a[href^="#"]'), function (a) { return a.getAttribute('href').slice(1); })
     .filter(function (h) { if (!h) return false; try { h = decodeURIComponent(h); } catch (e) {} return !doc.getElementById(h); });
   var images = [].filter.call(doc.images, function (i) { return i.complete && !i.naturalWidth; }).map(function (i) { return i.getAttribute('src'); });
-  return { want: w, width: win.innerWidth, over: over, anchors: anchors, images: images };
+  // 그림(svg·bars 블록 — 이 HARNESS는 템플릿 문자열이라 백틱을 쓰지 않는다): 좌표를 손으로 정하므로 글자가 상자·그림 밖으로 나가거나 서로 겹치기 쉽다. 화면 좌표로 잰다(<g transform>도 반영).
+  // 글자의 "집" = 글자 가운데를 품은 가장 작은 rect. 집 밖으로 가로로 나가면 넘침, 집이 아닌 rect와 겹치면 겹침
+  var figs = [];
+  [].forEach.call(doc.querySelectorAll('.fig > svg'), function (svg, k) {
+    var box = function (el) { var r = el.getBoundingClientRect(); return { l: r.left, t: r.top, r: r.right, b: r.bottom }; };
+    var meet = function (a, b) { return [Math.min(a.r, b.r) - Math.max(a.l, b.l), Math.min(a.b, b.b) - Math.max(a.t, b.t)]; };
+    var has = function (p, x, y) { return x >= p.l && x <= p.r && y >= p.t && y <= p.b; };
+    var S = box(svg), rects = [].map.call(svg.querySelectorAll('rect'), box);
+    var texts = [].map.call(svg.querySelectorAll('text'), function (el) { return { b: box(el), s: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 30) }; })
+      .filter(function (t) { return t.s && t.b.r > t.b.l; });
+    var add = function (kind, px, s) { figs.push({ fig: k + 1, kind: kind, px: Math.round(px), text: s }); };
+    texts.forEach(function (t, i) {
+      var cx = (t.b.l + t.b.r) / 2, cy = (t.b.t + t.b.b) / 2;
+      var out = Math.max(S.l - t.b.l, t.b.r - S.r);
+      if (out > 1) add('그림 밖으로 나감', out, t.s);
+      var home = rects.filter(function (r) { return has(r, cx, cy); })
+        .sort(function (a, b) { return (a.r - a.l) * (a.b - a.t) - (b.r - b.l) * (b.b - b.t); })[0];
+      if (home) { var o = Math.max(home.l - t.b.l, t.b.r - home.r); if (o > 1) add('상자 밖으로 나감', o, t.s); }
+      rects.forEach(function (r) { if (has(r, cx, cy)) return; var m = meet(t.b, r); if (m[0] > 2 && m[1] > 2) add('상자와 겹침', m[0], t.s); });
+      texts.slice(i + 1).forEach(function (u) { var m = meet(t.b, u.b); if (m[0] > 2 && m[1] > 2) add('글자끼리 겹침', m[0], t.s + ' / ' + u.s); });
+    });
+  });
+  return { want: w, width: win.innerWidth, over: over, anchors: anchors, images: images, figs: figs };
 }
 function next(i) {
   if (i === WIDTHS.length) { var p = document.createElement('pre'); p.textContent = 'KRRQA' + encodeURIComponent(JSON.stringify(results)) + 'KRRQA'; document.body.appendChild(p); return; }
@@ -114,7 +137,7 @@ function main() {
   const m = measure(browser, file);
   if (m.error) { console.log(`  측정 실패 — ${m.error}`); return 2; }
   let problems = 0, failed = 0;
-  const anchors = new Set(), images = new Set();
+  const anchors = new Set(), images = new Set(), figs = new Map();
   for (const r of m.results) {
     // 화면 폭이 요청과 다르면 그 폭은 잰 것이 아니다(세로 스크롤 막대 몫은 허용)
     if (Math.abs(r.width - r.want) > 20) { failed++; console.log(`  ${r.want}px: 측정 실패 — 실제 화면 폭 ${r.width}px`); continue; }
@@ -122,10 +145,16 @@ function main() {
     console.log(`  ${r.want}px: 넘침 ${r.over.length}곳`);
     for (const o of r.over) console.log(`    - ${o.px}px  ${o.el}${o.text ? `  "${o.text}"` : ''}`);
     r.anchors.forEach(a => anchors.add(a)); r.images.forEach(i => images.add(i));
+    // 그림은 폭에 비례해 줄 뿐이라 어느 폭에서나 같은 곳이 걸린다 — 한 번만, 가장 큰 폭(px)으로
+    for (const f of r.figs) { const key = `${f.fig}|${f.kind}|${f.text}`; if (!figs.has(key) || figs.get(key).px < f.px) figs.set(key, f); }
   }
   if (anchors.size) console.log(`  가리키는 곳이 없는 #링크 ${anchors.size}개: ${[...anchors].map(a => '#' + a).join(', ')}`);
   if (images.size) console.log(`  불러오지 못한 그림 ${images.size}개: ${[...images].join(', ')}`);
-  problems += anchors.size + images.size;
+  if (figs.size) {
+    console.log(`  그림 안 글자 문제 ${figs.size}곳 — 상자를 넓히거나 글자를 줄이거나 좌표를 옮기기:`);
+    for (const f of figs.values()) console.log(`    - 그림 ${f.fig}: ${f.kind} ${f.px}px  "${f.text}"`);
+  }
+  problems += anchors.size + images.size + figs.size;
   const files = missingFiles(file);
   if (files.length) console.log(`  없는 파일로 가는 링크 ${files.length}개: ${files.join(', ')} — 옆 보고서(-근거.md 등)면 그 md도 렌더하기`);
   problems += files.length;

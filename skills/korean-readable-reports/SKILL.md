@@ -233,7 +233,10 @@ easy.
     | components and how they connect (architecture) | Mermaid `flowchart LR` with role colors |
     | states and what moves between them | Mermaid `stateDiagram-v2` |
     | dates, durations, dependencies | Mermaid `gantt` |
-    | 3+ items compared on the same short attributes | table |
+    | the same flow before and after a fix — where it breaks, what changes | two ` ```svg ` figures drawn on the same coordinates: the broken box/line `bad` (red dashed), the one changed box/line `chg` (orange), the rest gray — the reader spots the difference without reading (design-guide §10) |
+    | parts that add up to a total, or values against a limit ("대출 14일 + 유예 3일 ≤ 연체 기준 17일") | ` ```bars ` — `label \| 대출 14일 + 유예 3일:chg \| note \| result`, plus `기준선 17 \| label` (design-guide §10) |
+    | what a user receives or sees (message text, screen), before vs after | ` ```cards compare ` — speech-bubble pair; `[실패]` turns one red, `[추천]`/`[완료]` orange |
+    | 3+ items compared on the same short attributes | table (an impact/effort scale reads well as `●○○`) |
     | 2–4 key numbers that *are* the finding (rule 6 exception) | ` ```stats ` cards — `label \| value \| note \| status`, placed right after the summary or at the top of the section |
     | 2+ parallel items that each need a sentence or bullets (modules, findings, options) | ` ```cards ` — blank line between cards, first line is the title; mark the chosen option `[추천]`. Layout adapts to text length (short → grid, medium → 2 columns, long → one card per row), so keep titles short and put detail in the body |
     | a number over 3+ points or across 3+ items | table; a chart only when the trend itself is the finding (design-guide §4) |
@@ -251,6 +254,12 @@ easy.
     Appending the failure steps to a ` ```flow ` makes every item look like
     it goes through them (lint hints when a flow step says "실패하면").
 
+    A report that finds a cause inside a flow and proposes a fix draws that
+    flow twice — before (`bad` where it breaks) and after (`chg` where it
+    changes) — as ` ```svg `. That pair is the default for 원인·수정 방안
+    documents, not an extra; a ` ```flow ` of the current path alone does not
+    show the fix.
+
 ## Workflow
 
 1. Name the reader in one line (who, what they already know) → `audience:`.
@@ -267,8 +276,11 @@ easy.
    2, 4, 6, 7, 8, 9, 11, 13, 14, required frontmatter, and structural traps the
    renderer would otherwise swallow silently (unclosed fence, table column
    mismatch). Fix every finding in the md. Hints are printed separately;
-   judge each one. They cover rule 15 ("this looks like a flow — draw it?")
-   and consistency: a summary number missing from the body,
+   judge each one. They cover rule 15 ("this looks like a flow — draw it?",
+   "a fix inside this flow — draw it before/after?", "numbers against a
+   limit — bars?"). A rule-15 hint is not optional: draw what it names, or
+   tell the user in one line why that picture would not help. Hints also cover
+   consistency: a summary number missing from the body,
    "세 가지입니다" above a list of two, a "뒤에서 다루겠습니다" to follow up.
 4. **Reader check** — lint (and render) prints `독자 회수 검사 대상(…)` for a
    report with 4+ H2 sections, `audience: leadership | external`, or a
@@ -295,11 +307,12 @@ easy.
    Then run `node <skill-dir>/scripts/qa.js <file>.html`: it opens the HTML in
    headless Chrome/Edge at 1280, 768 and 390px and reports text spilling out of
    (or clipped inside) its box, `#links` with no target, links to local files
-   that don't exist, and images that failed to load. Exit 1 → fix the md (usually a long unbroken name in a card) and
+   that don't exist, images that failed to load, and text in a ` ```svg ` /
+   ` ```bars ` figure that leaves its box or overlaps other text. Exit 1 → fix the md (usually a long unbroken name in a card) and
    re-render; exit 2 means no browser was found — say so instead of claiming the
    check passed.
 6. If the draft still reads like a default agent report, read
-   `references/examples.md` (thirteen before/after pairs, one per failure mode,
+   `references/examples.md` (fourteen before/after pairs, one per failure mode,
    plus how the same finding shifts per audience) and rewrite.
    `references/design-guide.md` holds the visual details (colors, chart
    types, Mermaid quirks) — *whether* to draw is decided by rule 15, not there.
@@ -310,6 +323,13 @@ easy.
    `ext` external, `entry` entry point, `logic` processing, `data` storage
    (Mermaid: `class A ext`) — or by status (`done`/`fail`/`caution`/`info`/
    `neutral`), never both in one diagram.
+   Mermaid places boxes itself, so two Mermaid figures never line up. When
+   the point is *where* a flow breaks or changes, draw ` ```svg ` by hand:
+   copy the skeleton in design-guide §10, keep every box at the same x/y in
+   the before and after figures, and color with classes only (`fill`/`style`
+   are stripped). Size a box from its text: Korean ≈ 1 font-size per
+   character, plus 24 for padding. `qa.js` reports figure text that leaves
+   its box or overlaps — widen the box or shorten the text, never ignore it.
 
 ## Before / after
 
