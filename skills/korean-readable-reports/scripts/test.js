@@ -1094,6 +1094,9 @@ test('bars 블록: 누적 막대 길이·기준선·결과 색, 좁은 조각은
   const thr = +r2.html.match(/<line class="thr" x1="([\d.]+)"/)[1], res = +r2.html.match(/<text class="b-res" x="([\d.]+)"[^>]*>배송비/)[1];
   assert.ok(res > thr, `결과 글자 x ${res}가 기준선 x ${thr} 뒤여야 함`);
   assert.ok(r2.html.includes('>32,000원</text>') && r2.html.includes('<title>27,000원</title>'));
+  // 합이 0인 줄은 막대가 없으니 값 글자를 막대 자리에 쓴다(작업 보고서 "새 그림 0개"가 안 보이던 것)
+  const r3 = render('# 제목\n\n```bars\n1차 | 새 그림 0개 | | 없음\n3차 | 새 그림 3개 | | 있음\n```\n');
+  assert.ok(/<text class="b-sub" x="[\d.]+" y="\d+">새 그림 0개<\/text>/.test(r3.html), r3.html.match(/<div class="fig">[\s\S]*?<\/svg>/)[0]);
 });
 // 2026-10-23 시나리오 2건이 그림 블록을 안 씀 → 힌트로 짚는다. 실제 보고서 오탐("지급액 기준으로는 8.8%")은 막는다
 test('힌트: 흐름+고치는 이야기 → svg, 기준값과 숫자 → bars, 숫자 나란히 표 → bars (이미 그렸으면 안 냄)', () => {

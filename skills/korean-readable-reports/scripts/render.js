@@ -424,8 +424,14 @@ function renderBars(lines) {
       const label = textEm(s.text) * 14 + 12 <= w ? s.text : textEm(s.num) * 14 + 8 <= w ? s.num : '';
       if (label) out.push(`<text class="sv${s.cls ? ' ' + s.cls : ''}" x="${n(x + w / 2)}" y="${y + 33}" text-anchor="middle">${esc(label)}</text>`);
     }
-    // 결과 글자가 기준선에 걸치면 기준선 뒤에서 시작한다(시나리오: "배송비 3,000원 부과"의 숫자를 점선이 가름). 결과 칸(resW) 안이라 넘치지 않는다
+    // 합이 0인 줄은 막대가 없어 값이 사라진다("새 그림 0개") — 막대 자리 맨 앞에 값 글자를 쓰고 결과는 그 뒤에
     let rx = X(r.total) + 12;
+    if (!r.total && r.segs.length) {
+      const zero = r.segs.map(s => s.text).join(' + ');
+      out.push(`<text class="b-sub" x="${n(X(0) + 4)}" y="${y + 33}">${esc(zero)}</text>`);
+      rx = X(0) + 4 + textEm(zero) * 13 + 16;
+    }
+    // 결과 글자가 기준선에 걸치면 기준선 뒤에서 시작한다(시나리오: "배송비 3,000원 부과"의 숫자를 점선이 가름). 결과 칸(resW) 안이라 넘치지 않는다
     if (threshold && r.result) { const tx = X(threshold.value); if (tx > rx - 4 && tx < rx + textEm(r.result) * 15) rx = tx + 10; }
     if (r.result) out.push(`<text class="b-res${r.resultCls ? ' ' + r.resultCls : ''}" x="${n(rx)}" y="${y + 34}">${esc(r.result)}</text>`);
   });
