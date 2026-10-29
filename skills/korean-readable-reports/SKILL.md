@@ -100,6 +100,9 @@ easy.
     period (md: literal newline; HTML: `<br>` after each sentence inside a
     `<p>`). A paragraph of three sentences is three lines. Applies to body
     prose, callouts, and `<details>` — not to table cells or code.
+    A list item is one point: when an item (with its indented follow-on
+    lines, not its children) runs to three or more sentences, split it into
+    sub-bullets — lint warns `불릿 문장 N개`.
     A line per sentence is not a short sentence per line: don't stack three
     or more short facts about the same subject with no connecting word. Split
     where the judgment changes, not by length — and when joining two

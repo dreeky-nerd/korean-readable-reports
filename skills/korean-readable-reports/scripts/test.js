@@ -526,6 +526,116 @@ test('규칙 14: 좁은 문맥 판별로 남긴 알려진 미검출', () => {
   assert.deepEqual(lint(fm + '병목은 캐시가 아닌 DB다.\n\n원인은 메모리가 아닌 CPU다.').filter(f => f.rule === 14), []);
 });
 
+// ── details 판정·긴 불릿 회귀 ─────────────────────────────────────────────
+test('details: 코드 span·펜스·주석 속 태그는 구조와 본문 범위를 바꾸지 않음', () => {
+  // 코드 span은 render.js inline()과 같은 정의(한 줄 안 백틱 한 쌍) — CommonMark의 여러 백틱 묶음 짝은 렌더러가 안 따르므로 시험하지 않는다
+  const fakes = ['`<details>`', '``<details>``', '`</details>`',
+    '```html\n<details>\n```', '~~~html\n</details>\n~~~',
+    '<!-- <details> -->', '<!--\n</details>\n<details>\n-->', '<!-- <details>'];
+  for (const fake of fakes) {
+    for (const opts of [{}, {plain: true}]) {
+      assert.deepEqual(lint(fm + fake, opts).filter(f => f.rule === 9), [], fake);
+    }
+    if (fake === '<!-- <details>') continue; // 미종결 주석 뒤 글은 화면에도 없음
+    const doc = fm + fake + '\n\n확인했다. 다시 본다.';
+    assert.equal(lint(doc).filter(f => f.rule === 11).length, 1, fake);
+  }
+});
+test('details: 가짜 닫힘은 진짜 접힘·출처 스택을 닫지 않고 태그 순서를 보존', () => {
+  const body = '<details>\n<summary>상세</summary>\n`</details>`\n``</details>``\n<!-- </details> -->\n확인했다. 다시 본다.\n</details>\n확인했다. 다시 본다.';
+  assert.deepEqual(lint(fm + body).filter(f => f.rule === 9), []);
+  assert.deepEqual(lint(fm + body).filter(f => f.rule === 11).map(f => f.line), [13]);
+  const source = '<details>\n<summary>근거</summary>\n## 출처\n`</details>`\n</details>\n- 담당자 배정';
+  assert.equal(lint(fm + source).filter(f => f.rule === 4).length, 1);
+  for (const opts of [{}, {plain: true}]) {
+    assert.equal(lint(fm + '</details><details>', opts).filter(f => f.rule === 9).length, 2);
+    assert.deepEqual(lint(fm + '<DETAILS title="<details>">\n</DETAILS>', opts).filter(f => f.rule === 9), []);
+  }
+});
+test('details: 가짜 열림 뒤 괄호·섹션 길이·그림 힌트도 검사', () => {
+  const p = '(한국어로여덟글자이상)'.repeat(12);
+  const doc = fm + '## 결과\n`<details>`\n' + p + '\n' + ('글'.repeat(70) + '\n').repeat(13);
+  for (const re of [/괄호 단서/, /본문 \d+줄/, /글 \d+자에 그림/]) {
+    assert.ok(lint(doc).some(f => re.test(f.msg)), String(re));
+  }
+});
+test('긴 불릿: 한 줄·후속 세 줄은 시작 행에 하나, 두 문장은 허용', () => {
+  for (const body of ['- 확인했다. 저장했다. 끝났다.', '* 확인했다.\n  저장했다.\n  끝났다.', '- 확인했다.\n  저장했다. 끝났다.']) {
+    const hits = lint(fm + body).filter(f => f.rule === 11);
+    assert.deepEqual(hits.map(f => [f.line, f.msg, f.hint]), [[6, '불릿 문장 3개 — 하위 불릿으로 나누기', false]], body);
+  }
+  assert.deepEqual(lint(fm + '- 확인했다. 저장했다.').filter(f => f.rule === 11), []);
+  assert.equal(lint(fm + '확인했다. 저장했다.').filter(f => f.rule === 11).length, 1);
+  assert.deepEqual(lint(fm + '- 확인했다.\n 저장했다. 끝났다.').filter(f => f.rule === 11).map(f => f.line), [7], '한 칸은 후속 줄 아님');
+});
+test('긴 불릿: 번호·중첩·요청 볼드 접두도 검사, 자식은 부모에 더하지 않음', () => {
+  for (const body of ['3. **요청** — 확인했다. 저장했다. 끝났다.', '  * 확인했다. 저장했다. 끝났다.']) {
+    assert.deepEqual(lint(fm + body).filter(f => f.rule === 11).map(f => f.line), [6]);
+  }
+  const parent = '- 확인했다. 저장했다.\n';
+  assert.deepEqual(lint(fm + parent + '  - 확인했다. 저장했다.').filter(f => f.rule === 11), []);
+  assert.deepEqual(lint(fm + parent + '  1. 확인했다.\n    저장했다. 끝났다.').filter(f => f.rule === 11).map(f => f.line), [7]);
+});
+test('긴 불릿: 코드·표·근거·출처 제외, URL 있는 일반 항목은 검사', () => {
+  for (const body of ['- `확인했다. 저장했다. 끝났다.`', '- ``확인했다. 저장했다. 끝났다.``',
+    '| 항목 | 설명 |\n| --- | --- |\n| A | 확인했다. 저장했다. 끝났다. |',
+    '- 확인했다.\n  | A | 확인했다. 저장했다. 끝났다. |',
+    '- **근거:** 확인했다. 저장했다. 끝났다.', '1. **출처**: 확인했다. 저장했다. 끝났다.',
+    '## Sources\n- 확인했다. 저장했다. 끝났다.', '- 확인했다.\n  근거: 저장했다. 끝났다.']) {
+    assert.deepEqual(lint(fm + body).filter(f => f.rule === 11), [], body);
+  }
+  assert.equal(lint(fm + '- [문서](https://example.com/a.b) 확인했다. 저장했다. 끝났다.').filter(f => f.rule === 11).length, 1);
+});
+test('긴 불릿: 인라인 가짜 details 뒤는 검사, 펜스·진짜 details는 제외', () => {
+  const item = '- 확인했다. 저장했다. 끝났다.';
+  for (const fake of ['`<details>`', '``<details>``', '<!-- <details> -->']) {
+    assert.deepEqual(lint(fm + fake + '\n' + item).filter(f => f.rule === 11).map(f => f.line), [7]);
+  }
+  for (const body of ['```md\n' + item + '\n```', '~~~md\n' + item + '\n~~~', '<details>\n<summary>상세</summary>\n' + item + '\n</details>']) {
+    assert.deepEqual(lint(fm + body).filter(f => f.rule === 11), []);
+  }
+});
+test('긴 불릿: 맨 앞 볼드 제목 끝 마침표만 제외', () => {
+  const hits = body => lint(fm + body).filter(f => f.rule === 11);
+  assert.deepEqual(hits('- **One term per concept.** 확인했다. 저장했다.'), []);
+  assert.equal(hits('- **One term per concept.** 확인했다. 저장했다. 끝났다.')[0].msg, '불릿 문장 3개 — 하위 불릿으로 나누기');
+  assert.equal(hits('- **확인했다. 저장했다.** 끝났다. 돌아왔다.')[0].msg, '불릿 문장 3개 — 하위 불릿으로 나누기', '제목 내부 마침표는 유지');
+  assert.equal(hits('- **정말?** 확인했다. 저장했다.').length, 1, '다른 종결부호 유지');
+  assert.equal(hits('- 설명 **제목.** 확인했다. 저장했다.').length, 1, '중간 볼드는 유지');
+});
+test('긴 불릿: plain 비적용, 신규 경고만으로 일반 0·strict 1', () => {
+  const doc = fm + '# 제목\n\n> 요약입니다.\n\n## 배경\n- **요청** — 확인합니다.\n- **현상** — 동작합니다.\n\n## 결과\n- 확인했다. 저장했다. 끝났다.\n';
+  const warnings = lint(doc).filter(f => !f.hint);
+  assert.equal(warnings.length, 1, JSON.stringify(warnings));
+  assert.equal(warnings[0].rule, 11);
+  assert.deepEqual(lint(doc, {plain: true}).filter(f => f.rule === 11), []);
+  const input = path.join(dir, 'long-bullet.md'); fs.writeFileSync(input, doc);
+  for (const [args, status] of [[[], 0], [['--strict'], 1], [['--plain', '--strict'], 0]]) {
+    const r = spawnSync(process.execPath, [path.join(__dirname, 'lint.js'), input, ...args], {encoding: 'utf8'});
+    assert.equal(r.status, status, r.stdout + r.stderr);
+  }
+});
+test('details: 렌더러도 같은 기준 — 코드 span·한 줄 주석 속 닫힘은 접힘을 닫지 않음, 코드 span은 문단을 넘지 않음', () => {
+  const r = render('# 제목\n\n<details>\n<summary>상세</summary>\n\n`</details>`는 닫는 태그다.\n\n<!-- </details> -->\n\n안쪽 글이다.\n\n</details>\n\n바깥 글이다.\n');
+  const html = r.html.slice(r.html.indexOf('<details'));
+  assert.ok(html.indexOf('안쪽 글이다') < html.indexOf('</details>') && html.indexOf('</details>') < html.indexOf('바깥 글이다'), html.slice(0, 400));
+  assert.ok(html.includes('<code>&lt;/details&gt;</code>'));
+  assert.deepEqual(lint(fm + '<details>\n<summary>상세</summary>\n\n`</details>`는 닫는 태그다.\n\n</details>').filter(f => f.rule === 9), []);
+  const across = '## 섹션\n\n펜스(```)로 쓴다.\n\n<details>\n<summary>상세</summary>\n\n안쪽에서도 ```를 쓴다.\n\n</details>\n\n뒤 글이다.';
+  assert.deepEqual(lint(fm + across).filter(f => f.rule === 9), []);
+});
+test('긴 불릿: 강조한 근거 접두는 제외, 코드 span 속 문장은 안 셈', () => {
+  const hits = body => lint(fm + body).filter(f => f.rule === 11);
+  for (const body of ['- *근거*: 확인했다. 저장했다. 끝났다.', '- 확인했다.\n  *근거*: 저장했다. 끝났다.', '- `a ``` b` `확인했다. 저장했다.` 끝났다.']) assert.deepEqual(hits(body), [], body);
+});
+test('details·긴 불릿: 속성 안 백틱은 태그를 지우지 않고, 코드는 한 번만 뺌', () => {
+  const attr = '<details title="`">`\n<summary>상세</summary>\n본문이다. 다음이다.\n';
+  assert.equal(lint(fm + attr).filter(f => f.rule === 9).length, 1, '닫히지 않은 details');
+  assert.deepEqual(lint(fm + attr + '</details>\n').filter(f => f.rule === 9 || f.rule === 11), []);
+  assert.equal(lint(fm + '- ``a` 확인했다. 저장했다. 끝났다. `b``').filter(f => f.rule === 11).length, 1);
+});
+// ── details 판정·긴 불릿 회귀 끝 ──────────────────────────────────────────
+
 // ── render: 마크다운 해석 ──────────────────────────────────────────────────
 test('코드펜스 길이·종류 보존', () => {
   const r = plain('# 제목\n\n````text\n```\n내용\n````\n\n~~~text\n보존\n~~~\n', ['--strict']);
@@ -577,7 +687,7 @@ test('plain: 인용문을 요약으로 바꾸지 않음 / 기본: 첫 인용문�
   const p = plain('# 제목\n\n> 인터뷰 발언입니다.', ['--strict']);
   assert.ok(p.html.includes('<blockquote>인터뷰 발언입니다.</blockquote>')); assert.ok(!p.html.includes('<div class="callout">'));
   const d = render('# 제목\n\n> 요약 문장입니다.', ['--no-lint']);
-  assert.ok(d.html.includes('<div class="callout">요약 문장입니다.</div>'));
+  assert.ok(d.html.includes('<div class="callout"><p>요약 문장입니다.</p></div>'));
 });
 test('plain: 자동 줄바꿈·선택 강제 개행 / 기본: 줄마다 <br>', () => {
   const body = '# 제목\n\n첫 문장.\n둘째 문장.';
@@ -1242,6 +1352,33 @@ test('qa: 화면보다 넓은 md 그림도 칸 폭에 맞춰 줄어 넘침 없�
   const r = render('# 제목\n\n## 그림\n\n![넓은 그림](wide.svg)\n');
   const q = runQa(r.output);
   assert.equal(q.status, 0, q.stdout + q.stderr);
+});
+test('글 폭: 읽는 글만 45rem, 그림·표·상자는 단 폭 그대로, 고아 줄 줄이기는 글 요소에만', () => {
+  const browser = require('./qa.js').findBrowser();
+  if (!browser) skip('Chrome·Edge 없음');
+  const long = '가나다라마바사 아자차카타파하 '.repeat(12) + '끝.';
+  fs.writeFileSync(path.join(dir, 'w.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="300"><rect width="2200" height="300" fill="#ccc"/></svg>');
+  const r = render('# 제목\n\n> ' + long + '\n\n## 본문\n\n' + long + '\n\n![넓은 그림](w.svg)\n\n- ' + long + '\n\n| 항목 | 설명 |\n|---|---|\n| 가 | ' + long + ' |\n\n' +
+    '```flow\n첫 단계 | 설명\n둘째 단계 | 설명\n```\n\n```cards wide\n카드\n' + long + '\n근거: ' + long + '\n```\n\n<details open>\n<summary>접힌 글</summary>\n\n' + long + '\n\n| 항목 | 설명 |\n|---|---|\n| 가 | ' + long + ' |\n\n</details>\n\n<ul id="raw"><li><p>' + long + '</p><table><tr><td><p>' + long + '</p></td></tr></table></li></ul>\n\n근거: ' + long + '\n');
+  const probe = `<script>addEventListener('load', () => { const w = s => { const e = document.querySelector(s); return e && Math.round(e.getBoundingClientRect().width); }, t = s => getComputedStyle(document.querySelector(s)).textWrapStyle;
+    const o = {callout: w('.callout'), calloutP: w('.callout p'), p: w('section.sec > p:not(:has(img))'), img: w('section.sec > p img'), li: w('section.sec > ul > li'), table: w('section.sec > .table-wrap'), flow: w('.flow'),
+      card: w('.card-body'), cardSources: w('.card-body > .sources'), details: w('details'), detailsP: w('details > p'), detailsTable: w('details table'), sources: w('section.sec > .sources'),
+      rawLi: w('#raw > li'), cellP: w('#raw td p'), pWrap: t('section.sec > p'), liWrap: t('section.sec > ul > li'), tdWrap: t('td'), rawTdWrap: t('#raw td'), stepWrap: t('.flow-step'), h2Wrap: t('h2')};
+    const pre = document.createElement('pre'); pre.id = 'probe' + '-out'; pre.textContent = JSON.stringify(o); document.body.append(pre); });</script>`;
+  const f = r.output.replace(/\.html$/, '-probe.html');
+  fs.writeFileSync(f, r.html.replace('</body>', probe + '</body>'));
+  const out = spawnSync(browser, ['--headless', '--disable-gpu', '--window-size=1280,900', '--virtual-time-budget=3000', '--dump-dom', require('node:url').pathToFileURL(f).href], {encoding: 'utf8', timeout: 60000});
+  const m = (out.stdout || '').match(/<pre id="probe-out">([^<]*)<\/pre>/);
+  assert.ok(m, 'probe 없음: ' + (out.stderr || '').slice(0, 200));
+  const o = JSON.parse(m[1].replace(/&quot;/g, '"'));
+  for (const k of ['p', 'li', 'calloutP', 'detailsP', 'sources']) assert.ok(o[k] > 0 && o[k] <= 720, `${k} ${o[k]}px`);
+  for (const k of ['callout', 'img', 'table', 'flow', 'details']) assert.equal(o[k], 1060, `${k} ${o[k]}px`);
+  assert.ok(o.rawLi > 900 && o.cellP > 900, `표를 품은 항목 ${o.rawLi}px · 표 칸 안 문단 ${o.cellP}px — 둘 다 안 좁힘`);
+  assert.ok(o.detailsTable > 1000 && o.cardSources >= o.card, JSON.stringify(o));
+  if (o.pWrap !== undefined && o.pWrap !== '') {   // text-wrap-style를 모르는 브라우저면 폭만 본다
+    assert.deepEqual([o.pWrap, o.liWrap, o.h2Wrap], ['pretty', 'pretty', 'balance']);
+    assert.deepEqual([o.tdWrap, o.rawTdWrap, o.stepWrap], ['auto', 'auto', 'auto']);
+  }
 });
 test('qa: 칸 밖으로 나간 글자·대상 없는 #링크는 exit 1', () => {
   if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');

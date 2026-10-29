@@ -139,6 +139,10 @@ function parseFrontmatter(lines) {
 // 코드펜스 지도: ``` 와 ~~~ (앞 공백 3칸까지), 닫는 펜스는 같은 글자로 같거나 더 길게 + 뒤에 공백만.
 // 모든 검사가 이 지도 하나를 쓴다 — 검사마다 펜스를 따로 세면 ~~~ 나 ```` 안의 ``` 에서 서로 어긋난다
 const FENCE_RE = /^\s{0,3}(`{3,}|~{3,})\s*([^\s`~]*)\s*(.*)$/;
+// 코드 span 정의는 이것 하나: 한 줄 안에서 백틱 한 쌍 사이 한 글자 이상(render.js inline()과 같음). lint의 모든 "코드 빼고 보기"와
+// details 짝 맞추기, render.js의 코드 표시·details 짝 맞추기가 이 정의를 같이 쓴다 — 정의가 갈리면 lint는 통과인데 화면이 깨진다
+const CODE_SPAN = /`[^`\n]+`/g;
+const maskCode = t => t.replace(CODE_SPAN, m => ' '.repeat(m.length));   // 위치를 지키며 가린다
 function scanFences(lines, start) {
   const at = new Array(lines.length).fill(null);   // 펜스 줄(여는·닫는·안쪽)이면 그 블록
   const blocks = [];
@@ -176,12 +180,17 @@ function stripComments(s) {
     out += s.slice(i, a); i = b + 3;
   }
 }
-function htmlTokens(text, literalLines = []) {
+function htmlTokens(text, literalLines = [], markdown = false) {
   const out = [], start = /<!--|<\/?[a-zA-Z][\w-]*/g;
+  // 코드 span 속에서 시작하는 태그는 태그가 아니다(render.js tagView와 같은 기준). 태그 자체는 원문에서 읽어 속성 안 백틱에 끝이 지워지지 않게
+  const spans = markdown ? [...text.matchAll(CODE_SPAN)].map(m => [m.index, m.index + m[0].length]) : [];
+  let span = 0;
   let m, line = 0, cursor = 0;
   while ((m = start.exec(text))) {
     line += (text.slice(cursor, m.index).match(/\n/g) || []).length;
     cursor = m.index;
+    while (span < spans.length && spans[span][1] <= m.index) span++;
+    if (span < spans.length && spans[span][0] < m.index) { start.lastIndex = m.index + 1; continue; }
     if (literalLines[line]) {
       const end = text.indexOf('\n', m.index);
       start.lastIndex = end < 0 ? text.length : end;
@@ -236,7 +245,7 @@ function replaceLinks(text, replace) {
 }
 function visibleText(text, literalHtml = false) {
   return replaceLinks((literalHtml ? text : maskHtml(text, {hide: t => /^(pre|code)$/.test(t.name)}))
-    .replace(/`[^`]*`/g, ''), (image, label) => image ? '' : label)
+    .replace(CODE_SPAN, ''), (image, label) => image ? '' : label)
     .replace(/<https?:\/\/[^<>]+>/gi, '')
     .replace(/(?:https?:\/\/|mailto:)[^\s<>]+/gi, '')
     .replace(/&nbsp;|&#160;/gi, ' ').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"')
@@ -271,7 +280,7 @@ function readingLines(lines, at) {
       else if (title) { inline[i] = true; title = false; }
     }
   }
-  const tokens = htmlTokens(text, inline);
+  const tokens = htmlTokens(text, inline, true);
   let block = '', depth = 0, tokenIndex = 0;
   for (let i = 0; i < lines.length; i++) {
     const literal = inline[i];
@@ -415,7 +424,7 @@ function lint(src, opts = {}) {
     }
   }
 
-  const readable = plain ? null : readingLines(lines, fenceAt);
+  const readable = readingLines(lines, fenceAt);
   const checkCell = (i, raw, column = 0, literalHtml = false) => {
     const c = raw.trim(), text = visibleText(c, literalHtml), n = [...text].length, sentences = countSentences(text);
     if (/^`[^`]+`$/.test(c) && column > 0) warn(i, 7, `표 셀이 코드만 있음 "${c}" — 구절로 (예: "가장 오래 안 쓴 것부터 지운다")`);
@@ -425,7 +434,7 @@ function lint(src, opts = {}) {
   if (!plain) {
     const input = lines.map((l, i) => fenceAt[i] && (fenceAt[i].open === i || fenceAt[i].close === i || !/^(cards|browser)$/.test(fenceAt[i].kind)) ? '' : l).join('\n');
     const html = maskHtml(input, {tokens: htmlTokens(input, readable.inline), hide: t => /^(pre|code|thead)$/.test(t.name), strip: () => false})
-      .split('\n').map((l, i) => readable.raw[i] ? l : '').join('\n').replace(/`[^`]*`/g, '');
+      .split('\n').map((l, i) => readable.raw[i] ? l : '').join('\n').replace(CODE_SPAN, '');
     let open = null, cursor = 0, line = 0;
     for (const t of htmlTokens(html)) {
       line += (html.slice(cursor, t.start).match(/\n/g) || []).length;
@@ -445,7 +454,7 @@ function lint(src, opts = {}) {
     for (let i = start; i < lines.length; i++) {
       const l = lines[i];
       if (inCode(i)) { tableHead = -1; continue; }
-      const plainText = l.replace(/`[^`]*`/g, '');
+      const plainText = l.replace(CODE_SPAN, '');
       for (const lm of l.matchAll(/\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g)) {
         if (!safeUrl(lm[1])) warn(i, '구조', `링크 주소 "${lm[1].slice(0, 40)}" — 허용 안 되는 스킴·문자, 렌더 시 죽은 링크(#)가 됨`);
       }
@@ -454,10 +463,11 @@ function lint(src, opts = {}) {
       }
       // 참조 정의 "[이름]: 주소" — 상태 태그로 시작하는 줄("[완료]: …")은 제외
       if (/^\s*\[\^|\]\[[^\]]*\]/.test(plainText) || (/^\s*\[([^\]]+)\]:\s*\S/.test(plainText) && !Object.hasOwn(STATUS_TAGS, plainText.match(/^\s*\[([^\]]+)\]/)[1]))) warn(i, '구조', '각주·참조형 링크는 지원 안 함 — 인라인 링크 [글](주소)로');
-      const opens = (plainText.match(/<details(\s|>)/gi) || []).length, closes = (plainText.match(/<\/details\s*>/gi) || []).length;
-      if (opens) lastOpen = i;
-      depth += opens;
-      for (let c = 0; c < closes; c++) { if (depth) depth--; else warn(i, 9, '열리지 않은 </details> — 짝을 맞추기'); }
+      for (const close of readable.detailsAt[i]) {
+        if (!close) { depth++; lastOpen = i; }
+        else if (depth) depth--;
+        else warn(i, 9, '열리지 않은 </details> — 짝을 맞추기');
+      }
       if (plain && opts.renderer && /^#\s/.test(l) && ++h1 === 2) warn(i, '구조', 'H1(#)이 두 번 — 두 번째부터 섹션(##)으로 표시됨');
       if (/^\s*\|/.test(l)) {
         if (tableHead < 0) {
@@ -575,7 +585,7 @@ function lint(src, opts = {}) {
 
   // 짧은 대괄호 휴리스틱: 한글 시작 또는 README처럼 영문 이름+한글 설명. 뜻은 자동 교정하지 않는다.
   const checkTags = (line, text) => {
-    const prose = replaceLinks(text.replace(/`[^`]*`/g, ''), () => '').replace(/!?\[[^\[\]]*\]\[[^\[\]]*\]/g, '')
+    const prose = replaceLinks(text.replace(CODE_SPAN, ''), () => '').replace(/!?\[[^\[\]]*\]\[[^\[\]]*\]/g, '')
       .replace(/(?:https?:\/\/|mailto:)[^\s<>]+/gi, '');
     if (/^\s*\[\^?[^\]]+\]:/.test(prose) && !Object.hasOwn(STATUS_TAGS, (prose.match(/^\s*\[([^\]]+)\]/) || [])[1])) return;
     for (const m of prose.matchAll(/(?<!\\)\[([^\]\n]{1,30})\]/g)) {
@@ -599,14 +609,14 @@ function lint(src, opts = {}) {
   const unquoted = lines.join('\n').replace(/“[^”]{0,800}”|「[^」]{0,800}」|『[^』]{0,800}』/g,
     m => '""' + '\n'.repeat((m.match(/\n/g) || []).length)).split('\n');
   // 곧은따옴표가 두 줄에 걸친 인용: 두 줄 모두 따옴표 수가 홀수일 때만 이어 본다(짝이 맞는 줄끼리 묶으면 뒤 짝이 어긋난다)
-  const oddQuotes = l => (l.replace(/`[^`]*`/g, '').match(/"/g) || []).length % 2 === 1;
+  const oddQuotes = l => (l.replace(CODE_SPAN, '').match(/"/g) || []).length % 2 === 1;
   for (let i = 0; i + 1 < unquoted.length; i++) {
     if (!oddQuotes(unquoted[i]) || !oddQuotes(unquoted[i + 1])) continue;
     unquoted[i] = unquoted[i].slice(0, unquoted[i].lastIndexOf('"')) + '""';
     unquoted[i + 1] = unquoted[i + 1].slice(unquoted[i + 1].indexOf('"') + 1);
     i++;
   }
-  const proseLines = unquoted.map(l => l.replace(/`[^`]*`/g, '')
+  const proseLines = unquoted.map(l => l.replace(CODE_SPAN, '')
     .replace(/\]\(((?:[^()\s]|\([^()\s]*\))+)\)/g, ']()')
     .replace(/"[^"\n]*"|“[^”\n]*”|‘[^’\n]*’|'[^'\n]*'/g, '""'));
 
@@ -753,6 +763,13 @@ function lint(src, opts = {}) {
   const sources = sourceLines(lines, fenceAt, readable);
   let h2Count = 0, secLines = 0, secStart = -1, secName = '', h3BeforeH2 = false;
   const flushSec = () => { if (secStart >= 0 && secLines > 12) warn(secStart, 8, `"${secName}" 본문 ${secLines}줄 — 12줄 넘으면 그림·표·카드로 바꾸거나(규칙 15) 상세를 <details>로 접기`); };
+  // 목록 항목의 후속 줄: render.js와 같은 기준(빈 줄 아님·항목 아님·두 칸 이상 들여씀). 항목 쪽에서 합쳐 세므로 줄 단위 규칙 11은 건너뛴다
+  const LIST_LINE = /^\s*([-*]|\d+\.)\s+(.*)$/, follows = new Array(lines.length).fill(false);
+  const isBasis = t => SOURCES_LINE.test(t.replace(/[*_]/g, ''));   // "*근거*:"·"**근거:**"처럼 강조해도 근거 줄
+  for (let i = start; i < lines.length; i++) {
+    if (fenceAt[i] || !LIST_LINE.test(lines[i])) continue;
+    for (let j = i + 1; j < lines.length && !fenceAt[j] && lines[j].trim() && !LIST_LINE.test(lines[j]) && /^\s{2,}/.test(lines[j]); j++) follows[j] = true;
+  }
 
   for (let i = start; i < lines.length; i++) {
     const l = lines[i];
@@ -770,7 +787,7 @@ function lint(src, opts = {}) {
     if (SOURCES_RE.test(l)) continue;
     if (/^>/.test(l) && i === summaryLine) continue;
 
-    const text = l.replace(/^>\s?/, '').replace(/`[^`]*`/g, '');
+    const text = l.replace(/^>\s?/, '').replace(CODE_SPAN, '');
     if (secStart >= 0) secLines++;
 
     // 규칙 6
@@ -780,15 +797,21 @@ function lint(src, opts = {}) {
     const li = l.match(/^\s*([-*]|\d+\.)\s+(.*)$/);
     if (li && !sources[i] && !/(?:https?:\/\/|mailto:)/i.test(l)) {
       const raw = li[2].trim();
-      const item = replaceLinks(raw.replace(/`[^`]*`/g, '').replace(/\*\*/g, ''), () => 'x').replace(STATUS_RE, '').trim();
+      const item = replaceLinks(raw.replace(CODE_SPAN, '').replace(/\*\*/g, ''), () => 'x').replace(STATUS_RE, '').trim();
       if (/^`[^`]+`$/.test(raw)) warn(i, 4, `불릿이 코드만 있음 "${raw}" — 무엇을 하는지 문장으로`);
       else if (item.length > 3 && !ENDERS.test(item)) warn(i, 4, `불릿이 서술어 없이 끝남 — 온전한 문장으로: "${item.slice(0, 40)}"`);
     }
 
-    // 규칙 11: 한 줄 여러 문장 (표·불릿 제외)
+    // 규칙 11: 한 줄 여러 문장 (표 제외). 불릿은 항목 하나(후속 줄 포함, 자식 항목 제외)가 3문장부터 — 하위 불릿으로
     if (!li) {
       const n = countSentences(text);
-      if (n >= 2) warn(i, 11, `한 줄에 문장 ${n}개 — 문장마다 줄바꿈`);
+      if (n >= 2 && !follows[i]) warn(i, 11, `한 줄에 문장 ${n}개 — 문장마다 줄바꿈`);
+    } else if (!sources[i] && !isBasis(li[2])) {
+      let item = li[2];
+      for (let j = i + 1; follows[j]; j++) if (!/^\s*\|/.test(lines[j]) && !isBasis(lines[j])) item += ' ' + lines[j].trim();
+      // 맨 앞 볼드 제목의 끝 마침표("**One term per concept.**")는 문장으로 안 센다
+      const n = countSentences(visibleText(item.replace(/^\*\*([^*]+?)\.\*\*/, '**$1**')));   // 코드 span은 visibleText가 한 번만 뺀다
+      if (n >= 3) warn(i, 11, `불릿 문장 ${n}개 — 하위 불릿으로 나누기`);
     }
   }
   flushSec();
@@ -986,7 +1009,7 @@ function lint(src, opts = {}) {
     if (sumAt > 0) { order.push(sumAt); for (let j = sumAt + 1; j < start - 1 && /^\s+\S/.test(lines[j]); j++) order.push(j); }
     for (let i = start; i < lines.length; i++) order.push(i);
     // 닫는 짝이 없으면 정규식을 돌리지 않는다 — 닫힘 없는 <code>가 이어진 줄에서 시작점마다 끝까지 찾는 것을 막는다
-    const noCode = t => (/<\/code/i.test(t) ? t.replace(/<code\b[^>]*>.*?<\/code\s*>/gi, '') : t).replace(/`[^`]*`/g, '');
+    const noCode = t => (/<\/code/i.test(t) ? t.replace(/<code\b[^>]*>.*?<\/code\s*>/gi, '') : t).replace(CODE_SPAN, '');
     for (const i of order) {
       const fb = fenceAt[i];
       if (fb && (i === fb.open || i === fb.close || !/^(flow|stats|cards)$/.test(fb.kind))) continue;
@@ -1002,9 +1025,8 @@ function lint(src, opts = {}) {
         if (SOURCE_HEADING.test(visibleText(h[2]))) sourceDepth = h[1].length;
         continue;
       }
-      const opens = (raw.match(/<details[\s>]/gi) || []).length, closes = (raw.match(/<\/details\s*>/gi) || []).length;
-      const inDetails = details > 0 || opens > 0;
-      details = Math.max(0, details + opens - closes);
+      const inDetails = details > 0 || readable.detailsAt[i].some(close => !close);
+      for (const close of readable.detailsAt[i]) details = Math.max(0, details + (close ? -1 : 1));
       if (sourceDepth) continue;
       if (SOURCES_LINE.test(raw)) { if (visibleText(raw).length > 200) longBasis.push(i); continue; }
       const l = noCode(raw).replace(/\]\((?:[^()\s]|\([^()\s]*\))*\)/g, ']');
@@ -1215,7 +1237,7 @@ function lint(src, opts = {}) {
         if (/^###\s/.test(l)) { h3 = new Set(); g.h3s.push(h3); continue; }
         if (/^\s*\|/.test(l)) { g.table = g.visual = true; continue; }
         if (SOURCES_LINE.test(readable[i]) || /^#/.test(l) || !l.trim()) continue;
-        const bare = readable[i].replace(/`[^`]*`/g, '');
+        const bare = readable[i].replace(CODE_SPAN, '');
         replaceLinks(bare, image => { if (image) g.visual = true; return ''; });
         if (tagIn(bare, /^img$/)) g.visual = true;
         g.chars += [...visibleText(readable[i], true)].length;
@@ -1263,7 +1285,7 @@ function lint(src, opts = {}) {
         sec.steps++; if (sec.first < 0) sec.first = i;
         if (SUBJ.test(l.replace(ORD, '').trim() + ' ')) sec.subj++;
       }
-      if ((l.replace(/`[^`]*`/g, '').match(/→|->/g) || []).length >= 3) warn(i, 15, '화살표로 3단계 이상 이어 씀 — ```flow 블록(가지 없음)이나 Mermaid 흐름도로', true);
+      if ((l.replace(CODE_SPAN, '').match(/→|->/g) || []).length >= 3) warn(i, 15, '화살표로 3단계 이상 이어 씀 — ```flow 블록(가지 없음)이나 Mermaid 흐름도로', true);
     }
     for (const s of secs) {
       if (s.diagram || s.procedure || s.steps < 3 || s.subj / s.steps < 0.5) continue;
@@ -1350,7 +1372,7 @@ function readerCheckNeed(src) {
 const readerCheckLine = src => { const why = readerCheckNeed(src);
   return why.length ? `독자 회수 검사 대상(${why.join(' · ')}) — 필수: references/reader-check.md 절차대로 새 서브에이전트에게 md 내용만 주고 질문에 답하게 한 뒤, 한 일을 사용자에게 알리기` : ''; };
 
-module.exports = { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, FENCE_RE, STATUS_TAGS, measureReading, readerCheckNeed, readerCheckLine, stripComments, decodeEnt };
+module.exports = { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, FENCE_RE, STATUS_TAGS, measureReading, readerCheckNeed, readerCheckLine, stripComments, decodeEnt, CODE_SPAN, maskCode };
 
 if (require.main === module) {
   const args = process.argv.slice(2);

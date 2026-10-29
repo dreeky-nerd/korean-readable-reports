@@ -55,7 +55,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, stripComments, decodeEnt, FENCE_RE, STATUS_TAGS, readerCheckLine } = require('./lint.js');
+const { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, stripComments, decodeEnt, FENCE_RE, STATUS_TAGS, readerCheckLine, CODE_SPAN, maskCode } = require('./lint.js');
 
 const args = process.argv.slice(2);
 if (!args.length || args.includes('-h') || args.includes('--help')) {
@@ -128,7 +128,7 @@ const siblingHtml = u => {
 
 function inline(text) {
   const codes = [];
-  let s = text.replace(/`([^`]+)`/g, (_, c) => { codes.push('<code>' + esc(c) + '</code>'); return NUL + (codes.length - 1) + NUL; });
+  let s = text.replace(CODE_SPAN, m => { codes.push('<code>' + esc(m.slice(1, -1)) + '</code>'); return NUL + (codes.length - 1) + NUL; });
   s = esc(s);
   s = s.replace(TAG_RE, (_, t) => `<span class="tag ${STATUS_TAGS[t]}">${t}</span>`);
   s = s.replace(/[●○]{2,5}/g, d => `<span class="dots">${d}</span>`);
@@ -436,7 +436,9 @@ function renderBars(lines) {
   return `<div class="fig"><svg viewBox="0 0 ${W} ${H + 4}" role="img" aria-label="${esc('막대그래프: ' + desc)}">\n${out.join('\n')}\n</svg></div>`;
 }
 
-// raw HTML 덩어리: 첫 줄 태그의 열림/닫힘 짝이 맞을 때까지 모은다(빈 줄에 끊지 않음). 안쪽 코드펜스의 태그는 세지 않는다
+// 짝 맞추기용: 코드 span과 한 줄 주석 속 태그는 태그가 아니다(lint의 details 판정과 같은 기준). 위치는 원문 그대로
+const tagView = l => maskCode(l).replace(/<!--.*?-->/g, m => ' '.repeat(m.length));
+// raw HTML 덩어리: 첫 줄 태그의 열림/닫힘 짝이 맞을 때까지 모은다(빈 줄에 끊지 않음). 안쪽 코드펜스·코드 span의 태그는 세지 않는다
 function collectHtml(lines, i) {
   const tag = lines[i].match(/^<([a-zA-Z][\w-]*)/)[1].toLowerCase();
   const VOID = /^(img|hr|br)$/i;
@@ -447,7 +449,8 @@ function collectHtml(lines, i) {
     const f = l.match(FENCE_RE);
     if (fence) { if (f && f[1][0] === fence[0] && f[1].length >= fence.length && !f[2] && !f[3]) fence = null; continue; }
     if (f && depth > 0) { fence = f[1]; continue; }
-    depth += (l.match(open) || []).length - (l.match(close) || []).length;
+    const t = tag === 'details' ? tagView(l) : l;   // details 안은 md로 다시 읽어 코드 span이 코드가 된다. 다른 raw HTML 안의 백틱은 글자
+    depth += (t.match(open) || []).length - (t.match(close) || []).length;
     if (VOID.test(tag)) break;
   } while (i < lines.length && depth > 0);
   return { buf, next: i, tag };
@@ -459,7 +462,7 @@ function renderDetails(buf) {
   if (buf.length === 1) return sanitizeHtml(buf[0]);
   const first = buf[0], last = buf[buf.length - 1];
   const inner = buf.slice(1, -1);
-  const closeIdx = last.lastIndexOf('</details>');
+  const closeIdx = tagView(last).lastIndexOf('</details>');
   const tail = closeIdx > -1 ? last.slice(0, closeIdx) : last;
   if (tail.trim()) inner.push(tail);
   // </details> 뒤에 같은 줄로 이어 쓴 글자는 버리지 않고 뒤따르는 문단으로
@@ -599,9 +602,9 @@ const between = (s, a, b) => { const x = s.indexOf(a), y = s.indexOf(b, x); retu
   html = html.slice(0, a) + '<div class="meta-row">\n      ' + pills + '\n    </div>' + html.slice(b);
 }
 {
-  // 요약 없으면 빈 "요약" 상자를 남기지 않고 통째로 뺀다
+  // 요약 없으면 빈 "요약" 상자를 남기지 않고 통째로 뺀다. 글은 <p>에 담아 상자는 넓게, 줄 길이는 본문처럼 묶는다(template --prose-w)
   const [a, b] = between(html, '<div class="callout">', '</div>');
-  html = html.slice(0, a) + (summary ? '<div class="callout">' + inline(summary).replace(/\n/g, '<br>\n') + '</div>' : '') + html.slice(b);
+  html = html.slice(0, a) + (summary ? '<div class="callout"><p>' + inline(summary).replace(/\n/g, '<br>\n') + '</p></div>' : '') + html.slice(b);
 }
 // 치환값에 $& 같은 패턴이 있어도 그대로 들어가게 함수 replacer 사용
 html = html

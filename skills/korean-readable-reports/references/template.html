@@ -87,6 +87,17 @@
   a:hover { text-decoration: underline; }
   code { font-family: var(--mono); font-size: 0.88em; background: var(--gray-1); padding: 1px 6px; border-radius: 6px; }
   p { margin: 0.6em 0 1em; }
+  /* 읽는 글은 한 줄 약 60자(45rem = 720px)로 묶는다 — 1060px 단은 그림·표 몫이고, 그 폭의 글은 한 줄이 90자 가까이 됐다(2026-10-29 실측).
+     상자(목록·카드·details·요약)가 아니라 글 요소에만 건다: 상자를 좁히면 안의 표·그림까지 줄어든다. 그림·표를 품은 글 요소와 그림 안 글은 뺀다.
+     :has()를 모르는 브라우저는 이 규칙을 통째로 버려 예전처럼 넓게 보인다 */
+  :root { --prose-w: 45rem; }  /* rem: 근거 상자처럼 글씨가 작은 요소도 같은 오른쪽 끝에 맞춘다 */
+  :is(main, .callout) :is(p, li, blockquote, figcaption, .block-desc, .note):not(:has(img, svg, video, iframe, table, pre, .flow, .cards, .stats, .pair, .browser-mock)):not(:is(pre, .mermaid, .flow, .fig, table) *),
+  main .sources:not(.card-body > .sources) { max-width: var(--prose-w); }
+  /* 둘째 줄에 한 어절만 남는 줄을 줄인다(완전히 막지는 못함, 모르는 브라우저는 무시). 상속되므로 글 요소에만 — 표 칸·flow·stats·그림 글은 기본 그대로 */
+  :is(main, .callout) :is(p, li, blockquote, figcaption, .block-desc, .note, .sources):not(:is(pre, .mermaid, .flow, .fig, table) *) { text-wrap: pretty; }
+  :is(h1, h2, h3, h4, h5, h6, .card-title, details > summary) { text-wrap: balance; }
+  /* 목록 항목 안 표·그림은 위 pretty를 물려받지 않게 되돌린다(줄바꿈 방식은 건드리지 않는 낱개 속성) */
+  :is(table, pre, .mermaid, .flow, .stats, .cards, .fig) { text-wrap-style: auto; }
   strong { font-weight: 700; }
 
   /* ── 상단 스티키 바 ───────────────────────────────────────────────────────── */
@@ -125,6 +136,7 @@
     box-shadow: 0 1px 2px rgba(25,31,40,.04), 0 8px 24px rgba(25,31,40,.05);
     font-size: 1.08em; font-weight: 500; line-height: 1.8; color: var(--ink);
   }
+  .callout p { margin: 0; }
   .callout::before {
     content: "요약"; display: block; width: fit-content; margin-bottom: 10px;
     padding: 2px 11px; border-radius: 999px;
