@@ -235,7 +235,10 @@ easy.
     | components and how they connect (architecture) | Mermaid `flowchart LR` with role colors |
     | states and what moves between them | Mermaid `stateDiagram-v2` |
     | dates, durations, dependencies | Mermaid `gantt` |
-    | the same flow before and after a fix — where it breaks, what changes | two ` ```svg ` figures drawn on the same coordinates: the broken box/line `bad` (red dashed), the one changed box/line `chg` (orange), the rest gray — the reader spots the difference without reading (design-guide §10) |
+    | the same flow before and after a fix — where it breaks, what changes | two ` ```svg ` figures drawn on the same coordinates: the broken box/line `bad` (red dashed), the one changed box/line `chg` (orange), the rest gray — the reader spots the difference without reading (skeleton: `references/svg-figures.md` 4-7) |
+    | layers stacked in order (화면 → API → 업무 규칙 → 저장소) and which layer something happens in | ` ```svg ` layer stack — one `chg` layer (svg-figures.md 4-5) |
+    | events on dates where the gaps between them matter (설치 → 누락 발견 → 일주일 뒤 수정) | ` ```svg ` timeline with x proportional to the date (svg-figures.md 4-6); durations and dependencies stay Mermaid `gantt` |
+    | items placed by two judgments (효과 × 품) to pick what comes first | ` ```svg ` 2×2 quadrant; say what decided each position (svg-figures.md 4-8) |
     | parts that add up to a total, or values against a limit ("대출 14일 + 유예 3일 ≤ 연체 기준 17일") | ` ```bars ` — `label \| 대출 14일 + 유예 3일:chg \| note \| result`, plus `기준선 17 \| label` (design-guide §10) |
     | what a user receives or sees (message text, screen), before vs after | ` ```cards compare ` — speech-bubble pair; `[실패]` turns one red, `[추천]`/`[완료]` orange |
     | 3+ items compared on the same short attributes | table (an impact/effort scale reads well as `●○○`) |
@@ -281,9 +284,14 @@ easy.
     3. Focal: mark the one or two boxes the takeaway is about with `chg`
        (Mermaid `class A chg`, svg `class="node chg"`); everything else
        stays plain. If a 3-column table says the same thing, use the table.
-    When the layout itself is the message (the same flow before and after,
-    boxes on fixed coordinates), draw ` ```svg ` with right-angle connectors
-    (`d="M100 50 H160 V120"`); otherwise let Mermaid lay it out. Lint hints
+    Mermaid or hand-drawn ` ```svg `: if the report goes out `--offline`
+    (Mermaid shows as source text there) or the layout itself is the
+    message (before/after on the same coordinates, layer order, date
+    spacing, quadrant position), draw ` ```svg ` from a skeleton in
+    `references/svg-figures.md` — eight types (decision flowchart,
+    sequence, architecture, state, layers, timeline, before/after,
+    quadrant) with right-angle connectors (`d="M100 50 H160 V120"`);
+    otherwise let Mermaid lay it out. Lint hints
     when a flowchart passes 12 nodes or 16 arrows, more than two elements
     are `chg`, or an svg connector runs diagonally.
 
@@ -348,7 +356,9 @@ easy.
    (or clipped inside) its box, `#links` with no target, links to local files
    that don't exist, images that failed to load, and text in a ` ```svg ` /
    ` ```bars ` figure that leaves its box or overlaps other text, and Mermaid
-   diagrams that failed to parse (shown as source in a "문법 오류" box). Exit 1 → fix the md (usually a long unbroken name in a card) and
+   diagrams that failed to parse (shown as source in a "문법 오류" box).
+   ` ```svg ` connector problems print as warnings ("그림 연결선 경고") and
+   don't change the exit code — fix them anyway in a figure you just drew. Exit 1 → fix the md (usually a long unbroken name in a card) and
    re-render; exit 2 means no browser was found — say so instead of claiming the
    check passed. "Mermaid 미검사" (exit stays 0) means the diagram check did
    not run — CDN unreachable, browser timeout, or a temp file it could not
@@ -369,11 +379,15 @@ easy.
    shadows, thin borders) with right-angle connectors (ELK layout).
    Mermaid places boxes itself, so two Mermaid figures never line up. When
    the point is *where* a flow breaks or changes, draw ` ```svg ` by hand:
-   copy the skeleton in design-guide §10, keep every box at the same x/y in
-   the before and after figures, and color with classes only (`fill`/`style`
-   are stripped). Size a box from its text: Korean ≈ 1 font-size per
-   character, plus 24 for padding. `qa.js` reports figure text that leaves
-   its box or overlaps — widen the box or shorten the text, never ignore it.
+   copy the skeleton in `references/svg-figures.md`, keep every box at the
+   same x/y in the before and after figures, and color with classes only
+   (`fill`/`style` are stripped). Size a box from its text: Korean ≈ 1
+   font-size per character, plus 24 for padding. `qa.js` reports figure
+   text that leaves its box or overlaps — widen the box or shorten the text,
+   never ignore it. It also warns about connectors (through a box, label
+   touching a line, two lines stacked, ports closer than 12 or within 8 of a
+   corner, a line riding a border); the warnings don't fail qa, but fix them
+   in a new figure.
 
 ## Before / after
 
@@ -393,7 +407,7 @@ easy.
 - [ ] Korean reads native: no metaphor headings, translated verbs, colloquial intensifiers, announcing sentences, translationese (에 의해·하기 위해서는), or office habits (해당·진행합니다·하시기 바랍니다); one term per concept (references/ko-terms.md).
 - [ ] Every section was checked against the rule-15 table; ordered processing steps, exchanges, and architecture are drawn, not listed.
 - [ ] No section is a wall of sentences: each long one became keyword + core line in a flow, table, or cards, with the original sentences in `<details>`.
-- [ ] Each diagram answers one question: ≤ 9 nodes / 12 arrows (else overview + detail), one or two `chg` boxes, right-angle svg connectors.
+- [ ] Each diagram answers one question: ≤ 9 nodes / 12 arrows (else overview + detail), one or two `chg` boxes, right-angle svg connectors with no qa connector warnings.
 - [ ] Quotes only around someone else's words; emphasis is bold, once per paragraph at most.
 - [ ] Conditions (sample, period, basis) sit on `근거:` lines or in `<details>`; one parenthetical per sentence; each hedge said once.
 - [ ] No unglossed jargon / coined names / bare formulas.

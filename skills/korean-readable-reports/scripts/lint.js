@@ -67,7 +67,7 @@ const SOURCE_HEADING = /^(?:\d+[.)]\s*)?(?:출처|근거|참고(?:\s*(?:문헌|�
 // fill·stroke·style을 직접 쓰면 다크 모드에서 안 바뀌고 그림 색 세 가지(회색·빨강·주황)를 벗어난다. 화살촉은 class="ln"이 붙인다
 const SVG_TAGS = /^(svg|g|rect|circle|ellipse|line|polyline|polygon|path|text|tspan|title|desc)$/i;
 const SVG_ATTRS = /^(viewbox|width|height|x|y|x1|y1|x2|y2|cx|cy|r|rx|ry|d|points|dx|dy|transform|class|text-anchor|dominant-baseline|role|aria-label)$/i;
-const FIG_CLASSES = /^(node|ln|lbl|t1|t2|bad|chg|mute|bare)$/;
+const FIG_CLASSES = /^(node|ln|lbl|t1|t2|bad|chg|mute|bare|ext|data|zone|tag|hair|dot)$/;
 
 // ```bars 블록 해석(lint·render 공용). 한 줄 = "라벨 | 값들 | 보조 설명 | 결과", 값들 = "대출 14일 + 유예 3일:chg".
 // "기준선 17 | 연체 기준 17일" 줄은 세로 기준선. 끝의 :bad·:chg·:mute = 빨강·주황·점선(그림 색). lines = [[줄 번호, 글]]
@@ -507,7 +507,7 @@ function lint(src, opts = {}) {
         : fb.body.flatMap(([, l]) => [...(l.match(/^\s*class\s+\S+\s+([\w-]+)/) || []).slice(1), ...[...l.matchAll(/:::([\w-]+)/g)].map(m => m[1])]);
       if (used.some(t => ROLES.test(t)) && used.some(t => STATUSES.test(t))) warn(fb.open, 15, `${fb.kind}에 역할 색(ext·entry·logic·data)과 상태 색(done·fail·caution·info·neutral)이 섞임 — 한 그림에는 한 종류만`);
     }
-    const FIG_HINT = 'node·ln·lbl·t1·t2 + bad·chg·mute·bare';
+    const FIG_HINT = 'node·ln·lbl·t1·t2·tag·zone·hair·dot + ext·data·bad·chg·mute·bare';
     for (const fb of blocks) {
       if (!/^(flow|stats|cards|svg|bars)$/.test(fb.kind)) continue;
       const filled = fb.body.filter(([, l]) => l.trim());

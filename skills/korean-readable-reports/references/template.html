@@ -47,9 +47,10 @@
     --content-w: 1060px;
     /* 역할 색(```flow 카드·Mermaid 역할 클래스 공통): 상태 색(초록·빨강·주황·노랑)과 겹치지 않게 */
     --role-ext: #fcf0f6; --role-entry: #f3f1fb; --role-logic: #eef6fb; --role-data: #ecf7f5;
-    /* 그림 색(```svg·```bars·```cards compare·●○○): 회색 = 보통, 빨강 = 문제, 주황 = 바뀌는 곳·추천. 이 세 가지뿐.
-       -ink는 글자용(흰 바탕 대비 4.5 이상), 나머지는 선·채움용 */
-    --fig-node: #eef0f2; --fig-edge: #9aa1a9; --fig-mute: #5f6670; --fig-seg: #c3c8cf;
+    /* 그림 색(```svg·```bars·```cards compare·●○○): 강조는 셋 — 회색 = 보통, 빨강 = 문제, 주황 = 바뀌는 곳·추천.
+       역할(svg의 ext·data)은 위 역할 색을 옅게 깔 뿐 강조가 아니다. -ink는 글자용(흰 바탕 대비 4.5 이상), 나머지는 선·채움용.
+       선 색 --fig-edge는 흰 바탕 대비 3 이상(예전 #9aa1a9는 2.6이라 가는 선이 흐렸다) */
+    --fig-node: #eef0f2; --fig-edge: #858d96; --fig-zone: #f6f7f9; --fig-mute: #5f6670; --fig-seg: #c3c8cf;
     --fig-bad: #d6332f; --fig-bad-bg: #fdeceb; --fig-bad-ink: #b4232e;
     --fig-chg: #e8710a; --fig-chg-bg: #fff1e0; --fig-chg-ink: #a84f00;
   }
@@ -62,7 +63,7 @@
     --blue-7: #9fd3ee; --green-7: #a9dc9c; --yellow-7: #fbd97a; --red-7: #f4a3a0; --orange-7: #f6b27a;
     --shadow-sm: 0 1px 2px rgba(0,0,0,.4); --shadow-md: 0 6px 16px rgba(0,0,0,.45);
     --role-ext: #2e1a25; --role-entry: #24223a; --role-logic: #13303f; --role-data: #122f2c;
-    --fig-node: #2a2f35; --fig-edge: #6a7078; --fig-mute: #a2a8b4; --fig-seg: #4a5058;
+    --fig-node: #2a2f35; --fig-edge: #6a7078; --fig-zone: #1c2027; --fig-mute: #a2a8b4; --fig-seg: #4a5058;
     --fig-bad-bg: #3b2020; --fig-bad-ink: #f0706a; --fig-chg-bg: #3d2a12; --fig-chg-ink: #f6a04d;
   }
 
@@ -248,19 +249,34 @@
   .fig text { fill: var(--ink); font-size: 15px; }
   .fig .t1 { font-size: 17px; font-weight: 700; }
   .fig .t2 { font-size: 13.5px; fill: var(--fig-mute); }
-  .fig .lbl { font-size: 13.5px; font-weight: 700; fill: var(--fig-mute); }
+  /* 선 라벨은 바탕색 테두리(후광)를 글자 뒤에 깔아 지나가는 선이 글자를 가르지 않게 — 그래도 선과는 6 이상 띄운다(qa 경고) */
+  .fig .lbl { font-size: 13.5px; font-weight: 700; fill: var(--fig-mute); paint-order: stroke; stroke: var(--surface); stroke-width: 5px; stroke-linejoin: round; }
+  .fig .tag { font-size: 12px; font-weight: 700; letter-spacing: .06em; fill: var(--fig-mute); }
   .fig text.bad { fill: var(--fig-bad-ink); font-weight: 700; }
   .fig text.chg { fill: var(--fig-chg-ink); font-weight: 700; }
-  .fig .node { fill: var(--fig-node); stroke: var(--fig-edge); stroke-width: 1.6; }
-  .fig .node.bad { fill: var(--fig-bad-bg); stroke: var(--fig-bad); stroke-width: 2.2; stroke-dasharray: 7 5; }
-  .fig .node.chg { fill: var(--fig-chg-bg); stroke: var(--fig-chg); stroke-width: 3.5; }
-  .fig .node.mute { fill: none; stroke-dasharray: 7 5; }
-  .fig .ln { fill: none; stroke: var(--fig-edge); stroke-width: 2.6; marker-end: url(#fig-arr); }
-  .fig .ln.bad { stroke: var(--fig-bad); stroke-dasharray: 8 6; marker-end: url(#fig-arr-bad); }
-  .fig .ln.chg { stroke: var(--fig-chg); stroke-width: 3.4; marker-end: url(#fig-arr-chg); }
-  .fig .ln.mute { stroke: var(--fig-mute); stroke-dasharray: 2 6; marker-end: url(#fig-arr-mute); }
+  /* 편집형(diagram-design): 그림자 없이 가는 테두리. 역할(ext 외부 = 흰 바탕 점선, data 저장소 = 옅은 청록)을 먼저 쓰고
+     강조(bad·chg)를 뒤에 써서 "data chg"처럼 겹쳐도 강조가 이긴다 */
+  .fig .node { fill: var(--fig-node); stroke: var(--fig-edge); stroke-width: 1.25; }
+  .fig .node.ext { fill: var(--surface); stroke-dasharray: 6 4; }
+  .fig .node.data { fill: var(--role-data); }
+  .fig .node.mute { fill: none; stroke-dasharray: 6 4; }
+  .fig .node.bad { fill: var(--fig-bad-bg); stroke: var(--fig-bad); stroke-width: 1.5; stroke-dasharray: 6 4; }
+  .fig .node.chg { fill: var(--fig-chg-bg); stroke: var(--fig-chg); stroke-width: 2.25; stroke-dasharray: none; }
+  .fig .zone { fill: var(--fig-zone); stroke: var(--line); stroke-width: 1; }
+  .fig .zone.chg { stroke: var(--fig-chg); }
+  .fig .ln { fill: none; stroke: var(--fig-edge); stroke-width: 1.5; marker-end: url(#fig-arr); }
+  /* mute(점선)를 강조보다 먼저 — "ln mute chg"(강조한 응답)는 점선을 지키고 색·화살촉은 주황 */
+  .fig .ln.mute { stroke: var(--fig-mute); stroke-dasharray: 2 5; marker-end: url(#fig-arr-mute); }
+  .fig .ln.bad { stroke: var(--fig-bad); stroke-dasharray: 6 4; marker-end: url(#fig-arr-bad); }
+  .fig .ln.chg { stroke: var(--fig-chg); stroke-width: 2.25; marker-end: url(#fig-arr-chg); }
   .fig .ln.bare { marker-end: none; }
-  /* 화살촉은 body 첫머리의 숨은 <svg class="fig-defs">에 한 벌만 — 그림마다 marker를 쓰지 않는다 */
+  /* 축·생명선·구분선(hair)과 점(dot): 관계가 아니라 자리를 알려 준다 — qa 연결선 검사 대상이 아니다 */
+  .fig .hair { fill: none; stroke: var(--fig-edge); stroke-width: 1; }
+  .fig .hair.mute { stroke-dasharray: 4 4; }
+  .fig .dot { fill: var(--fig-mute); stroke: none; }
+  .fig .dot.chg { fill: var(--fig-chg); } .fig .dot.bad { fill: var(--fig-bad); }
+  /* 화살촉은 body 첫머리의 숨은 <svg class="fig-defs">에 한 벌만 — 그림마다 marker를 쓰지 않는다.
+     크기는 그림 단위 10으로 고정(userSpaceOnUse) — 선 굵기를 따라가면 chg 선만 화살촉이 커졌다 */
   .fig-defs { position: absolute; width: 0; height: 0; overflow: hidden; }
   #fig-arr path { fill: var(--fig-edge); } #fig-arr-bad path { fill: var(--fig-bad); }
   #fig-arr-chg path { fill: var(--fig-chg); } #fig-arr-mute path { fill: var(--fig-mute); }
@@ -404,7 +420,7 @@
       --blue-7: #1957c2; --green-7: #007a52; --yellow-7: #843215; --red-7: #b4232e; --orange-7: #8a4f08;
       --role-ext: #fcf0f6; --role-entry: #f3f1fb; --role-logic: #eef6fb; --role-data: #ecf7f5;
       --code-bg: #f3f5f8; --code-text: #191f28; --code-muted: #4b5563;
-      --fig-node: #eef0f2; --fig-edge: #9aa1a9; --fig-mute: #5f6670; --fig-seg: #c3c8cf;
+      --fig-node: #eef0f2; --fig-edge: #858d96; --fig-zone: #f6f7f9; --fig-mute: #5f6670; --fig-seg: #c3c8cf;
       --fig-bad-bg: #fdeceb; --fig-bad-ink: #b4232e; --fig-chg-bg: #fff1e0; --fig-chg-ink: #a84f00;
     }
     /* 브라우저 기본값(배경 그래픽 끔)이면 색 바탕이 빠져 흰 글자(요약 라벨·추천 태그)가 흰 종이에 사라진다 */
@@ -416,10 +432,10 @@
 </head>
 <body>
 <svg class="fig-defs" aria-hidden="true" focusable="false"><defs>
-  <marker id="fig-arr" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z"/></marker>
-  <marker id="fig-arr-bad" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z"/></marker>
-  <marker id="fig-arr-chg" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z"/></marker>
-  <marker id="fig-arr-mute" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z"/></marker>
+  <marker id="fig-arr" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 1.5L10 5L0 8.5z"/></marker>
+  <marker id="fig-arr-bad" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 1.5L10 5L0 8.5z"/></marker>
+  <marker id="fig-arr-chg" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 1.5L10 5L0 8.5z"/></marker>
+  <marker id="fig-arr-mute" viewBox="0 0 10 10" refX="10" refY="5" markerWidth="10" markerHeight="10" markerUnits="userSpaceOnUse" orient="auto"><path d="M0 1.5L10 5L0 8.5z"/></marker>
 </defs></svg>
 
 <header class="topbar">

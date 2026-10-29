@@ -1292,5 +1292,124 @@ test('qa: 렌더하지 않은 옆 보고서로 가는 링크는 exit 1, 렌더�
   q = runQa(r.output);
   assert.equal(q.status, 0, q.stdout + q.stderr);
 });
+// 연결선 검사는 글자 넘침과 달리 권고다. 실제 렌더를 거쳐 SVG class·변환·사용자 좌표를 함께 확인한다.
+const connectorSvg = inner => '```svg\n<svg viewBox="0 0 600 320" aria-label="연결선 시험">\n' + inner + '\n</svg>\n```\n';
+function connectorQa(figures) {
+  if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');
+  const r = render('# 제목\n\n' + figures.map(connectorSvg).join('\n'), ['--no-lint']);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  const q = runQa(r.output);
+  assert.equal(q.status, 0, q.stdout + q.stderr);
+  assert.ok((q.stdout.match(/그림 연결선 경고 \d+곳/g) || []).length <= 1, q.stdout);
+  return q.stdout;
+}
+const connectorQuiet = figures => {
+  const out = connectorQa(figures);
+  assert.ok(!/그림 연결선 경고/.test(out), out);
+};
+test('qa 연결선: 정상 흐름·분기·마름모·타임라인·시퀀스·배지·머리꼬리 이음은 조용', () => {
+  connectorQuiet([
+    '<rect class="node" x="20" y="80" width="100" height="80"/><rect class="node" x="240" y="80" width="100" height="80"/><rect class="node" x="460" y="80" width="100" height="80"/><path class="ln" d="M120 120 H180 V200 H220 V120 H240"/><path class="ln" d="M340 120 H460"/>',
+    '<rect class="node" x="20" y="80" width="100" height="80"/><rect class="node" x="300" y="40" width="100" height="80"/><rect class="node" x="300" y="180" width="100" height="80"/><path class="ln" d="M120 105 H200 V80 H300"/><path class="ln" d="M120 135 H220 V220 H300"/>',
+    '<polygon class="node" points="300,60 340,100 300,140 260,100"/><line class="ln" x1="100" y1="100" x2="260" y2="100"/><line class="ln" x1="340" y1="100" x2="500" y2="100"/>',
+    '<line class="hair" x1="50" y1="150" x2="550" y2="150"/><circle class="dot" cx="100" cy="150" r="5"/><circle class="dot" cx="300" cy="150" r="5"/><circle class="dot" cx="500" cy="150" r="5"/>',
+    '<line class="hair" x1="100" y1="30" x2="100" y2="290"/><line class="hair" x1="500" y1="30" x2="500" y2="290"/><line class="ln" x1="100" y1="100" x2="500" y2="100"/><line class="ln" x1="500" y1="200" x2="100" y2="200"/>',
+    '<rect class="node" x="180" y="80" width="140" height="140"/><path class="ln" d="M320 150 H550"/><rect x="210" y="100" width="40" height="24"/><text class="tag" x="230" y="117" text-anchor="middle">예</text>',
+    '<path class="ln" d="M50 150 H250"/><polyline class="ln" points="250,150 500,150"/>',
+  ]);
+});
+const connectorKinds = ['선이 상자를 지나감', '라벨이 선에 붙음', '선이 겹침', '연결점이 붙음', '모서리에 연결', '테두리를 따라감'];
+const connectorFaults = [
+  '<rect class="node" x="200" y="100" width="100" height="100"/><line class="ln" x1="50" y1="150" x2="450" y2="150"/>',
+  '<path class="ln" d="M50 150 H550"/><text class="lbl" x="250" y="150">승인</text>',
+  '<path class="ln" d="M50 120 H450"/><polyline class="ln" points="200,120 500,120"/>',
+  '<rect class="node" x="200" y="80" width="100" height="140"/><path class="ln" d="M300 120 H400 V40 H500"/><path class="ln" d="M300 130 H420 V260 H500"/>',
+  '<rect class="node" x="200" y="100" width="100" height="100"/><path class="ln" d="M300 104 H450"/>',
+  '<rect class="node" x="200" y="100" width="100" height="100"/><path class="ln" d="M140 100 H360"/>',
+];
+for (const [i, kind] of connectorKinds.entries()) {
+  test('qa 연결선: ' + kind + ' 경고에도 exit 0', () => {
+    const out = connectorQa([connectorFaults[i]]);
+    assert.ok(/그림 연결선 경고 [1-9]\d*곳/.test(out) && out.includes(kind), out);
+  });
+}
+test('qa 연결선: 라벨 여백 5는 경고, 8은 통과', () => {
+  // dominant-baseline·서체에 기대지 않고 렌더한 text bbox의 오른쪽에서 5/8만큼 떨어진 세로선을 만든다.
+  // 한 글자 너비 대신 text-anchor=end의 x를 사용한다.
+  const label = gap => '<text class="lbl" x="250" y="160" text-anchor="end">승인</text><line class="ln" x1="' + (250 + gap) + '" y1="80" x2="' + (250 + gap) + '" y2="240"/>';
+  assert.ok(connectorQa([label(5)]).includes('라벨이 선에 붙음'));
+  connectorQuiet([label(8)]);
+});
+test('qa 연결선: 같은 변 연결점 간격 10은 경고, 14는 통과', () => {
+  const ports = gap => '<rect class="node" x="200" y="80" width="100" height="140"/><path class="ln" d="M300 120 H400 V40 H500"/><path class="ln" d="M300 ' + (120 + gap) + ' H420 V260 H500"/>';
+  assert.ok(connectorQa([ports(10)]).includes('연결점이 붙음'));
+  connectorQuiet([ports(14)]);
+});
+test('qa 연결선: translate·scale은 루트 SVG 사용자 단위로 검사', () => {
+  // 로컬 간격 7은 루트에서 14: 연결점을 붙었다고 판단하면 변환/단위가 잘못됐다.
+  connectorQuiet(['<g transform="translate(30 20) scale(2)"><rect class="node" x="50" y="30" width="50" height="100"/><path class="ln" d="M100 65 H160 V10 H220"/><path class="ln" d="M100 72 H180 V140 H220"/></g>']);
+  assert.ok(connectorQa(['<g transform="translate(30 20) scale(2)"><rect class="node" x="80" y="40" width="50" height="50"/><path class="ln" d="M10 65 H240"/></g>']).includes('선이 상자를 지나감'));
+});
+test('qa 연결선: 다중 M의 빈 구간·직각 교차는 선 겹침 아님', () => {
+  connectorQuiet([
+    '<rect class="node" x="230" y="100" width="100" height="100"/><path class="ln" d="M50 150 H150 M400 150 H550"/>',
+    '<path class="ln" d="M50 150 H550"/><path class="ln" d="M300 50 V270"/>',
+  ]);
+});
+test('qa 연결선: 원·타원·닫힌 path 노드 내부 통과도 경고', () => {
+  for (const node of ['<circle class="node" cx="300" cy="150" r="50"/>', '<ellipse class="node" cx="300" cy="150" rx="80" ry="40"/>', '<path class="node" d="M250 100 H350 V200 H250 Z"/>']) {
+    assert.ok(connectorQa([node + '<path class="ln" d="M50 150 H550"/>']).includes('선이 상자를 지나감'));
+  }
+});
+test('qa 연결선: 분기·합류 공통 줄기도 겹침 경고', () => {
+  for (const lines of [
+    '<path class="ln" d="M50 150 H250 V50 H500"/><path class="ln" d="M50 150 H250 V250 H500"/>',
+    '<path class="ln" d="M50 50 H250 V150 H500"/><path class="ln" d="M50 250 H250 V150 H500"/>',
+  ]) assert.ok(connectorQa([lines]).includes('선이 겹침'));
+});
+test('qa 연결선: 이름 없는 서로 다른 선의 같은 결함도 각각 보고', () => {
+  const out = connectorQa(['<rect class="node" x="260" y="90" width="80" height="100"/><path class="ln" d="M50 120 H550"/><path class="ln" d="M50 160 H550"/>']);
+  assert.equal((out.match(/선이 상자를 지나감/g) || []).length, 2, out);
+});
+test('qa 연결선: mute 선도 자기 노드에 중간에 되들어가면 경고', () => {
+  const out = connectorQa(['<rect class="node" x="200" y="100" width="100" height="100"/><path class="ln mute" d="M300 150 H400 V50 H250 V150 H450"/>']);
+  assert.ok(out.includes('선이 상자를 지나감'), out);
+});
+test('qa 연결선: 원의 bounding box 모서리만 지나가면 조용', () => {
+  connectorQuiet(['<circle class="node" cx="300" cy="150" r="50"/><path class="ln" d="M150 105 H270"/>']);
+});
+test('qa 연결선: 길이 상한 40000 초과는 미검사로 알리고 exit 0', () => {
+  const out = connectorQa(['<path class="ln" d="M0 150 H40001"/>']);
+  assert.ok(/연결선[^\n]*미검사|미검사[^\n]*연결선/.test(out), out);
+});
+test('qa 연결선: 열린 path 노드의 암묵닫힘도 명시적 Z처럼 경계 2단위 제외', () => {
+  connectorQuiet(['', ' Z'].map(close => '<path class="node" d="M200 100 H300 V200' + close + '"/><path class="ln" d="M210 109 L290 189"/>'));
+});
+// 2026-10-29 검수: 빈 경로·크기 0 상자·역행렬 없는 transform 하나가 기하 API 예외로 qa 전체를 "측정 실패"(exit 2)로 만들었다
+test('qa 연결선: 측정할 수 없는 그림은 그 그림만 미검사, 다른 검사는 그대로', () => {
+  const out = connectorQa([
+    '<path class="ln" d=""/><rect class="node" x="10" y="10" width="0" height="40"/><path class="ln" d="M10 30 H200"/>',
+    '<g transform="scale(1 0)"><path class="ln" d="M10 30 H200"/></g><polyline class="ln" points=""/>',
+  ]);
+  assert.ok(!/측정 실패/.test(out), out);
+});
+test('qa 연결선: 모서리 간격 7.8은 경고, 8·8.2는 통과(회전 변환의 계산 오차 포함)', () => {
+  const corner = (y, g = '') => '<g' + g + '><rect class="node" x="200" y="100" width="100" height="100"/><path class="ln" d="M150 ' + y + ' H198"/></g>';
+  assert.ok(connectorQa([corner(107.8)]).includes('모서리에 연결'));
+  connectorQuiet([corner(108), corner(108.2), corner(108, ' transform="translate(200 0) rotate(15)"')]);
+});
+// svg-figures.md의 뼈대 8종은 복사해 쓰는 원본이다 — lint 구조 경고·qa 글자 문제·연결선 경고가 하나라도 있으면 복사본마다 퍼진다
+test('svg 뼈대 8종: lint 구조 경고 0, qa 문제·연결선 경고 0', () => {
+  const doc = fs.readFileSync(path.join(__dirname, '..', 'references', 'svg-figures.md'), 'utf8');
+  const figs = doc.match(/```svg\n[\s\S]*?\n```/g);
+  assert.equal(figs.length, 8);
+  const struct = d => lint(fm + '# 제목\n\n' + d).filter(f => f.rule === '구조').map(f => f.msg).join('\n');
+  for (const f of figs) assert.equal(struct(f + '\n'), '', f.slice(0, 120));
+  if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');
+  const r = render('# 제목\n\n' + figs.join('\n\n') + '\n', ['--no-lint']);
+  const q = runQa(r.output);
+  assert.equal(q.status, 0, q.stdout + q.stderr);
+  assert.ok(!/그림 연결선|미검사/.test(q.stdout), q.stdout);
+});
 console.log(`${passed} passed, ${failed} failed${skipped ? `, ${skipped} skipped` : ''}; artifacts: ${dir}`);
 process.exit(failed ? 1 : 0);
