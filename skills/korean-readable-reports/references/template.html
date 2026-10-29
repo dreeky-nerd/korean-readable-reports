@@ -367,6 +367,8 @@
   /* 우아한형제들·토스 실물 관찰(design-guide.md §7): 실제 화면·로그 캡처는 카드형으로 */
   .evidence-card { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px 20px; margin: 16px 0; }
   .evidence-card img { max-width: 100%; border-radius: var(--radius-sm); display: block; }
+  /* md 그림(![설명](경로))은 칸 폭에 맞춰 줄인다 — 큰 스크린샷이 페이지 가로 스크롤을 만들었다(2026-10-29 qa: 2200px 그림이 1280px 화면을 1030px 넘김) */
+  img { max-width: 100%; height: auto; }
   .evidence-card .tag-row { display: flex; gap: 6px; margin-bottom: 10px; }
   .evidence-card figcaption { color: var(--muted); font-size: 0.86em; margin-top: 8px; }
 

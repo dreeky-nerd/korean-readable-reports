@@ -1236,6 +1236,13 @@ test('qa: 그림 안 글자가 상자 밖으로 나가거나 겹치면 exit 1, �
   q = runQa(good.output);
   assert.equal(q.status, 0, q.stdout + q.stderr);
 });
+test('qa: 화면보다 넓은 md 그림도 칸 폭에 맞춰 줄어 넘침 없음', () => {
+  if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');
+  fs.writeFileSync(path.join(dir, 'wide.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="300"><rect width="2200" height="300" fill="#ccc"/></svg>');
+  const r = render('# 제목\n\n## 그림\n\n![넓은 그림](wide.svg)\n');
+  const q = runQa(r.output);
+  assert.equal(q.status, 0, q.stdout + q.stderr);
+});
 test('qa: 칸 밖으로 나간 글자·대상 없는 #링크는 exit 1', () => {
   if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');
   const f = path.join(dir, 'qa-bad.html');
