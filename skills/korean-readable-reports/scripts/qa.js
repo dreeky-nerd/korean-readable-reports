@@ -13,7 +13,9 @@
  *     이미지  불러오지 못한 그림
  *     그림    ```svg·```bars 안 글자가 자기 상자·그림 밖으로 나감, 다른 상자나 글자와 겹침(폭과 무관하게 한 번만 보고)
  *     파일    상대 링크가 가리키는 파일이 없음(옆 보고서 md를 렌더하지 않아 .html이 없는 경우 등)
- *   브라우저 위치를 바꾸려면 KRR_BROWSER=경로
+ *     Mermaid 문법 오류로 그림 대신 소스가 보임 · 같은 id를 받은 그림(한 칸에 포개짐) — 문제.
+ *             12초 안에 안 그려짐(CDN이 막혔거나 느림)·접힌 칸 안이라 미검사 — 알리기만
+ *   브라우저 위치를 바꾸려면 KRR_BROWSER=경로. macOS는 Playwright의 chrome-headless-shell이 있으면 먼저 쓴다
  *
  * 사례: 2026-09-30 flow 설명의 `InvoiceMailStatusNotifyTasklet의`가 카드 밖으로 37px 삐져나온 것을 눈으로 보고서야 찾았다
  * (design-guide.md "좁은 카드의 긴 이름"). 이 검사가 그런 넘침을 렌더 직후에 잡는다.
@@ -35,6 +37,18 @@ function findBrowser() {
     : process.platform === 'darwin'
       ? ['Google Chrome', 'Microsoft Edge', 'Chromium'].map(n => `/Applications/${n}.app/Contents/MacOS/${n}`)
       : (process.env.PATH || '').split(':').flatMap(d => ['google-chrome', 'google-chrome-stable', 'chromium', 'chromium-browser', 'microsoft-edge'].map(n => path.join(d, n)));
+  // macOS: node가 띄운 Chrome 앱은 화면 동기화(CVDisplayLink)를 못 얻어 Mermaid가 있는 페이지에서 끝나지 않았다
+  // (2026-10-29 실측: 같은 페이지가 셸에서 직접 3초, node에서 50초 초과). 화면이 필요 없는 chrome-headless-shell
+  // (Playwright가 설치)은 1.5초 — 있으면 먼저 쓴다
+  if (process.platform === 'darwin') {
+    const root = path.join(os.homedir(), 'Library', 'Caches', 'ms-playwright');
+    let shells = [];
+    try {
+      shells = fs.readdirSync(root).filter(d => d.startsWith('chromium_headless_shell-')).sort().reverse()
+        .flatMap(d => ['arm64', 'x64'].map(a => path.join(root, d, `chrome-headless-shell-mac-${a}`, 'chrome-headless-shell')));
+    } catch (e) { /* 없으면 Chrome 앱 */ }
+    cands.unshift(...shells);
+  }
   return cands.find(p => fs.existsSync(p)) || null;
 }
 
@@ -100,20 +114,64 @@ function next(i) {
 next(0);
 </script></body></html>`;
 
+// 브라우저를 한 번 띄워 page를 열고, 페이지가 MARK…MARK 사이에 적은 결과를 읽는다.
+// 프로필 폴더는 실행마다 따로 — 앞 브라우저가 아직 닫히는 중이면 같은 프로필을 잠가 두어 다음 실행이 90초 동안 멈췄다
+function dump(browser, tmp, page, mark, wait, limit = 90000) {
+  const r = spawnSync(browser, ['--headless', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-extensions',
+    `--user-data-dir=${path.join(tmp, 'profile-' + mark)}`, '--window-size=1400,1000', wait, '--dump-dom', pathToFileURL(page).href],
+    {encoding: 'utf8', timeout: limit, maxBuffer: 64 * 1024 * 1024});
+  // 결과 앞뒤 표식만 찾는다 — 페이지 안 스크립트 소스에 적힌 표식("+…+")은 따옴표가 있어 걸리지 않는다
+  const m = [...(r.stdout || '').matchAll(new RegExp(mark + '([^<\\s"]*)' + mark, 'g'))].pop();
+  if (!m) return {error: (r.error && r.error.message) || (r.stderr || '').trim().split('\n').pop() || '결과 표식 없음'};
+  return {value: JSON.parse(decodeURIComponent(m[1]))};
+}
+
+// Mermaid 검사는 폭별 iframe 밖에서 원래 페이지 그대로 한 번. 폭별 iframe 안에서 CDN 모듈을 받으면 Mermaid 있는 문서 하나에
+// 66초가 걸려(2026-10-29 실측, 제한 90초) 폭 검사에서는 모듈을 빼고, 그림은 여기서 따로 본다.
+// 접힌 <details> 안(data-pending)은 펼칠 때 그리므로 미검사로 센다
+const MM_PROBE = `<script>(function () {
+  var t0 = Date.now(), all = function () { return [].slice.call(document.querySelectorAll('pre.mermaid')); };
+  var settled = function () { return all().every(function (p) { return p.hasAttribute('data-processed') || p.hasAttribute('data-pending') || p.classList.contains('mermaid-error'); }); };
+  var done = function () {
+    var r = { error: 0, missing: 0, pending: 0, dup: 0 }, ids = {};
+    all().forEach(function (p) {
+      if (p.classList.contains('mermaid-error')) r.error++;
+      else if (p.hasAttribute('data-pending')) r.pending++;
+      else if (!p.hasAttribute('data-processed') || !p.querySelector('svg')) r.missing++;
+      var s = p.querySelector('svg[id]'); if (s) ids[s.id] = (ids[s.id] || 0) + 1;
+    });
+    for (var k in ids) if (ids[k] > 1) r.dup += ids[k];
+    var o = document.getElementById('krr-qa-mm') || document.body.appendChild(document.createElement('pre'));
+    o.id = 'krr-qa-mm'; o.textContent = 'KRRMM' + encodeURIComponent(JSON.stringify(r)) + 'KRRMM';
+  };
+  // 다 그려지거나(오류 포함) 12초가 지날 때까지 0.2초마다 상태를 다시 적는다(마지막 것만 읽음)
+  window.addEventListener('load', function () { done(); (function again() { if (!settled() && Date.now() - t0 < 12000) setTimeout(function () { done(); again(); }, 200); })(); });
+})();</script>`;
+
 function measure(browser, file) {
   // <base>로 원래 폴더를 가리켜 상대 경로 그림이 그대로 열리게 한다
   const base = `<base href="${pathToFileURL(path.dirname(path.resolve(file))).href}/">`;
-  const src = fs.readFileSync(file, 'utf8').replace(/<head([^>]*)>/i, m => m + base);
+  const html = fs.readFileSync(file, 'utf8').replace(/<head([^>]*)>/i, m => m + base);
+  // 폭 검사에서는 Mermaid 모듈을 뺀다(render.js --offline과 같은 방식) — Mermaid 칸은 원래 가로 스크롤이라 넘침 검사 대상이 아니다
+  const src = html.replace(/<script type="module">[\s\S]*?<\/script>/g, '');
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'krr-qa-'));
   try {
     const page = path.join(tmp, 'page.html');
     fs.writeFileSync(page, HARNESS(src, WIDTHS));
-    const r = spawnSync(browser, ['--headless', '--disable-gpu', '--no-first-run', '--no-default-browser-check', '--disable-extensions',
-      `--user-data-dir=${path.join(tmp, 'profile')}`, '--window-size=1400,1000', '--virtual-time-budget=15000', '--dump-dom', pathToFileURL(page).href],
-      {encoding: 'utf8', timeout: 90000, maxBuffer: 64 * 1024 * 1024});
-    const m = (r.stdout || '').match(/KRRQA([^<\s]*)KRRQA/);
-    if (!m) return {error: (r.error && r.error.message) || (r.stderr || '').trim().split('\n').pop() || '결과 표식 없음'};
-    return {results: JSON.parse(decodeURIComponent(m[1]))};
+    const q = dump(browser, tmp, page, 'KRRQA', '--virtual-time-budget=15000');
+    if (q.error) return q;
+    let mermaid = null;
+    if (/<pre class="mermaid/.test(html) && /<script type="module">/.test(html)) {
+      // 임시 폴더에 쓴다(<base>가 원래 폴더를 가리켜 상대 경로는 그대로 열림) — 보고서 폴더에는 아무것도 만들지 않는다
+      const mpage = path.join(tmp, 'mermaid.html');
+      try {
+        fs.writeFileSync(mpage, html.replace(/<\/body>/i, () => MM_PROBE + '</body>'));
+        // 45초 상한: CDN이 막힌 환경(폐쇄망·샌드박스)에서는 브라우저가 끝나지 않고 기다린다
+        const r = dump(browser, tmp, mpage, 'KRRMM', '--virtual-time-budget=20000', 45000);
+        mermaid = r.error ? {failed: r.error} : r.value;
+      } catch (e) { mermaid = {failed: e.message}; }
+    }
+    return {results: q.value, mermaid};
   } finally {
     try { fs.rmSync(tmp, {recursive: true, force: true}); } catch (e) { /* 브라우저가 프로필을 늦게 놓으면 남는다 — tmp라 둔다 */ }
   }
@@ -153,6 +211,16 @@ function main() {
   if (figs.size) {
     console.log(`  그림 안 글자 문제 ${figs.size}곳 — 상자를 넓히거나 글자를 줄이거나 좌표를 옮기기:`);
     for (const f of figs.values()) console.log(`    - 그림 ${f.fig}: ${f.kind} ${f.px}px  "${f.text}"`);
+  }
+  const mm = m.mermaid;
+  // 폭 검사는 이미 끝났으므로 Mermaid만 못 본 것은 측정 실패(exit 2)로 치지 않고 알린다
+  if (mm && mm.failed) console.log(`  Mermaid 미검사 — ${mm.failed}. CDN이 막혔거나 브라우저가 시간 안에 끝나지 않음 등, 브라우저로 열어 확인`);
+  else if (mm) {
+    if (mm.error) console.log(`  Mermaid 문법 오류 ${mm.error}개 — 그림 대신 소스 글자가 보임("문법 오류" 상자를 찾아 고치기)`);
+    if (mm.dup) console.log(`  Mermaid 그림 ${mm.dup}개가 같은 id — 한 칸에 포개져 그려짐(템플릿 renderOne의 고유 id 확인)`);
+    if (mm.missing) console.log(`  Mermaid ${mm.missing}개가 12초 안에 그려지지 않음 — CDN이 막혔거나(폐쇄망·샌드박스) 느림. 문제 수에는 넣지 않으니 브라우저로 열어 확인`);
+    if (mm.pending) console.log(`  접힌 칸 안 Mermaid ${mm.pending}개는 펼칠 때 그리므로 미검사`);
+    problems += mm.error + mm.dup;
   }
   problems += anchors.size + images.size + figs.size;
   const files = missingFiles(file);

@@ -68,8 +68,10 @@ easy.
    봅니다") or the tag (`[추정]`), not "~라고 봅니다 [추정]". Lint hints
    when a document carries 12+ long parentheticals or 3+ lines holding two,
    and on every doubled hedge. Hard limits: summary ≤ 3 sentences, ≤ 7 H2
-   sections, ≤ 12 lines of prose per section — anything past that goes behind
-   `<details>` or into an appendix. Folding hides text but doesn't shorten
+   sections, ≤ 12 lines of prose per section — past that, first turn the
+   prose into a picture, table, or cards (rule 15, "text mass"; a procedure
+   the reader performs stays a numbered list), then fold
+   what is left behind `<details>` or into an appendix. Folding hides text but doesn't shorten
    the document: lint hints past 6,000 readable characters (tables and
    `<details>` counted; sources, `근거:` lines, and code not) — cut repeats or
    split the document. (6,000 is about the 75th percentile of 198 reports on
@@ -237,6 +239,7 @@ easy.
     | parts that add up to a total, or values against a limit ("대출 14일 + 유예 3일 ≤ 연체 기준 17일") | ` ```bars ` — `label \| 대출 14일 + 유예 3일:chg \| note \| result`, plus `기준선 17 \| label` (design-guide §10) |
     | what a user receives or sees (message text, screen), before vs after | ` ```cards compare ` — speech-bubble pair; `[실패]` turns one red, `[추천]`/`[완료]` orange |
     | 3+ items compared on the same short attributes | table (an impact/effort scale reads well as `●○○`) |
+    | the same bold item labels repeated under 3+ subjects (list items like `1. **비용:** …`, `2. **속도:** …` under `### A`, `### B`, `### C`) | subject × label table at the top of the section — cells are keywords, `●○○`, or a badge; the sentences go under it in `<details>` |
     | 2–4 key numbers that *are* the finding (rule 6 exception) | ` ```stats ` cards — `label \| value \| note \| status`, placed right after the summary or at the top of the section |
     | 2+ parallel items that each need a sentence or bullets (modules, findings, options) | ` ```cards ` — blank line between cards, first line is the title; mark the chosen option `[추천]`. Layout adapts to text length (short → grid, medium → 2 columns, long → one card per row), so keep titles short and put detail in the body |
     | a number over 3+ points or across 3+ items | table; a chart only when the trend itself is the finding (design-guide §4) |
@@ -247,6 +250,42 @@ easy.
     sentence says it), and a procedure the reader performs ("넣습니다 →
     재시작합니다") — that stays a numbered list. Lint prints a hint when a
     section lists 3+ processing steps with subjects but has no diagram.
+
+    **Text mass.** A section that is mostly sentences — 800+ readable
+    characters with no picture, table, or cards — reads as a wall even when
+    every sentence is good. Don't wait to be asked; restructure it:
+    1. For each paragraph or item, write a **keyword** (a 2–8 character noun
+       phrase — the card title or row name) and **one core line** (≤ 40
+       characters: the finding, the number, or the decision).
+    2. Look at how the keywords relate and pick the shape from the table
+       above: in order → `flow`; same attributes across subjects → table;
+       parallel and independent → `cards`; cause → effect → `flow` or `svg`;
+       one choice among options → `cards` with `[추천]`.
+    3. Put one takeaway sentence above the picture. The original sentences
+       go under it in `<details>` or into the companion `-근거.md` (rule 8) —
+       moved, not deleted, with their tags and conditions.
+    Lint hints on such sections and on labels repeated across subjects.
+    Appendix and source sections are exempt.
+
+    **One picture, one question.** Before drawing, name the relation the
+    reader must see (order, exchange, state change, cause, containment,
+    same attributes) and draw only things that relation connects — never
+    an arrow between items whose link the text does not state. Then cut:
+    1. Budget: a flowchart holds ≤ 9 nodes and ≤ 12 arrows, a sequence ≤ 5
+       participants. Over that, draw an overview (5–7 big steps) plus one
+       detail figure per step.
+    2. Remove test: drop a node that adds nothing the reader needs, merge
+       two that always travel together, drop an arrow the layout already
+       says. Never drop a condition, a failure path, or a state difference
+       — those move into the detail figure with their tags.
+    3. Focal: mark the one or two boxes the takeaway is about with `chg`
+       (Mermaid `class A chg`, svg `class="node chg"`); everything else
+       stays plain. If a 3-column table says the same thing, use the table.
+    When the layout itself is the message (the same flow before and after,
+    boxes on fixed coordinates), draw ` ```svg ` with right-angle connectors
+    (`d="M100 50 H160 V120"`); otherwise let Mermaid lay it out. Lint hints
+    when a flowchart passes 12 nodes or 16 arrows, more than two elements
+    are `chg`, or an svg connector runs diagonally.
 
     A failure or retry path is a branch. "저장에 실패하면 재시도하고, 그래도
     실패하면 알림" is a Mermaid `flowchart`: the normal path ends at its last
@@ -308,21 +347,26 @@ easy.
    headless Chrome/Edge at 1280, 768 and 390px and reports text spilling out of
    (or clipped inside) its box, `#links` with no target, links to local files
    that don't exist, images that failed to load, and text in a ` ```svg ` /
-   ` ```bars ` figure that leaves its box or overlaps other text. Exit 1 → fix the md (usually a long unbroken name in a card) and
+   ` ```bars ` figure that leaves its box or overlaps other text, and Mermaid
+   diagrams that failed to parse (shown as source in a "문법 오류" box). Exit 1 → fix the md (usually a long unbroken name in a card) and
    re-render; exit 2 means no browser was found — say so instead of claiming the
-   check passed.
+   check passed. "Mermaid 미검사" (exit stays 0) means the diagram check did
+   not run — CDN unreachable, browser timeout, or a temp file it could not
+   write; open the HTML and look at the diagrams before calling them fine.
 6. If the draft still reads like a default agent report, read
-   `references/examples.md` (fourteen before/after pairs, one per failure mode,
+   `references/examples.md` (sixteen before/after pairs, one per failure mode,
    plus how the same finding shifts per audience) and rewrite.
    `references/design-guide.md` holds the visual details (colors, chart
    types, Mermaid quirks) — *whether* to draw is decided by rule 15, not there.
 7. Diagrams: a straight sequence with no branches (A→B→C…) is a ` ```flow `
    block (one step per line: `title | description | role`), not Mermaid — it
-   wraps to the page width with curved arrows. Use Mermaid for branches,
+   wraps to the page width with right-angle arrows. Use Mermaid for branches,
    loops, or architecture. Color flow/architecture nodes by role —
    `ext` external, `entry` entry point, `logic` processing, `data` storage
    (Mermaid: `class A ext`) — or by status (`done`/`fail`/`caution`/`info`/
-   `neutral`), never both in one diagram.
+   `neutral`), never both in one diagram; `chg` marks the one or two focal
+   boxes and `bad` the place it breaks. Mermaid figures render flat (no
+   shadows, thin borders) with right-angle connectors (ELK layout).
    Mermaid places boxes itself, so two Mermaid figures never line up. When
    the point is *where* a flow breaks or changes, draw ` ```svg ` by hand:
    copy the skeleton in design-guide §10, keep every box at the same x/y in
@@ -348,6 +392,8 @@ easy.
 - [ ] `## 배경` comes first and is labeled request analysis (요청·현상 at least), not a story; any analogy is one clause beside a hard concept.
 - [ ] Korean reads native: no metaphor headings, translated verbs, colloquial intensifiers, announcing sentences, translationese (에 의해·하기 위해서는), or office habits (해당·진행합니다·하시기 바랍니다); one term per concept (references/ko-terms.md).
 - [ ] Every section was checked against the rule-15 table; ordered processing steps, exchanges, and architecture are drawn, not listed.
+- [ ] No section is a wall of sentences: each long one became keyword + core line in a flow, table, or cards, with the original sentences in `<details>`.
+- [ ] Each diagram answers one question: ≤ 9 nodes / 12 arrows (else overview + detail), one or two `chg` boxes, right-angle svg connectors.
 - [ ] Quotes only around someone else's words; emphasis is bold, once per paragraph at most.
 - [ ] Conditions (sample, period, basis) sit on `근거:` lines or in `<details>`; one parenthetical per sentence; each hedge said once.
 - [ ] No unglossed jargon / coined names / bare formulas.

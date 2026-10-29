@@ -799,6 +799,54 @@ test('규칙 15: 한 그림에 역할 색과 상태 색을 섞으면 경고(flow
   assert.equal(mixed('```mermaid\nflowchart LR\nA --> B\nclass A ext\nB:::fail\n```'), 1);
   assert.equal(mixed('```mermaid\nflowchart LR\nA --> B\nclassDef x fill:#fff\nclass A,B ext\n```'), 0);
 });
+// 2026-10-29 "머메이드 다이어그램이 너무 못생겼다" — diagram-design(MIT)의 그림 예산·강조·직각 연결선을 힌트로
+test('규칙 15 힌트: 흐름도 노드·연결 예산, 강조(chg) 수, svg 사선 연결선 — 못 읽는 그림은 세지 않음', () => {
+  const hints = body => lint(fm + '# 제목\n\n## 그림\n\n' + body).filter(f => f.rule === 15).map(f => f.msg.split(' — ')[0]);
+  const mm = b => '```mermaid\nflowchart TD\n' + b + '\n```\n';
+  const sv = b => '```svg\n<svg viewBox="0 0 400 200" aria-label="x">\n' + b + '\n</svg>\n```\n';
+  const chainOf = n => Array.from({length: n}, (_, i) => `  N${i}[단계 ${i}] --> N${i + 1}`).join('\n');
+  assert.deepEqual(hints(mm(chainOf(12))), ['흐름도 노드 13개·연결 12개']);
+  assert.deepEqual(hints(mm(chainOf(11))), []);
+  // A & B --> C & D 는 연결 4개, 따옴표·도형 글자 속 --> 와 :::chg 는 세지 않음, edge id(e1@)는 노드가 아님
+  assert.deepEqual(hints(mm([0, 1, 2, 3, 4].map(i => `  A${i} & B${i} --> C${i} & D${i}`).join('\n'))), ['흐름도 노드 20개·연결 20개']);
+  assert.deepEqual(hints(mm('  A["문구 --> :::chg"] --> B["x:::chg"] --> C{"y:::chg"}')), []);
+  assert.deepEqual(hints(mm(Array.from({length: 7}, (_, i) => `  A${i}([시작]) e${i}@-->|예| B${i}>표시] -.-> C${i}[(DB)]`).join('\n'))), ['흐름도 노드 21개·연결 14개']);
+  assert.deepEqual(hints(mm(chainOf(12) + '\n  X@{ shape: rect }')), []);
+  assert.deepEqual(hints(mm('  subgraph G [묶음]\n  A -- 예 --> B\n  end\n  class A,B,C chg')), ['흐름도 강조(chg) 3개']);
+  assert.deepEqual(hints(mm('  A:::chg --> B:::chg --> C')), []);
+  // 주석 속 강조·선은 세지 않고, 겹괄호 도형 뒤 :::chg 는 센다
+  assert.deepEqual(hints(mm('%% A:::chg B:::chg C:::chg\n  A --> B')), []);
+  for (const shape of ['[[가]]', '((가))', '{{가}}', '>가]', '([가])', '[(가)]', '["a]b"]'])
+    assert.deepEqual(hints(mm(`  A${shape}:::chg --> B${shape}:::chg --> C${shape}:::chg`)), ['흐름도 강조(chg) 3개'], shape);
+  assert.deepEqual(hints(mm('  X --o Y --x Z\n  P <--> Q ~~~ R\n  S -. 아마 .-> T == 굵게 ==> U')), []);
+  assert.deepEqual(hints(sv('<line class="ln" x1="0" y1="0" x2="10" y2="10"/>\n<path class="ln" d="M0 0 10 10"/>\n<path class="ln" d="M0 0 L0 10 20 20"/>')), ['svg 연결선(class="ln") 사선 3구간']);
+  assert.deepEqual(hints(sv('<path class="ln" d="M400 120 H430 V55 H468"/>\n<path class="ln" d="M0 0 M10 10"/>\n<path class="ln" d="M0 0 Q10 0 10 10"/>\n<path class="node" d="M0 0 L10 10"/>')), []);
+  assert.deepEqual(hints(sv('<g transform="rotate(-45)"><line class="ln" x1="0" y1="0" x2="10" y2="10"/></g>')), []);
+  assert.deepEqual(hints(sv('<!-- <line class="ln chg" x2="10" y2="10"/><rect class="chg"/><rect class="chg"/> -->')), []);
+  const box = c => `<rect class="node ${c}" x="1" y="1" width="5" height="5"/>`;
+  // 렌더러와 같은 엔티티 풀기: class="c&#104;g" 는 chg
+  assert.deepEqual(hints(sv(box('c&#104;g').repeat(3))), ['svg 강조색(chg) 도형·선 3개']);
+  assert.deepEqual(hints(sv(box('chg') + box('chg') + '<path class="ln chg" d="M5 3 H10"/>')), ['svg 강조색(chg) 도형·선 3개']);
+  assert.deepEqual(hints(sv(box('chg') + '<path class="ln chg" d="M5 3 H10"/><text class="chg" x="1" y="1">a</text>')), []);
+  assert.equal(lint(fm + mm(chainOf(12)), {plain: true}).filter(f => f.rule === 15).length, 0);
+});
+// 편집형 그림(그림자 없음·가는 테두리)과 렌더 안정성: 그림마다 고유 id(겹쳐 그려지던 버그), ELK 직각 배치 + dagre 복구
+test('템플릿: Mermaid는 고유 id로 하나씩 그리고 ELK 실패·문법 오류를 복구, 그림자 없는 편집형 스타일', () => {
+  const r = render('# 제목\n\n```mermaid\nflowchart LR\nA --> B\nclass B chg\n```\n\n```flow\n하나 | 설명 | entry\n둘 | 설명 | ext\n```\n', ['--no-lint']);
+  const live = spawnSync(process.execPath, [renderer, r.input, '-o', r.input.replace(/\.md$/, '-live.html'), '--no-lint', '--force'], {encoding: 'utf8'});
+  assert.equal(live.status, 0, live.stderr);
+  const html = fs.readFileSync(r.input.replace(/\.md$/, '-live.html'), 'utf8');
+  assert.ok(html.includes("mermaid.render(id, p.dataset.src)") && !html.includes('await mermaid.run('), '고유 id 렌더');
+  assert.ok(html.includes("const id = 'krr-mmd-' + (++seq)") && html.includes('let queue = Promise.resolve()'), 'id·줄 세우기');
+  assert.ok(html.includes('@mermaid-js/layout-elk@0.2.3') && html.includes("cycleBreakingStrategy: 'DEPTH_FIRST'"), 'ELK');
+  assert.ok(/if \(useElk\) \{ useElk = false; continue; \}/.test(html) && html.includes("p.classList.add('fallback', 'mermaid-error')"), '복구');
+  assert.ok(html.includes("keys = ['bad', 'fail', 'chg'"), 'class 우선순위');
+  assert.ok(!/drop-shadow\(4px|flow-shadow|stroke-width: 2\.5px/.test(html), '브루탈리스트 그림자·굵은 테두리 없음');
+  assert.ok(/\.flow-step \{[^}]*border: 1\.25px solid var\(--ink\); border-radius: 6px;/.test(html) && !/\.flow-step \{[^}]*box-shadow/.test(html), html.match(/\.flow-step \{[^}]*\}/)[0]);
+  assert.ok(/\.flow-step\.role-ext \{ background: var\(--role-ext\); border-style: dashed; \}/.test(html));
+  // --offline은 Mermaid·ELK 모듈을 모두 뺀다
+  assert.ok(!r.html.includes('layout-elk') && r.html.includes('class="mermaid fallback"'));
+});
 test('[추정]은 [미검증]처럼 태그 칩(본문·카드 제목)', () => {
   const r = plain('# 제목\n\n원인은 업체 변경으로 보입니다 [추정].\n\n```cards\nH1. 업체 변경 [추정]\n본문입니다.\n```');
   assert.equal(r.status, 0, r.stdout + r.stderr);
@@ -1048,6 +1096,16 @@ for (const token of ['[', '<a ', '<a "', '<code>', '<pre>', '<!--', '`', '[x](',
     });
   });
 }
+// 그림 예산 힌트(규칙 15)의 Mermaid·svg 스캐너 — 닫히지 않은 괄호·따옴표·태그가 반복된 긴 줄(Codex 검수 2026-10-29: 강조 정규식이 8만 자에 5.2초)
+for (const [kind, token, pre = ''] of [['mermaid', 'A'], ['mermaid', 'A['], ['mermaid', 'A["'], ['mermaid', 'A -- x '], ['mermaid', 'A:::chg '], ['mermaid', 'A --> '], ['svg', '<rect '], ['svg', '<!--'], ['svg', '<path class="ln" d="M0 0 1 1 '], ['mermaid', 'A -- 예 --> '], ['svg', 'A', '<rect aria-label=">" ']]) {
+  test('그림 예산 힌트 CPU 증가율: ' + kind + ' ' + pre + token, () => {
+    assertLinearTime(token, (n, reps) => {
+      const head = kind === 'mermaid' ? 'flowchart TD\n' : '<svg viewBox="0 0 9 9" aria-label="x">\n';
+      const doc = fm + '# 제목\n\n```' + kind + '\n' + head + pre + token.repeat(Math.ceil(n / token.length)) + '\n```\n';
+      return cpuTime(repeat(reps, () => lint(doc)));
+    });
+  });
+}
 // 렌더 후 검사 — 브라우저가 없는 PC에서는 건너뜀
 const qa = path.join(__dirname, 'qa.js');
 const runQa = file => spawnSync(process.execPath, [qa, file], {encoding: 'utf8', timeout: 120000});
@@ -1111,6 +1169,51 @@ test('힌트: 흐름+고치는 이야기 → svg, 기준값과 숫자 → bars, 
   assert.ok(/숫자를 나란히 비교하는 표/.test(hint(table)));
   assert.ok(!/숫자를 나란히/.test(hint(table + '\n' + barsBlock)));
 });
+// 2026-10-29: "글씨가 많으면 못생기게 나온다" — 최근 보고서 157건 중 41건에 그림·표 없이 800자 넘는 섹션.
+// 가장 큰 사례는 대상 6개마다 같은 굵은 항목 5개를 번호 목록 문장으로 반복한 조사 보고서였다
+test('힌트: 그림·표 없는 글 덩어리 → 키워드 뽑아 모양 고르기, 대상마다 같은 항목 반복 → 비교표', () => {
+  const hint = doc => lint(fm + '# 제목\n\n' + doc).filter(f => f.hint && f.rule === 15).map(f => f.msg).join('\n');
+  const para = '반납 알림은 대출 기간이 끝나기 사흘 전에 문자로 나가며 연체가 생기면 하루 단위로 다시 보냅니다.\n';
+  const dense = '## 알림 정책\n\n' + para.repeat(16);
+  assert.ok(/"알림 정책" 글 \d+자에 그림·표 없음/.test(hint(dense)), hint(dense));
+  assert.ok(!/글 \d+자에 그림/.test(hint(dense + '\n```cards\n알림\n사흘 전\n```\n')), '카드가 있으면 조용');
+  assert.ok(!/글 \d+자에 그림/.test(hint('## 알림 정책\n\n요약입니다.\n\n<details>\n<summary>상세</summary>\n\n' + para.repeat(16) + '\n</details>\n')), '접힌 글은 세지 않음');
+  assert.ok(!/글 \d+자에 그림/.test(hint('## 알림 정책\n\n' + para.repeat(5))), '짧으면 조용');
+  const lib = name => `### ${name}\n\n1. **연장:** ${name}는 대출을 한 번 연장합니다.\n2. **예약:** ${name}는 대기 순번을 문자로 알립니다.\n3. **요금:** 연체료는 하루 100원입니다.\n\n`;
+  const rep = '## 도서관별 비교\n\n' + ['가 도서관', '나 도서관', '다 도서관'].map(lib).join('');
+  const h = hint(rep);
+  assert.ok(/대상 3개가 같은 항목 3개\(연장, 예약, 요금\)를 글로 반복/.test(h), h);
+  assert.ok(!/처리 단계/.test(h), '굵은 항목 이름으로 시작하는 번호 목록은 처리 순서가 아님: ' + h);
+  assert.ok(!/같은 항목/.test(hint('## 도서관별 비교\n\n' + ['가 도서관', '나 도서관'].map(lib).join(''))), '대상 2개면 조용');
+  assert.ok(!/같은 항목/.test(hint(rep.replace('### 가 도서관', '| 도서관 | 연장 |\n|---|---|\n| 가 | 1회 |\n\n### 가 도서관'))), '비교표가 있으면 조용');
+  assert.ok(!/글 \d+자에 그림|같은 항목/.test(lint(fm + '# 제목\n\n' + dense + rep, {plain: true}).map(f => f.msg).join('\n')), '--plain은 문체 힌트 없음');
+  const long = lint(fm + '# 제목\n\n## 긴 섹션\n\n' + '가나다라마바사.\n'.repeat(13)).find(f => /본문 13줄/.test(f.msg));
+  assert.ok(long && /그림·표·카드로/.test(long.msg), long?.msg);
+  // Codex 검수(2026-10-29)가 실제로 재현한 입력들
+  const T = '## 분석\n\n' + '가'.repeat(800) + '\n';
+  assert.ok(/처리 단계 3개/.test(hint('## 요청 처리\n\n1. **수신:** 서버가 요청을 받습니다.\n2. **검증:** 서비스가 요청을 검사합니다.\n3. **저장:** 저장소가 결과를 기록합니다.\n')), '한 번만 쓴 굵은 단계 이름은 처리 단계');
+  assert.ok(/글 800자/.test(hint(T + '\n<details>\n<summary>상세</summary>\n\n~~~flow\n요청 | 처리\n~~~\n\n</details>\n')), '접힌 그림은 본문 그림이 아님');
+  assert.ok(/글 800자/.test(hint(T + '\n### 출처\n\n| 출처 | 설명 |\n|---|---|\n| 공식 | 안내 |\n')), '출처 표는 본문 표가 아님');
+  assert.ok(/"분석" 글 \d+자/.test(hint('## 분석\n\n<p>' + '가'.repeat(800) + '</p>\n')), 'raw HTML 글도 셈');
+  assert.ok(!/HTML 글자/.test(hint('## 분석\n\n<div>\n## HTML 글자\n</div>\n\n' + '가'.repeat(800) + '\n')), 'raw HTML 안 ## 는 제목 아님');
+  assert.ok(!/글 \d+자에 그림/.test(hint('## 분석\n\n![관계도](./diagram.png)\n\n' + '가'.repeat(800) + '\n')), 'Markdown 이미지는 그림');
+  assert.ok(!/같은 항목/.test(hint('## 도서관별 비교\n\n<table><tr><th>도서관</th><th>연장</th></tr><tr><td>가</td><td>1회</td></tr></table>\n\n' + ['가 도서관', '나 도서관', '다 도서관'].map(lib).join(''))), 'raw 표도 표');
+  const folded = '## 도서관별 비교\n\n| 도서관 | 연장 |\n|---|---|\n| 가 | 1회 |\n\n<details>\n<summary>원문</summary>\n\n' + ['가 도서관', '나 도서관', '다 도서관'].map(lib).join('') + '</details>\n';
+  assert.ok(!/처리 단계/.test(hint(folded)), '표로 바꾸고 원문을 접어도 속성 목록은 처리 단계가 아님: ' + hint(folded));
+  const one = (names, k) => names.map(n => `### ${n}\n\n1. **${k}:** 값입니다.\n\n`).join('');
+  assert.ok(!/같은 항목/.test(hint('## 비교\n\n' + one(['A', 'B', 'C'], '비용') + one(['D', 'E', 'F'], '속도'))), '항목 둘을 함께 가진 대상이 없으면 조용');
+  assert.ok(!/같은 항목/.test(hint('## 부록\n\n' + ['가 도서관', '나 도서관', '다 도서관'].map(lib).join(''))), '부록은 조용');
+  // 재검수(2026-10-29)
+  const R2 = (names, ks) => names.map(n => `### ${n}\n\n` + ks.map((k, i) => `${i + 1}. **${k}:** 값입니다.\n`).join('') + '\n').join('');
+  assert.ok(!/같은 항목/.test(hint('## 비교\n\n' + R2(['A', 'B'], ['비용', '속도']) + R2(['C', 'D'], ['비용', '보안']) + R2(['E', 'F'], ['속도', '보안']))), '같은 항목 쌍을 가진 대상이 2개뿐이면 조용');
+  const steps3 = '## 요청 처리\n\n1. **수신:** 서버가 요청을 받습니다.\n2. **검증:** 서비스가 요청을 검사합니다.\n3. **저장:** 저장소가 결과를 기록합니다.\n';
+  assert.ok(/처리 단계 3개/.test(hint(steps3 + '\n## 부록\n\n<details>\n<summary>원문</summary>\n\n' + R2(['A', 'B', 'C'], ['수신', '검증', '저장']) + '</details>\n')), '다른 섹션의 반복 항목이 처리 단계를 숨기지 않음');
+  assert.ok(/글 \d+자에 그림/.test(hint(T + '\n`![그림](./x.png)`\n')), '코드 안 이미지 문법은 그림 아님');
+  assert.ok(/글 \d+자에 그림/.test(hint(T + "\n<div title='<img src=x>'>설명</div>\n")), 'HTML 속성 안 <img>는 그림 아님');
+  assertLinearTime('닫히지 않은 이미지 문법', (n, reps) => cpuTime(repeat(reps, () => lint(fm + '## 분석\n\n' + '![foo'.repeat(n / 5)))));
+  assertLinearTime('반복 항목 H3 많음', (n, reps) => cpuTime(repeat(reps, () => lint(fm + '## 비교\n\n' + Array.from({length: n / 50}, (_, i) => [0, 1, 2].map(j => `### 대상${i}-${j}\n1. **항목${i}:** 설명입니다.\n`).join('')).join('')))));
+  assertLinearTime('글 덩어리·반복 항목',(n, reps) => cpuTime(repeat(reps, () => lint(fm + '## 가\n\n### 나\n\n1. **' + '가'.repeat(n) + '\n'))));
+});
 test('bars 블록 lint: 숫자 없는 값·모르는 색·칸 5개', () => {
   const msgs = lint(fm + '# 제목\n\n```bars\n가 | 많음\n나 | 대출 14일:red\n다 | 1 | 2 | 3 | 4\n```\n').filter(f => f.rule === '구조').map(f => f.msg).join('\n');
   assert.ok(/막대 값 "많음"/.test(msgs) && /색 ":red"/.test(msgs) && /bars 칸 5개/.test(msgs), msgs);
@@ -1155,6 +1258,19 @@ test('독자 회수 검사 대상은 lint가 판정해 출력(H2 4개·리더·�
   assert.deepEqual(readerCheckNeed(fm + '# 제목\n\n```text\n## 코드 안 제목\n[추천]\n```\n'), []);
   assert.ok(/독자 회수 검사 대상\(H2 4개\)/.test(render('# 제목\n' + h2(4)).stdout));
   assert.ok(!/독자 회수 검사/.test(plain('# 제목\n' + h2(4)).stdout));
+});
+// Mermaid는 폭 검사와 따로, 원래 페이지에서 그려지기를 기다려 본다. CDN을 못 받으면(폐쇄망·샌드박스) 건너뜀
+test('qa: Mermaid 문법 오류는 exit 1, 고치면 통과', () => {
+  if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');
+  const live = body => { const r = render('# 제목\n\n' + body); const out = r.input.replace(/\.md$/, '-live.html');
+    assert.equal(run(r.input, '-o', out, '--no-lint').status, 0); return out; };
+  let q = runQa(live('```mermaid\nflowchart TD\n  A[시작 -->\n```\n'));
+  if (/Mermaid 미검사|그려지지 않음/.test(q.stdout)) skip('Mermaid CDN에 닿지 않음');
+  assert.equal(q.status, 1, q.stdout + q.stderr);
+  assert.ok(/Mermaid 문법 오류 1개/.test(q.stdout), q.stdout);
+  q = runQa(live('```mermaid\nflowchart TD\n  A[시작] --> B[끝]\n```\n\n```mermaid\nsequenceDiagram\n  A->>B: 요청\n```\n'));
+  assert.equal(q.status, 0, q.stdout + q.stderr);
+  assert.ok(!/Mermaid/.test(q.stdout), q.stdout);
 });
 test('qa: 렌더하지 않은 옆 보고서로 가는 링크는 exit 1, 렌더하면 통과', () => {
   if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');

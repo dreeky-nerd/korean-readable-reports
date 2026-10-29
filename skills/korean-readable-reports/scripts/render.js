@@ -55,7 +55,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, FENCE_RE, STATUS_TAGS, readerCheckLine } = require('./lint.js');
+const { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, stripComments, decodeEnt, FENCE_RE, STATUS_TAGS, readerCheckLine } = require('./lint.js');
 
 const args = process.argv.slice(2);
 if (!args.length || args.includes('-h') || args.includes('--help')) {
@@ -353,10 +353,6 @@ const isBlockStart = l => /^(#{1,6}\s|>|\s*\||\s*([-*]|\d+\.)\s|---+\s*$)/.test(
 // raw HTML 정리: 허용 태그(HTML_TAGS)는 허용 속성만 남겨 다시 쓰고, 나머지 <…>는 글자로 이스케이프한다.
 // 속성 값은 엔티티를 풀어서 검사한 뒤 다시 이스케이프 — href="javascript&#58;…" 처럼 숨긴 주소도 막힌다
 const ATTR_OK = /^(class|id|src|href|alt|title|width|height|open|colspan|rowspan)$/i;
-const codePoint = e => { const hex = /^#x/i.test(e), n = parseInt(e.slice(hex ? 2 : 1), hex ? 16 : 10); return n > 0 && n <= 0x10FFFF ? n : 0xFFFD; };
-const decodeEnt = v => v.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);?/gi, (_, e) => e[0] === '#'
-  ? String.fromCodePoint(codePoint(e))
-  : { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[e.toLowerCase()]);
 // 태그 하나 = < 부터 따옴표 밖의 > 까지 (alt="A > B" 의 > 에서 끊지 않게)
 const TAG_CHUNK = /<(?:[^>"']|"[^"]*"|'[^']*')*>?/g;
 // svg=true: ```svg 블록용 — SVG 허용 목록을 쓰고 <rect … /> 의 / 를 살린다(SVG 안에서 / 가 빠지면 뒤 도형이 전부 그 rect의 자식이 되어 안 보인다)
@@ -385,7 +381,7 @@ function sanitizeHtml(html, svg = false) {
 
 // ```svg 블록: 직접 그린 그림을 .fig 상자에 넣는다. 주석은 버리고, <svg>를 안 닫았으면 닫는다(안 닫으면 뒤의 본문이 전부 그림 속으로 들어가 안 보인다)
 function renderSvg(lines) {
-  let s = sanitizeHtml(lines.join('\n').replace(/<!--[\s\S]*?-->/g, ''), true).trim();
+  let s = sanitizeHtml(stripComments(lines.join('\n')), true).trim();
   if (!s) return '';
   s = s.replace(/<svg(?![^>]*\srole=)/, '<svg role="img"');
   const open = (s.match(/<svg[\s>]/g) || []).length - (s.match(/<\/svg>/g) || []).length;

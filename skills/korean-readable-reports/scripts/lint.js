@@ -159,6 +159,23 @@ function scanFences(lines, start) {
 // 읽을 글만 센다: 표·접힌 글·요약·렌더용 블록 포함, 일반 코드·출처 제외.
 const SOURCES_LINE = /^\s*(?:>\s*)?(?:[-*+]\s*)?(?:\*\*)?(근거|출처|basis|sources)(?:\*\*)?\s*[:：]/i;
 // HTML 후보는 한 번만 훑는다. 닫히지 않은 태그·따옴표는 뒤의 <마다 다시 검색하지 않는다.
+// <!-- … --> 를 지운다(닫힘 없는 <!-- 는 그대로 둠 — /<!--[\s\S]*?-->/g 와 같은 결과). 그 정규식은 닫힘 없는 <!-- 가
+// 반복되면 시작 위치마다 끝까지 다시 훑어 제곱 시간이 걸렸다(2026-10-29 svg 블록 시험)
+// 속성 값의 엔티티 풀기(render.js가 svg·raw HTML 속성을 검사·출력할 때와 같은 해석 — lint도 같은 값을 본다)
+const codePoint = e => { const hex = /^#x/i.test(e), n = parseInt(e.slice(hex ? 2 : 1), hex ? 16 : 10); return n > 0 && n <= 0x10FFFF ? n : 0xFFFD; };
+const decodeEnt = v => v.replace(/&(#x[0-9a-f]+|#\d+|amp|lt|gt|quot|apos);?/gi, (_, e) => e[0] === '#'
+  ? String.fromCodePoint(codePoint(e))
+  : { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'" }[e.toLowerCase()]);
+function stripComments(s) {
+  let out = '', i = 0;
+  for (;;) {
+    const a = s.indexOf('<!--', i);
+    if (a < 0) return out + s.slice(i);
+    const b = s.indexOf('-->', a + 4);
+    if (b < 0) return out + s.slice(i);
+    out += s.slice(i, a); i = b + 3;
+  }
+}
 function htmlTokens(text, literalLines = []) {
   const out = [], start = /<!--|<\/?[a-zA-Z][\w-]*/g;
   let m, line = 0, cursor = 0;
@@ -498,7 +515,7 @@ function lint(src, opts = {}) {
       if (fb.kind === 'bars') { for (const [ln, msg] of parseBars(filled).errors) warn(ln, '구조', msg); continue; }
       if (fb.kind === 'svg') {
         // 렌더러가 지울 태그·속성과 스타일이 없는 class를 미리 알린다 — 지워진 뒤엔 그림이 왜 검은지 알 수 없다
-        const s = filled.map(([, l]) => l).join('\n').replace(/<!--[\s\S]*?-->/g, '');
+        const s = stripComments(filled.map(([, l]) => l).join('\n'));
         const tags = new Set(), attrs = new Set(), classes = new Set();
         for (const m of s.matchAll(/<([a-zA-Z][\w:-]*)([^<>]*)>/g)) {
           if (!SVG_TAGS.test(m[1])) tags.add(m[1]);
@@ -735,7 +752,7 @@ function lint(src, opts = {}) {
   let htmlDepth = 0, h1Count = 0;
   const sources = sourceLines(lines, fenceAt, readable);
   let h2Count = 0, secLines = 0, secStart = -1, secName = '', h3BeforeH2 = false;
-  const flushSec = () => { if (secStart >= 0 && secLines > 12) warn(secStart, 8, `"${secName}" 본문 ${secLines}줄 — 12줄 넘으면 <details>로 접기`); };
+  const flushSec = () => { if (secStart >= 0 && secLines > 12) warn(secStart, 8, `"${secName}" 본문 ${secLines}줄 — 12줄 넘으면 그림·표·카드로 바꾸거나(규칙 15) 상세를 <details>로 접기`); };
 
   for (let i = start; i < lines.length; i++) {
     const l = lines[i];
@@ -1018,6 +1035,140 @@ function lint(src, opts = {}) {
     if (longBasis.length) warn(longBasis[0], 6, `근거 줄 ${longBasis.length}개가 200자를 넘음 — 조건이 많으면 불릿으로 나누거나 <details>로`, true);
   }
 
+  // 규칙 15(힌트): 그림 한 장의 예산(cathrynlavery/diagram-design MIT의 복잡도 기준을 우리 수단에 맞춤, 2026-10-29)
+  //  - Mermaid flowchart: 고유 노드 12개·연결 16개를 넘으면 개요 + 상세로 나누기(작성 목표는 9개·12개 안쪽 —
+  //    실사용 흐름도 16개 중 6개가 10~12개였고 ELK 배치로 읽혔다. 힌트는 분명히 넘친 것만, 2026-10-29)
+  //  - flowchart·svg: 강조(chg)가 2개를 넘으면 핵심이 흐려진다
+  //  - svg: class="ln" 연결선이 사선 — 직각으로
+  //  읽을 수 있는 문법만 센다. 모르는 줄이 하나라도 있으면 그 그림은 세지 않는다(0개로 단정하지 않음).
+  //  정규식 대신 한 번 훑는 스캐너 — 닫히지 않은 괄호·따옴표가 반복된 긴 줄에서도 선형(Codex 검수 2026-10-29)
+  {
+    const ID = /[\w가-힣.$]/;
+    // 도형 여는 글자 → 닫는 글자. ([ → ]), [( → )], [[ → ]], (( → )), {{ → }}, > → ] 처럼 연 순서를 뒤집어 닫는다
+    const MIRROR = {'[': ']', '(': ')', '{': '}', '>': ']', '/': '/', '\\': '\\'};
+    // flowchart 한 줄 → {groups: [[A,B],[C]], chg: [A]} (A & B --> C:::chg). 못 읽으면 null
+    const flowLine = s => {
+      const groups = [[]], chg = [];
+      let i = 0, want = 'node';
+      const n = s.length, ws = () => { while (i < n && /\s/.test(s[i])) i++; };
+      while (true) {
+        ws();
+        if (i >= n) break;
+        if (want === 'node') {
+          const j0 = i;
+          while (i < n && ID.test(s[i])) i++;
+          if (i === j0) return null;
+          const id = s.slice(j0, i);
+          if (s[i] === '@') return null;   // A@{ shape: … } 같은 노드 메타데이터는 읽지 않음
+          if (i < n && '[({>'.includes(s[i])) {
+            let k = i, close = '';
+            while (k < n && k - i < 3 && '[({/\\'.includes(s[k])) close = MIRROR[s[k++]] + close;
+            if (s[i] === '>') { k = i + 1; close = ']'; }
+            if (s[k] === '"') { const q = s.indexOf('"', k + 1); if (q < 0) return null; k = q + 1; }
+            const e = s.indexOf(close, k);
+            if (e < 0) return null;
+            i = e + close.length;
+          }
+          if (s.startsWith(':::', i)) { const m = /^[\w-]+/.exec(s.slice(i + 3, i + 67)); if (!m) return null; if (m[0] === 'chg') chg.push(id); i += 3 + m[0].length; }
+          groups[groups.length - 1].push(id);
+          want = 'joint';
+          continue;
+        }
+        if (want === 'joint' && s[i] === '&') { i++; want = 'node'; continue; }
+        // 연결선: --> --- -.-> ==> <--> --o --x ~~~, 글자 붙은 -- 예 --> · -. 예 .-> · == 예 ==>, 뒤의 |글자|.
+        // 연결 id(e1@-->)는 건너뛴다
+        const eid = /^[\w-]+@(?=[-=.~<])/.exec(s.slice(i, i + 64));
+        if (eid) i += eid[0].length;
+        const j0 = i;
+        while (i < n && '-=.~<>'.includes(s[i])) i++;
+        const run = s.slice(j0, i);
+        if (run.replace(/[.<>]/g, '').length < 2 && run !== '-.') return null;
+        let head = false;
+        if ((s[i] === 'o' || s[i] === 'x') && /\s/.test(s[i + 1] || ' ')) { i++; head = true; }
+        if (!head && (run === '--' || run === '==' || run === '-.') && /\s/.test(s[i] || '')) {
+          // 닫는 화살표를 앞에서부터 한 번만 훑어 찾는다(패턴마다 indexOf를 하면 없는 패턴이 매번 끝까지 훑어 제곱 시간)
+          const ends = run === '-.' ? ['.->', '.-'] : run === '==' ? ['==>', '==='] : ['-->', '---', '--o', '--x'];
+          while (i < n && !ends.some(e => s.startsWith(e, i))) i++;
+          if (i >= n) return null;
+          while (i < n && '-=.>'.includes(s[i])) i++;
+          if ((s[i] === 'o' || s[i] === 'x') && /\s/.test(s[i + 1] || ' ')) i++;
+        }
+        ws();
+        if (s[i] === '|') { const e = s.indexOf('|', i + 1); if (e < 0) return null; i = e + 1; }
+        groups.push([]);
+        want = 'node';
+      }
+      return want === 'node' && groups.length > 1 ? null : {groups, chg};
+    };
+    const SKIPLINE = /^(%%|classDef\s|class\s|style\s|linkStyle\s|click\s|direction\s|end$|subgraph\b)/;
+    // svg 태그(주석 밖, 따옴표 안의 < > 는 태그로 안 봄)와 속성
+    const svgTags = text => htmlTokens(text).filter(t => !t.comment && !t.close).map(t => {
+      const raw = text.slice(t.start, t.end), attr = {};
+      // render.js sanitizeHtml과 같은 속성 정규식(= 는 선택 — 필수로 두면 = 없는 긴 이름에서 시작점마다 되짚는다)과 같은 엔티티 풀기
+      for (const a of raw.matchAll(/([^\s=\/"'>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s"'>]+)))?/g)) {
+        const v = a[2] ?? a[3] ?? a[4];
+        if (v !== undefined) attr[a[1].toLowerCase()] = decodeEnt(v);
+      }
+      return {name: t.name, attr, cls: (attr.class || '').split(/\s+/)};
+    });
+    // 절대 좌표 M·L·H·V만 쓴 path, line, polyline의 사선 구간 수. transform이 있으면 null(세지 않음)
+    const slants = tags => {
+      if (tags.some(t => 'transform' in t.attr)) return null;
+      let n = 0;
+      const diag = (x1, y1, x2, y2) => { if (Math.abs(x2 - x1) > 0.5 && Math.abs(y2 - y1) > 0.5) n++; };
+      for (const t of tags) {
+        if (!t.cls.includes('ln') || !/^(path|line|polyline)$/.test(t.name)) continue;
+        if (t.name === 'line') {
+          const v = ['x1', 'y1', 'x2', 'y2'].map(k => Number(t.attr[k] ?? 0));
+          if (v.every(Number.isFinite)) diag(...v);
+          continue;
+        }
+        const raw = t.name === 'path' ? t.attr.d : 'M' + (t.attr.points || '');
+        if (!raw || /[^MLHV\d\s,.eE+-]/.test(raw)) continue;   // 곡선·상대 좌표·Z 등은 판독하지 않음
+        const toks = raw.match(/[MLHV]|[-+]?(?:\d+\.?\d*|\.\d+)(?:[eE][-+]?\d+)?/g) || [];
+        let cmd = '', x = 0, y = 0, i = 0;
+        while (i < toks.length) {
+          if (/[MLHV]/.test(toks[i])) { cmd = toks[i++]; continue; }
+          if (cmd === 'H') { const nx = +toks[i++]; diag(x, y, nx, y); x = nx; continue; }
+          if (cmd === 'V') { const ny = +toks[i++]; diag(x, y, x, ny); y = ny; continue; }
+          if (i + 1 >= toks.length) break;
+          const nx = +toks[i], ny = +toks[i + 1]; i += 2;
+          if (cmd === 'L') diag(x, y, nx, ny);
+          else if (cmd === 'M') cmd = 'L';   // M 뒤에 이어지는 좌표 쌍은 L
+          x = nx; y = ny;
+        }
+      }
+      return n;
+    };
+    for (const fb of blocks) {
+      if (fb.kind === 'mermaid') {
+        const lines = fb.body.map(([, l]) => l.trim()).filter(Boolean);
+        if (!/^(flowchart|graph)\b/.test(lines[0] || '')) continue;
+        const nodes = new Set(), focal = new Set(); let edges = 0, ok = true;
+        for (const l of lines.slice(1)) {
+          const c = /^class\s+(\S+)\s+([\w-]+(?:\s*,\s*[\w-]+)*)\s*;?$/.exec(l);
+          if (c) { if (c[2].split(/\s*,\s*/).includes('chg')) c[1].split(',').forEach(id => focal.add(id.trim())); continue; }
+          if (SKIPLINE.test(l)) continue;
+          const g = flowLine(l.replace(/;\s*$/, ''));
+          if (!g) { ok = false; break; }
+          g.groups.flat().forEach(id => nodes.add(id));
+          g.chg.forEach(id => focal.add(id));
+          for (let k = 0; k + 1 < g.groups.length; k++) edges += g.groups[k].length * g.groups[k + 1].length;
+        }
+        if (!ok) continue;
+        if (nodes.size > 12 || edges > 16) warn(fb.open, 15, `흐름도 노드 ${nodes.size}개·연결 ${edges}개 — 한 그림은 노드 9개·연결 12개 안쪽이 읽힘. 큰 단계 5~7개의 개요 그림 하나 + 단계별 상세 그림으로 나누기(나눌 때 조건·실패 경로·근거 태그는 상세 쪽에 남기기)`, true);
+        if (focal.size > 2) warn(fb.open, 15, `흐름도 강조(chg) ${focal.size}개 — 핵심은 1~2개일 때 보임. 하나만 남길 수 있는지 검토(나머지는 class 없이)`, true);
+      } else if (fb.kind === 'svg') {
+        const tags = svgTags(fb.body.map(([, l]) => l).join('\n'));
+        // 강조색을 칠한 도형·선 수(글자는 같은 상자에 붙으므로 뺀다)
+        const f = tags.filter(t => /^(rect|path|line|polyline|polygon|circle|ellipse)$/.test(t.name) && t.cls.includes('chg')).length;
+        if (f > 2) warn(fb.open, 15, `svg 강조색(chg) 도형·선 ${f}개 — 바뀌는 곳은 1~2개일 때 보임. 줄일 수 있는지 검토`, true);
+        const n = slants(tags);
+        if (n) warn(fb.open, 15, `svg 연결선(class="ln") 사선 ${n}구간 — 가로·세로 선분으로 꺾기(예: d="M100 50 H160 V120 H220"). 같은 높이·같은 줄이면 곧은 선 하나`, true);
+      }
+    }
+  }
+
   // 규칙 15(힌트): 그림이 나을 내용을 글로만 쓴 섹션
   //  - 주어가 있는 처리 단계("컨트롤러가 …", "서비스가 …") 3개 이상을 번호·서수로 나열했는데 flow/mermaid가 없음
   //  - 한 줄에 화살표(→, ->)로 3단계 이상 이어 씀
@@ -1025,6 +1176,72 @@ function lint(src, opts = {}) {
   {
     const ORD = /^\s*(\d+\.|첫째|둘째|셋째|넷째|다섯째|여섯째|먼저|그다음|그 다음|다음으로|이어서|마지막으로)[,\s]/;
     const SUBJ = /^(\S+\s+){0,3}\S*(이|가|은|는)\s/;   // 앞 네 어절 안에 주어·주제 표지
+    const LABEL = /^\s*(?:[-*+]|\d+[.)])\s+\*\*([^*\n]{1,24}?)\s*(?:[:：]\s*\*\*|\*\*\s*[:：])/;
+    // 글 덩어리: 그림·표 없이 읽을 글이 800자 넘는 H2 섹션, 또는 H3 대상마다 같은 굵은 항목을 반복한 섹션.
+    // 사례: 2026-10-29 "글씨가 많으면 못생기게 나온다" — 최근 보고서 157건 중 41건에 800자 넘는 그림 없는 섹션(섹션 글자 P90 ≈ 1,100),
+    // 가장 큰 것은 대상 6개 × 같은 항목 5개를 번호 목록 문장으로 쓴 조사 보고서 한 섹션(8천 자).
+    // 접힌 글·출처 안의 그림·표는 본문을 대신하지 못하므로 세지 않는다
+    const repeatedAt = [];   // H2 범위별 반복 항목 이름 — 아래 "처리 단계" 힌트가 속성 목록을 단계로 세지 않게
+    // 그림·표 태그는 코드 밖, HTML 속성 값 밖의 진짜 태그만(htmlTokens는 따옴표 안을 건너뜀)
+    const tagIn = (text, re) => htmlTokens(text).some(t => !t.comment && !t.close && re.test(t.name));
+    {
+      const VISUAL = /^(flow|cards|stats|svg|bars|mermaid|browser)$/;
+      const groups = [];
+      let g = null, h3 = null, any3 = null, depth = 0;
+      let scope = { start, sets: [] };   // 접힌 글까지 포함한 H2 범위의 H3별 항목 이름 — 원문을 <details>로 접은 뒤에도 알아보게
+      const scopes = [scope];
+      for (let i = start; i < lines.length; i++) {
+        const fb = fenceAt[i];
+        if (!fb) for (const close of readable.detailsAt[i]) depth = Math.max(0, depth + (close ? -1 : 1));
+        const hidden = depth || readable.detailsAt[i].some(Boolean) || sources[i];
+        if (fb) { if (g && i === fb.open && VISUAL.test(fb.kind) && !hidden) g.visual = true; continue; }
+        const l = lines[i];
+        if (!readable.raw[i]) {
+          if (/^#{1,2}\s/.test(l)) { scope = { start: i, sets: [] }; scopes.push(scope); }
+          if (/^#{1,3}\s/.test(l)) { any3 = /^###\s/.test(l) ? new Set() : null; if (any3) scope.sets.push(any3); }
+          const m = any3 && l.match(LABEL);
+          if (m) any3.add(m[1].trim());
+        }
+        if (hidden) continue;
+        if (readable.raw[i]) {   // raw HTML 안의 "## …"는 제목이 아니라 글자
+          if (!g) continue;
+          if (tagIn(l, /^(img|figure)$/)) g.visual = true;
+          if (tagIn(l, /^(table|t[rdh])$/)) { g.table = g.visual = true; continue; }
+          g.chars += [...visibleText(readable[i], true)].length;
+          continue;
+        }
+        if (/^##\s/.test(l)) { g = { line: i, name: l.replace(/^##\s+/, '').trim(), chars: 0, visual: false, table: false, h3s: [] }; groups.push(g); h3 = null; continue; }
+        if (!g) continue;
+        if (/^###\s/.test(l)) { h3 = new Set(); g.h3s.push(h3); continue; }
+        if (/^\s*\|/.test(l)) { g.table = g.visual = true; continue; }
+        if (SOURCES_LINE.test(readable[i]) || /^#/.test(l) || !l.trim()) continue;
+        const bare = readable[i].replace(/`[^`]*`/g, '');
+        replaceLinks(bare, image => { if (image) g.visual = true; return ''; });
+        if (tagIn(bare, /^img$/)) g.visual = true;
+        g.chars += [...visibleText(readable[i], true)].length;
+        const m = h3 && l.match(LABEL);
+        if (m) h3.add(m[1].trim());
+      }
+      // 같은 항목 두 개를 함께 가진 대상이 3개 이상인 항목 쌍만 센다. 대상당 앞 12개 항목까지(쌍 수 상한)
+      const sharedOf = sets => {
+        const keys = set => [...set].slice(0, 12).sort(), pairsOf = ks => ks.flatMap((a, x) => ks.slice(x + 1).map(b => a + '\u0000' + b));
+        const count = new Map();
+        for (const set of sets) for (const p of pairsOf(keys(set))) count.set(p, (count.get(p) || 0) + 1);
+        const good = new Set([...count].filter(([, n]) => n >= 3).map(([p]) => p));
+        const shared = new Set([...good].flatMap(p => p.split('\u0000')));
+        const targets = sets.filter(set => pairsOf(keys(set)).some(p => good.has(p))).length;
+        return { shared, targets };
+      };
+      for (const sc of scopes) { const r = sharedOf(sc.sets); repeatedAt.push({ start: sc.start, set: r.targets >= 3 ? r.shared : new Set() }); }
+      for (const s of groups) {
+        const { shared, targets } = sharedOf(s.h3s);
+        if (/출처|부록|참고 문헌/.test(s.name)) continue;   // 부록·출처 모음은 읽히려고 쓴 글이 아님
+        if (!s.table && targets >= 3)
+          warn(s.line, 15, `"${s.name}"에서 대상 ${targets}개가 같은 항목 ${shared.size}개(${[...shared].slice(0, 5).join(', ')})를 글로 반복 — 대상×항목 비교표를 섹션 맨 위에(칸은 키워드·●○○·[미확인] 같은 짧은 값), 문장은 표 아래 <details>나 근거 파일로`, true);
+        else if (!s.visual && s.chars >= 800)
+          warn(s.line, 15, `"${s.name}" 글 ${s.chars}자에 그림·표 없음 — 문단·항목마다 키워드와 핵심 한 줄을 뽑고 관계로 모양을 고르기(순서→flow, 같은 항목 비교→표, 나란한 묶음→cards, 원인→결과→flow·svg). 원래 문장은 <details>나 근거 파일로`, true);
+      }
+    }
     let sec = null;
     const secs = [];
     const open = (i, name) => {
@@ -1032,12 +1249,17 @@ function lint(src, opts = {}) {
       secs.push(sec);
     };
     open(start, '(머리말)');
+    let rx = 0;
     for (let i = start; i < lines.length; i++) {
       const l = lines[i], fb = fenceAt[i];
+      while (rx + 1 < repeatedAt.length && repeatedAt[rx + 1].start <= i) rx++;
+      const repeated = repeatedAt[rx].set;
       if (fb) { if (i === fb.open && /^(flow|mermaid|svg)$/.test(fb.kind)) sec.diagram = true; continue; }
       const h = l.match(/^#{2,3}\s+(.*)$/);
       if (h) { open(i, h[1].trim()); continue; }
-      if (ORD.test(l)) {
+      // 대상마다 반복한 "1. **요금:** …"은 처리 순서가 아니라 속성 목록. 한 번만 쓴 "1. **수신:** 서버가 …"는 단계로 센다
+      const label = l.match(LABEL);
+      if (ORD.test(l) && !(label && repeated.has(label[1].trim()))) {
         sec.steps++; if (sec.first < 0) sec.first = i;
         if (SUBJ.test(l.replace(ORD, '').trim() + ' ')) sec.subj++;
       }
@@ -1128,7 +1350,7 @@ function readerCheckNeed(src) {
 const readerCheckLine = src => { const why = readerCheckNeed(src);
   return why.length ? `독자 회수 검사 대상(${why.join(' · ')}) — 필수: references/reader-check.md 절차대로 새 서브에이전트에게 md 내용만 주고 질문에 답하게 한 뒤, 한 일을 사용자에게 알리기` : ''; };
 
-module.exports = { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, FENCE_RE, STATUS_TAGS, measureReading, readerCheckNeed, readerCheckLine };
+module.exports = { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, FENCE_RE, STATUS_TAGS, measureReading, readerCheckNeed, readerCheckLine, stripComments, decodeEnt };
 
 if (require.main === module) {
   const args = process.argv.slice(2);

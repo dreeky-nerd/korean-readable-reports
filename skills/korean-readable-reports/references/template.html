@@ -46,8 +46,7 @@
     --mono: "Cascadia Mono", "JetBrains Mono", Consolas, ui-monospace, monospace;
     --content-w: 1060px;
     /* 역할 색(```flow 카드·Mermaid 역할 클래스 공통): 상태 색(초록·빨강·주황·노랑)과 겹치지 않게 */
-    --role-ext: #f8d9ea; --role-entry: #e4e0f7; --role-logic: #cfe8f3; --role-data: #cfeeea;
-    --flow-shadow: var(--ink);
+    --role-ext: #fcf0f6; --role-entry: #f3f1fb; --role-logic: #eef6fb; --role-data: #ecf7f5;
     /* 그림 색(```svg·```bars·```cards compare·●○○): 회색 = 보통, 빨강 = 문제, 주황 = 바뀌는 곳·추천. 이 세 가지뿐.
        -ink는 글자용(흰 바탕 대비 4.5 이상), 나머지는 선·채움용 */
     --fig-node: #eef0f2; --fig-edge: #9aa1a9; --fig-mute: #5f6670; --fig-seg: #c3c8cf;
@@ -62,8 +61,7 @@
     --blue-1: #123a4f; --green-1: #173322; --yellow-1: #3a2f10; --red-1: #3d1a1a; --orange-1: #3a2410;
     --blue-7: #9fd3ee; --green-7: #a9dc9c; --yellow-7: #fbd97a; --red-7: #f4a3a0; --orange-7: #f6b27a;
     --shadow-sm: 0 1px 2px rgba(0,0,0,.4); --shadow-md: 0 6px 16px rgba(0,0,0,.45);
-    --role-ext: #3d1a2e; --role-entry: #28253f; --role-logic: #123a4f; --role-data: #123633;
-    --flow-shadow: #05060a;
+    --role-ext: #2e1a25; --role-entry: #24223a; --role-logic: #13303f; --role-data: #122f2c;
     --fig-node: #2a2f35; --fig-edge: #6a7078; --fig-mute: #a2a8b4; --fig-seg: #4a5058;
     --fig-bad-bg: #3b2020; --fig-bad-ink: #f0706a; --fig-chg-bg: #3d2a12; --fig-chg-ink: #f6a04d;
   }
@@ -212,14 +210,16 @@
   /* CDN 막힌 환경(VDI·폐쇄망): 4초 안에 렌더 안 되면 소스 텍스트라도 읽히게 */
   pre.mermaid.fallback { color: var(--muted); text-align: left; font-family: var(--mono); font-size: 0.85em; white-space: pre; }
   pre.mermaid.fallback::before { content: "다이어그램 (Mermaid 소스 — 렌더러를 불러오지 못함)"; display: block; font-family: 'Pretendard', sans-serif; font-size: 0.8em; font-weight: 700; margin-bottom: 8px; }
+  pre.mermaid.mermaid-error::before { content: "다이어그램 (Mermaid 문법 오류 — 소스를 그대로 보여 줌)"; }
 
   /* ```flow — 가지 없는 순서 흐름. 카드가 폭에 맞춰 줄바꿈되고, 아래 스크립트가 화살표를 그린다
-     (같은 줄은 가로 화살표, 줄이 바뀌면 곡선). Mermaid 노드와 같은 브루탈리스트 톤: 굵은 테두리 + 딱딱한 그림자 */
-  .flow { position: relative; margin: 1em 0; padding: 26px 24px 30px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); color: var(--ink); }
+     (같은 줄은 가로 화살표, 줄이 바뀌면 줄 사이 틈에서 직각으로 꺾어 다음 줄 첫 카드로). Mermaid 노드와 같은 편집형 톤:
+     그림자 없음 · 가는 테두리 · 모서리 6px. 역할은 옅은 색조(ext는 점선), 상태는 옅은 채움 + 같은 계열 테두리 */
+  .flow { position: relative; margin: 1em 0; padding: 26px 24px 30px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); box-shadow: var(--shadow-sm); color: var(--fig-edge); }
   .flow-list { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 48px 56px; position: relative; z-index: 1; }
   .flow-step {
-    flex: 0 1 180px; min-width: 150px; padding: 12px 14px 13px;
-    background: var(--blue-1); border: 2px solid var(--ink); border-radius: 10px; box-shadow: 4px 4px 0 var(--flow-shadow);
+    flex: 0 1 180px; min-width: 150px; padding: 12px 14px 13px; color: var(--ink);
+    background: var(--surface); border: 1.25px solid var(--ink); border-radius: 6px;
     display: flex; flex-direction: column; gap: 3px;
     /* 한글은 단어 단위로 줄바꿈, 긴 영문 식별자는 render.js가 넣은 <wbr>에서 — 그래도 안 들어가면 마지막 수단으로 아무 데서나 */
     word-break: keep-all; overflow-wrap: anywhere;
@@ -227,15 +227,15 @@
   .flow-step strong { font-size: 0.98em; line-height: 1.35; }
   .flow-no { font-family: var(--mono); font-size: 0.7em; font-weight: 700; color: var(--muted); letter-spacing: .04em; }
   .flow-desc { font-size: 0.84em; color: var(--muted); line-height: 1.45; }
-  .flow-step.role-ext { background: var(--role-ext); }
+  .flow-step.role-ext { background: var(--role-ext); border-style: dashed; }
   .flow-step.role-entry { background: var(--role-entry); }
   .flow-step.role-logic { background: var(--role-logic); }
   .flow-step.role-data { background: var(--role-data); }
-  .flow-step.role-done { background: var(--green-1); }
-  .flow-step.role-fail { background: var(--red-1); }
-  .flow-step.role-caution { background: var(--orange-1); }
-  .flow-step.role-info { background: var(--blue-1); }
-  .flow-step.role-neutral { background: var(--gray-1); border-color: var(--gray-6); box-shadow: none; }
+  .flow-step.role-done { background: var(--green-1); border-color: var(--green-7); }
+  .flow-step.role-fail { background: var(--fig-bad-bg); border-color: var(--fig-bad); }
+  .flow-step.role-caution { background: var(--fig-chg-bg); border-color: var(--fig-chg); }
+  .flow-step.role-info { background: var(--blue-1); border-color: var(--blue-7); }
+  .flow-step.role-neutral { background: var(--gray-1); border-color: var(--fig-edge); }
   .flow-lines { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 0; }
   @media (max-width: 640px) { .flow-step { flex-basis: 100%; } }
 
@@ -400,7 +400,7 @@
       --ink: #191f28; --muted: #4b5563; --gray-1: #e9edf2; --gray: #c6ccd6; --gray-6: #6b7280; --gray-7: #4b5563;
       --blue-1: #e8f3ff; --green-1: #e6f7ef; --yellow-1: #fff2cf; --red-1: #fdebec; --orange-1: #fff4e5;
       --blue-7: #1957c2; --green-7: #007a52; --yellow-7: #843215; --red-7: #b4232e; --orange-7: #8a4f08;
-      --role-ext: #f8d9ea; --role-entry: #e4e0f7; --role-logic: #cfe8f3; --role-data: #cfeeea; --flow-shadow: #191f28;
+      --role-ext: #fcf0f6; --role-entry: #f3f1fb; --role-logic: #eef6fb; --role-data: #ecf7f5;
       --code-bg: #f3f5f8; --code-text: #191f28; --code-muted: #4b5563;
       --fig-node: #eef0f2; --fig-edge: #9aa1a9; --fig-mute: #5f6670; --fig-seg: #c3c8cf;
       --fig-bad-bg: #fdeceb; --fig-bad-ink: #b4232e; --fig-chg-bg: #fff1e0; --fig-chg-ink: #a84f00;
@@ -596,19 +596,20 @@
       for (var i = 0; i < steps.length - 1; i++) {
         var a = steps[i].getBoundingClientRect(), b = steps[i + 1].getBoundingClientRect(), d;
         if (Math.abs(a.top - b.top) < 8) {
-          // 같은 줄: 오른쪽 가운데 → 다음 카드 왼쪽 가운데 (앞 카드 그림자 4px 비켜서)
+          // 같은 줄: 오른쪽 가운데 → 다음 카드 왼쪽 가운데 (카드 테두리에서 6px 띄워서)
           var y1 = a.top + a.height / 2 - box.top, y2 = b.top + b.height / 2 - box.top;
           d = 'M' + (a.right - box.left + 6) + ',' + y1 + ' L' + (b.left - box.left - 4) + ',' + y2;
         } else {
-          // 줄 바뀜: 앞 카드 아래 가운데 → 다음 카드 위 가운데, 줄 사이 틈에서 휘어지는 곡선
+          // 줄 바뀜: 앞 카드 아래 가운데 → 다음 카드 위 가운데, 줄 사이 틈에서 직각으로 꺾는 선(모서리 r 8)
           var ax = a.left + a.width / 2 - box.left, ay = a.bottom - box.top + 6;
           var bx = b.left + b.width / 2 - box.left, by = b.top - box.top - 4;
-          var g = Math.max(16, (by - ay) * 0.85);
-          d = 'M' + ax + ',' + ay + ' C' + ax + ',' + (ay + g) + ' ' + bx + ',' + (by - g) + ' ' + bx + ',' + by;
+          var my = (ay + by) / 2, r = Math.min(8, Math.abs(bx - ax) / 2, (by - ay) / 4), sx = bx < ax ? -1 : 1;
+          d = 'M' + ax + ',' + ay + ' V' + (my - r) + ' Q' + ax + ',' + my + ' ' + (ax + sx * r) + ',' + my
+            + ' H' + (bx - sx * r) + ' Q' + bx + ',' + my + ' ' + bx + ',' + (my + r) + ' V' + by;
         }
         var p = document.createElementNS(NS, 'path');
         p.setAttribute('d', d); p.setAttribute('fill', 'none'); p.setAttribute('stroke', 'currentColor');
-        p.setAttribute('stroke-width', '2'); p.setAttribute('stroke-linecap', 'round'); p.setAttribute('marker-end', 'url(#' + id + ')');
+        p.setAttribute('stroke-width', '1.5'); p.setAttribute('stroke-linecap', 'round'); p.setAttribute('marker-end', 'url(#' + id + ')');
         svg.appendChild(p);
       }
       flow.appendChild(svg);
@@ -634,100 +635,105 @@
   // 다이어그램 소스에서는 classDef 없이  class 노드명 done|fail|caution|info|neutral  만 쓰면 아래 CSS가 라이트/다크 둘 다 맞춰 칠한다
   // theme: 'default'는 themeVariables를 무시한다 — 'base'여야 커스텀 색·폰트가 실제로 적용됨(2026-09-22 실측 확인, 라벤더+trebuchet ms로 나오던 버그)
   // 테마는 <html data-theme> 를 따른다(OS 설정 아님). 토글하면 window.hrrRenderDiagrams() 로 다시 그림
-  let mermaid = null;
-  // 종류별로 스타일을 다르게 입힌다(2026-09-23, 18종 실측 뒤 재구성). 종류 = 소스 첫 단어.
-  //  - BOXY(흐름도·상태·블록): 브루탈리스트 박스(굵은 테두리+딱딱한 그림자) + 역할/상태 색 강제 + 화살촉 채우기
-  //  - 나머지: 선·글자 색과 분류 색만 맞춘다. ER·클래스는 칸이 많아 칸마다 그림자가 붙으면 무거워지고,
-  //    마인드맵·칸반은 가지별 색이 사라진다. 클래스(빈 삼각형·마름모)·ER(o 표시) 화살촉은 속이 빈 모양이 곧 뜻이라 채우지 않는다.
+  let mermaid = null, elk = null, seq = 0;
+  // 편집형 그림(2026-10-29, cathrynlavery/diagram-design MIT의 원칙 참고 — 코드·서체는 가져오지 않음):
+  // 그림자 없음 · 가는 테두리 · 처리 상자 모서리 6px · 연결선 회색 · 색은 뜻이 있을 때만.
+  // 그 전의 브루탈리스트(굵은 테두리 + 딱딱한 그림자, modern-mermaid.live)는 사용자가 "너무 못생겼다"고 해서 걷어냈다.
+  // 종류 = 소스 첫 단어. BOXY(흐름도·상태·블록)는 렌더 뒤 노드 채움·테두리를 class대로 다시 칠한다(forceBoxy).
+  // ER·클래스(빈 삼각형·마름모·o 표시)의 화살촉은 속이 빈 모양이 곧 뜻이라 손대지 않는다.
   const kindOf = function (src) { return ((src || '').trim().split(/\s/)[0] || '').toLowerCase(); };
   const BOXY = /^(flowchart|graph|statediagram|statediagram-v2|block-beta)$/;
+  // ELK 배치: 연결선이 직각으로 꺾이고 상자를 피해 간다(dagre는 사선·곡선). 흐름도·상태만 지원하고,
+  // 모듈을 못 받으면 dagre로 그린다(그림은 계속 나온다). 순환 끊기 = DEPTH_FIRST: 시작 노드에서 따라가다 되돌아가는
+  // 화살표만 거꾸로 본다. 2026-10-29 실사용 17개 + 예시 실측 — 기본값 GREEDY는 되돌아가는 화살표가 있는 그림에서 시작 노드를
+  // 가운데로 옮겼고, MODEL_ORDER는 순환이 없어도 소스에 나중에 적은 노드로 가는 화살표를 위로 올려 그렸다
+  const ELK = /^(flowchart|graph|statediagram|statediagram-v2)$/;
 
   function palette(dark) {
     return {
-      ink: dark ? '#e7e9ee' : '#332d2f',
-      shadow: dark ? '#05060a' : '#332d2f',
+      ink: dark ? '#e7e9ee' : '#2d3142',
       surface: dark ? '#171a20' : '#ffffff',
       surface2: dark ? '#1d2129' : '#f7f8fa',
       grid: dark ? '#2a2f3a' : '#e6e8ec',
-      muted: dark ? '#a2a8b4' : '#696969',
-      fill: dark
-        ? { done: '#173322', fail: '#3d1a1a', caution: '#3a2410', info: '#123a4f', neutral: '#1d2129', primary: '#123a4f', secondary: '#173322', tertiary: '#1d2129', edgeLabel: '#171a20', line: '#a2a8b4',
-            ext: '#3d1a2e', entry: '#28253f', logic: '#123a4f', data: '#123633' }
-        : { done: '#dcedd9', fail: '#f8d5d4', caution: '#fde6d3', info: '#cfe8f3', neutral: '#f5f5f5', primary: '#cfe8f3', secondary: '#dcedd9', tertiary: '#f5f5f5', edgeLabel: '#ffffff', line: '#9d9da6',
+      muted: dark ? '#a2a8b4' : '#5f6670',
+      edge: dark ? '#7d848e' : '#8a919a',
+      // [채움, 테두리, 점선]. 상태·핵심은 같은 계열 테두리, 역할은 옅은 색조 + 본문색 테두리(ext만 점선 — 바깥 주체)
+      treat: dark
+        ? { '': ['#171a20', '#6b7280'], done: ['#173322', '#5fae6a'], fail: ['#3b2020', '#f0706a'], bad: ['#3b2020', '#f0706a', '5 4'],
+            caution: ['#3d2a12', '#f6a04d'], chg: ['#3d2a12', '#f6a04d'], info: ['#123a4f', '#6fb3d6'], neutral: ['#1d2129', '#4a5058'],
+            ext: ['#2e1a25', '#6b7280', '5 4'], entry: ['#24223a', '#6b7280'], logic: ['#13303f', '#6b7280'], data: ['#122f2c', '#6b7280'] }
+        : { '': ['#ffffff', '#2d3142'], done: ['#ebf6e8', '#2f8f46'], fail: ['#fdeceb', '#d6332f'], bad: ['#fdeceb', '#d6332f', '5 4'],
+            caution: ['#fff1e0', '#e8710a'], chg: ['#fff1e0', '#e8710a'], info: ['#e8f4fa', '#2b7bb9'], neutral: ['#f7f8fa', '#b4bac2'],
             // 역할 색(흐름·구조도용): 상태 색(초록·빨강·주황·노랑)과 겹치지 않는 색만 — ext 분홍, entry 연보라, logic 하늘, data 청록
-            ext: '#f8d9ea', entry: '#e4e0f7', logic: '#cfe8f3', data: '#cfeeea' },
-      // 분류 색(마인드맵 가지·타임라인 구간·칸반 열): 역할 색 4개 + 모래·회색. 상태 색은 쓰지 않는다
-      cScale: dark ? ['#123a4f', '#123633', '#28253f', '#3d1a2e', '#33291a', '#2a2f3a'] : ['#cfe8f3', '#cfeeea', '#e4e0f7', '#f8d9ea', '#efe6d6', '#ececec'],
+            ext: ['#fcf0f6', '#2d3142', '5 4'], entry: ['#f3f1fb', '#2d3142'], logic: ['#eef6fb', '#2d3142'], data: ['#ecf7f5', '#2d3142'] },
+      // 분류 색(마인드맵 가지·타임라인 구간·칸반 열): 역할 색조 + 모래·회색. 상태 색은 쓰지 않는다
+      cScale: dark ? ['#123a4f', '#123633', '#28253f', '#3d1a2e', '#33291a', '#2a2f3a'] : ['#e8f4fa', '#e6f5f2', '#efedf9', '#fbecf3', '#f6f0e6', '#f1f3f5'],
       // 조각·막대·가지가 나란히 붙는 차트(원형·xy·깃)는 옅은 틴트로는 구분이 안 된다(실측: 원형 3번째 조각이 배경과 같은 흰색,
       // xy 막대가 크림색이라 안 보임) → Urban 핵심색 중간 채도. 라이트·다크 공통
       series: ['#1696d2', '#ec008b', '#55b748', '#e66600', '#9d9dcf', '#fdbf11', '#46b3a8', '#9d9d9d']
     };
   }
 
-  function configFor(kind, P) {
-    const ink = P.ink, shadow = P.shadow, fill = P.fill, boxy = BOXY.test(kind);
+  function configFor(kind, P, useElk) {
+    const ink = P.ink, T = P.treat;
     const tv = {
       fontFamily: '"Pretendard", -apple-system, sans-serif',
-      primaryColor: fill.primary, primaryBorderColor: '#3182f6', primaryTextColor: ink,
-      lineColor: fill.line, secondaryColor: fill.secondary, tertiaryColor: fill.tertiary,
+      primaryColor: T[''][0], primaryBorderColor: T[''][1], primaryTextColor: ink, nodeBorder: T[''][1], mainBkg: T[''][0],
+      lineColor: P.edge, secondaryColor: P.surface2, tertiaryColor: P.surface2,
       textColor: ink, noteTextColor: ink, actorTextColor: ink, signalTextColor: ink, labelTextColor: ink, titleColor: ink,
-      noteBkgColor: fill.caution, actorBkg: fill.primary, actorBorder: ink, signalColor: ink,
-      mainBkg: fill.primary, clusterBkg: fill.tertiary, edgeLabelBackground: fill.edgeLabel,
+      noteBkgColor: T.caution[0], noteBorderColor: T.caution[1], actorBkg: T[''][0], actorBorder: T[''][1], signalColor: P.edge,
+      clusterBkg: P.surface2, clusterBorder: T.neutral[1], edgeLabelBackground: P.surface,
       // 간트: 색 언어 그대로 — 예정=회색, 진행 중(active)=파랑, 완료(done)=초록, 긴급(crit)=빨강
-      taskBkgColor: fill.neutral, taskBorderColor: ink, taskTextColor: ink, taskTextDarkColor: ink, taskTextLightColor: ink, taskTextOutsideColor: ink,
-      activeTaskBkgColor: fill.info, activeTaskBorderColor: '#3182f6',
-      doneTaskBkgColor: fill.done, doneTaskBorderColor: '#00a971',
-      critBkgColor: fill.fail, critBorderColor: '#e0333f',
+      taskBkgColor: T.neutral[0], taskBorderColor: T.neutral[1], taskTextColor: ink, taskTextDarkColor: ink, taskTextLightColor: ink, taskTextOutsideColor: ink,
+      activeTaskBkgColor: T.info[0], activeTaskBorderColor: T.info[1],
+      doneTaskBkgColor: T.done[0], doneTaskBorderColor: T.done[1],
+      critBkgColor: T.fail[0], critBorderColor: T.fail[1],
       sectionBkgColor: P.surface2, altSectionBkgColor: P.surface, sectionBkgColor2: P.surface2,
-      gridColor: P.grid, todayLineColor: '#e0333f', excludeBkgColor: P.surface2,
-      pieStrokeColor: ink, pieOuterStrokeColor: ink, pieSectionTextColor: '#17171c', pieTitleTextColor: ink, pieLegendTextColor: ink, pieOpacity: '1',
+      gridColor: P.grid, todayLineColor: T.chg[1], excludeBkgColor: P.surface2,
+      pieStrokeColor: P.surface, pieOuterStrokeColor: P.grid, pieSectionTextColor: '#17171c', pieTitleTextColor: ink, pieLegendTextColor: ink, pieOpacity: '1',
       xyChart: {
         backgroundColor: P.surface, titleColor: ink,
         xAxisLabelColor: ink, xAxisTitleColor: ink, xAxisTickColor: P.muted, xAxisLineColor: P.muted,
         yAxisLabelColor: ink, yAxisTitleColor: ink, yAxisTickColor: P.muted, yAxisLineColor: P.muted,
         plotColorPalette: P.series.slice(0, 4).join(', ')
       },
-      commitLabelColor: ink, commitLabelBackground: P.surface, tagLabelColor: ink, tagLabelBackground: P.surface2, tagLabelBorder: ink
+      commitLabelColor: ink, commitLabelBackground: P.surface, tagLabelColor: ink, tagLabelBackground: P.surface2, tagLabelBorder: T.neutral[1]
     };
     // cScaleInv(타임라인 항목 밑줄 등)는 mermaid가 분류 색을 뒤집어 만들어서 빨강·주황이 나온다 — "실패"로 읽히므로 중립 회색으로
     P.cScale.forEach(function (c, i) {
-      [i, i + 6].forEach(function (k) { tv['cScale' + k] = c; tv['cScaleLabel' + k] = ink; tv['cScaleInv' + k] = fill.line; });
+      [i, i + 6].forEach(function (k) { tv['cScale' + k] = c; tv['cScaleLabel' + k] = ink; tv['cScaleInv' + k] = P.edge; });
     });
     P.series.forEach(function (c, i) { tv['pie' + (i + 1)] = c; tv['git' + i] = c; tv['gitBranchLabel' + i] = i === 5 ? '#17171c' : '#ffffff'; });
 
-    // 모든 종류: 연결선은 진하고 굵게. v11은 흐름도 선이 .flowchart-link, 클래스 .relation, ER .relationshipLine
-    // (옛 셀렉터 .edgePath .path만 있어서 선이 가는 회색으로 나왔다 — 2026-09-23 실측)
+    // 연결선은 회색 1.5px, 화살촉도 같은 색. v11은 흐름도 선이 .flowchart-link, 클래스 .relation, ER .relationshipLine
+    // 선 위 글자는 불투명 바탕 위에 — mermaid 기본은 바탕 rect가 반투명(opacity 0.5)이라 선이 글자를 뚫고 지나간다
     let css = `
-      .flowchart-link, .edgePath .path, .transition, .relation, .relationshipLine { stroke: ${ink} !important; stroke-width: 2px !important; }
-      marker path { stroke: ${ink} !important; }
-      .edgeLabel { background-color: ${fill.edgeLabel} !important; font-weight: 700 !important; color: ${ink} !important; }
-      .edgeLabel rect, .labelBkg { fill: ${fill.edgeLabel} !important; }
-      /* 시퀀스 — actor/note는 rect로 태그를 좁힌다(bare .actor는 라벨 <text>에도 붙어 filter가 글자를 겹치게 함, 2026-09-22·23 실측) */
-      rect.actor { stroke: ${ink} !important; stroke-width: 2.5px !important; fill: ${fill.primary} !important; filter: drop-shadow(4px 4px 0px ${shadow}) !important; }
-      .actor-line { stroke: ${ink} !important; }
-      .messageLine0, .messageLine1 { stroke: ${ink} !important; stroke-width: 2px !important; }
-      text.actor, .messageText, .noteText, .labelText, .loopText { font-weight: 700 !important; }
-      rect.note { stroke: ${ink} !important; stroke-width: 2.5px !important; fill: ${fill.caution} !important; filter: drop-shadow(4px 4px 0px ${shadow}) !important; }
+      .flowchart-link, .edgePath .path, .transition, .relation, .relationshipLine { stroke: ${P.edge} !important; stroke-width: 1.5px !important; }
+      .edgeLabel { background-color: ${P.surface} !important; color: ${P.muted} !important; font-size: 13px !important; font-weight: 600 !important; }
+      .edgeLabel p, .edgeLabel span, .labelBkg { background-color: ${P.surface} !important; }
+      .edgeLabel p { padding: 1px 6px; }
+      .edgeLabel rect, .labelBkg rect { fill: ${P.surface} !important; opacity: 1 !important; }
+      .cluster-label .nodeLabel, .cluster-label span { color: ${P.muted} !important; font-weight: 700 !important; }
+      /* 시퀀스 — actor/note는 rect로 태그를 좁힌다(bare .actor는 라벨 <text>에도 붙는다, 2026-09-22·23 실측) */
+      rect.actor { stroke-width: 1.25px !important; }
+      .actor-line { stroke: ${T.neutral[1]} !important; stroke-dasharray: 3 4; }
+      .messageLine0, .messageLine1 { stroke: ${P.edge} !important; stroke-width: 1.5px !important; }
+      #arrowhead path, #crosshead path, #filled-head path { fill: ${P.edge} !important; stroke: ${P.edge} !important; }
+      text.actor { font-weight: 600 !important; }
+      .messageText { fill: ${ink} !important; font-size: 13.5px !important; }
+      rect.note { stroke-width: 1.25px !important; }
+      .labelBox { fill: ${P.surface2} !important; stroke: ${T.neutral[1]} !important; }
     `;
-    if (boxy) css += `
-      /* 브루탈리스트 각색(출처: modern-mermaid.live, MIT) — 장식색 순환 대신 역할·상태 클래스로 색을 준다 */
-      .node rect, .node polygon, .node circle, .node path { stroke: ${ink} !important; stroke-width: 2.5px !important; filter: drop-shadow(4px 4px 0px ${shadow}); }
-      .node .label, .nodeLabel { font-weight: 700 !important; color: ${ink} !important; }
-      .marker, .marker path, .arrowMarkerPath, .arrowheadPath { fill: ${ink} !important; stroke: ${ink} !important; }
-      .cluster rect { stroke: ${ink} !important; stroke-width: 2px !important; filter: drop-shadow(5px 5px 0px ${shadow}); }
-      .node.done rect, .node.done polygon, .node.done circle, .node.done path { fill: ${fill.done} !important; }
-      .node.fail rect, .node.fail polygon, .node.fail circle, .node.fail path { fill: ${fill.fail} !important; }
-      .node.caution rect, .node.caution polygon, .node.caution circle, .node.caution path { fill: ${fill.caution} !important; }
-      .node.info rect, .node.info polygon, .node.info circle, .node.info path { fill: ${fill.info} !important; }
-      .node.neutral rect, .node.neutral polygon, .node.neutral circle, .node.neutral path { fill: ${fill.neutral} !important; stroke: ${fill.line} !important; filter: none; }
-      .node.ext rect, .node.ext polygon, .node.ext circle, .node.ext path { fill: ${fill.ext} !important; }
-      .node.entry rect, .node.entry polygon, .node.entry circle, .node.entry path { fill: ${fill.entry} !important; }
-      .node.logic rect, .node.logic polygon, .node.logic circle, .node.logic path { fill: ${fill.logic} !important; }
-      .node.data rect, .node.data polygon, .node.data circle, .node.data path { fill: ${fill.data} !important; }
+    if (BOXY.test(kind)) css += `
+      .node .label, .nodeLabel { font-weight: 600 !important; color: ${ink} !important; }
+      .marker, .marker path, .arrowMarkerPath, .arrowheadPath { fill: ${P.edge} !important; stroke: ${P.edge} !important; }
     `;
     return {
       startOnLoad: false, theme: 'base',
-      flowchart: { useMaxWidth: false }, sequence: { useMaxWidth: false }, state: { useMaxWidth: false },
+      layout: useElk ? 'elk' : 'dagre', elk: { cycleBreakingStrategy: 'DEPTH_FIRST' },
+      flowchart: { useMaxWidth: false, curve: 'linear', nodeSpacing: 40, rankSpacing: 52, padding: 14 },
+      // mirrorActors: 참여자 상자를 아래에 한 번 더 그리지 않는다(짧은 보고서 그림에선 같은 상자가 두 줄로 보여 무겁다)
+      sequence: { useMaxWidth: false, mirrorActors: false, actorMargin: 70, messageMargin: 40 }, state: { useMaxWidth: false },
       // 간트: 기본 글자 11px·날짜 전체 표기는 너무 작고 빽빽함(실측) → 13px, 월/일
       gantt: { useMaxWidth: false, fontSize: 13, sectionFontSize: 13, barHeight: 24, barGap: 6, topPadding: 50, leftPadding: 90, axisFormat: '%m/%d' },
       gitGraph: { rotateCommitLabel: false },
@@ -738,39 +744,33 @@
   // setBoth: CSS만 믿지 않는다(2026-09-23, 실측: 인라인 style에 !important까지 박혀도 사용자 실제 렌더러에서 안 먹는
   // 사례 — 그 렌더러가 SVG fill/stroke에 CSS를 안 태우는 것으로 추정). 같은 값을 프레젠테이션 속성으로도 박는다.
   const setBoth = function (el, prop, value) { el.style.setProperty(prop, value, 'important'); el.setAttribute(prop, value); };
+  // 노드 도형 하나를 [채움, 테두리, 점선]으로 칠한다. 모서리 6px은 처리 상자(rect)만 — 마름모·원통·원은 모양이 곧 뜻
+  function paint(shape, t, width) {
+    setBoth(shape, 'fill', t[0]); setBoth(shape, 'stroke', t[1]); setBoth(shape, 'stroke-width', width || '1.25px');
+    if (t[2]) setBoth(shape, 'stroke-dasharray', t[2]);
+    else { shape.style.removeProperty('stroke-dasharray'); shape.removeAttribute('stroke-dasharray'); }
+    shape.style.setProperty('filter', 'none', 'important');
+    if (shape.tagName.toLowerCase() === 'rect' && !shape.closest('.cluster')) { shape.setAttribute('rx', '6'); shape.setAttribute('ry', '6'); }
+  }
 
   function forceSequence(svg, P) {
-    svg.querySelectorAll('rect.actor').forEach(function (r) {
-      setBoth(r, 'fill', P.fill.primary); setBoth(r, 'stroke', P.ink); setBoth(r, 'stroke-width', '2.5px');
-      r.style.setProperty('filter', 'drop-shadow(4px 4px 0px ' + P.shadow + ')', 'important');
-    });
-    svg.querySelectorAll('rect.note').forEach(function (r) {
-      setBoth(r, 'fill', P.fill.caution); setBoth(r, 'stroke', P.ink); setBoth(r, 'stroke-width', '2.5px');
-      r.style.setProperty('filter', 'drop-shadow(4px 4px 0px ' + P.shadow + ')', 'important');
-    });
+    svg.querySelectorAll('rect.actor').forEach(function (r) { paint(r, P.treat['']); });
+    svg.querySelectorAll('rect.note').forEach(function (r) { paint(r, P.treat.caution); });
   }
 
   function forceBoxy(svg, P) {
-    const f = P.fill;
-    const stateFill = { done: f.done, fail: f.fail, caution: f.caution, info: f.info, neutral: f.neutral, ext: f.ext, entry: f.entry, logic: f.logic, data: f.data };
+    // 한 노드에 class가 여럿이면 문제·강조·상태가 역할보다 먼저(class A logic chg → 주황). bad가 fail보다 먼저라 점선이 남는다
+    const T = P.treat, keys = ['bad', 'fail', 'chg', 'caution', 'done', 'info', 'neutral', 'ext', 'entry', 'logic', 'data'];
     svg.querySelectorAll('.node').forEach(function (node) {
       // 상태 다이어그램 시작(●)·끝(◉) 점은 건너뛴다 — 노드 색으로 덮으면 끝 점의 고리·안쪽 점 구분이 사라진다(2026-09-23 실측)
       if (/_(start|end)-\d+$/.test(node.id) || node.querySelector('.state-start, .state-end')) return;
-      const cls = Object.keys(stateFill).find(function (k) { return node.classList.contains(k); });
-      const nodeFill = cls ? stateFill[cls] : f.primary;
-      node.querySelectorAll('rect, polygon, circle, path').forEach(function (shape) {
-        setBoth(shape, 'fill', nodeFill);
-        setBoth(shape, 'stroke', cls === 'neutral' ? f.line : P.ink);
-        setBoth(shape, 'stroke-width', '2.5px');
-        shape.style.setProperty('filter', cls !== 'neutral' ? ('drop-shadow(4px 4px 0px ' + P.shadow + ')') : 'none', 'important');
-      });
+      const cls = keys.find(function (k) { return node.classList.contains(k); }) || '';
+      // chg = 그림의 핵심 1~2개(규칙 15) — 테두리를 한 단계 굵게 해서 색을 못 보는 사람에게도 보이게
+      node.querySelectorAll('rect, polygon, circle, path').forEach(function (shape) { paint(shape, T[cls], cls === 'chg' ? '2.25px' : ''); });
     });
-    svg.querySelectorAll('.cluster rect').forEach(function (r) {
-      setBoth(r, 'stroke', P.ink); setBoth(r, 'stroke-width', '2px');
-      r.style.setProperty('filter', 'drop-shadow(5px 5px 0px ' + P.shadow + ')', 'important');
-    });
-    svg.querySelectorAll('.flowchart-link, .transition').forEach(function (p) { setBoth(p, 'stroke', P.ink); setBoth(p, 'stroke-width', '2px'); });
-    svg.querySelectorAll('marker path').forEach(function (p) { setBoth(p, 'fill', P.ink); setBoth(p, 'stroke', P.ink); });
+    svg.querySelectorAll('.cluster rect').forEach(function (r) { paint(r, [P.surface2, T.neutral[1]]); r.setAttribute('rx', '8'); r.setAttribute('ry', '8'); });
+    svg.querySelectorAll('.flowchart-link, .transition').forEach(function (p) { setBoth(p, 'stroke', P.edge); setBoth(p, 'stroke-width', '1.5px'); });
+    svg.querySelectorAll('marker path').forEach(function (p) { setBoth(p, 'fill', P.edge); setBoth(p, 'stroke', P.edge); });
   }
 
   async function renderDiagrams() {
@@ -782,6 +782,10 @@
       else { p.removeAttribute('data-processed'); p.textContent = p.dataset.src; }
     });
     if (!mermaid) mermaid = (await import('https://cdn.jsdelivr.net/npm/mermaid@11.17.2/dist/mermaid.esm.min.mjs')).default;
+    if (elk === null && pres.some(function (p) { return ELK.test(kindOf(p.dataset.src)); })) {
+      try { mermaid.registerLayoutLoaders((await import('https://cdn.jsdelivr.net/npm/@mermaid-js/layout-elk@0.2.3/dist/mermaid-layout-elk.esm.min.mjs')).default); elk = true; }
+      catch (e) { elk = false; }
+    }
     for (const p of pres) {
       // 지금 안 보이는 다이어그램(접힌 <details> 안 등)은 건너뛰고 펼칠 때 그린다 — 크기를 못 재서 흐름도는
       // "Syntax error", 간트·마인드맵은 빈 칸으로 나온다(2026-09-23 실측). 규칙 9·12줄 제한 때문에 접힌 칸 안 다이어그램은 흔하다
@@ -791,14 +795,38 @@
     // 렌더가 4초를 넘겨 성공한 경우(느린 VDI): 타임아웃이 먼저 붙인 폴백 표시를 걷어낸다
     document.querySelectorAll('pre.mermaid[data-processed].fallback').forEach(function (p) { p.classList.remove('fallback'); });
   }
-  async function renderOne(p) {
+  // 그림은 한 번에 하나씩 — initialize()는 전역 설정이라, 펼친 칸의 그림과 테마 전환 다시 그리기가 겹치면
+  // 다른 그림의 설정(종류·배치)으로 그려질 수 있다. 모든 렌더를 이 줄에 세운다
+  let queue = Promise.resolve();
+  function renderOne(p) { const job = queue.then(function () { return drawOne(p); }); queue = job.catch(function () {}); return job; }
+  async function drawOne(p) {
+    // 줄을 기다리는 동안 칸이 다시 접혔으면 그리지 않고 다음 펼침을 기다린다(숨은 채 그리면 크기를 못 재 오류가 난다)
+    if (!p.offsetParent) { p.dataset.pending = '1'; return; }
     delete p.dataset.pending;
     const P = palette(document.documentElement.getAttribute('data-theme') === 'dark');
     const kind = kindOf(p.dataset.src);
-    mermaid.initialize(configFor(kind, P));
-    // 하나씩 그린다 — 종류별 설정을 주려면 필요하고, 한 다이어그램 문법 오류가 나머지를 막지 않는다
-    try { await mermaid.run({ nodes: [p] }); } catch (e) { return; }
-    p.classList.remove('fallback');
+    let useElk = !!elk && ELK.test(kind);
+    // 하나씩 그린다 — 종류별 설정을 주려면 필요하고, 한 다이어그램 문법 오류가 나머지를 막지 않는다.
+    // mermaid.run() 대신 render(고유 id): run()은 그림마다 id를 Date.now()로 만들어서 같은 값이 겹치면
+    // 여러 그림이 한 칸에 포개져 그려졌다(2026-10-29, 헤드리스에서 17개 중 15개가 같은 id).
+    // 문법 오류면 소스 글자를 그대로 보여 준다(폴백과 같은 모양) — 빈 칸이나 폭탄 그림보다 고치기 쉽다
+    // ELK가 실패하면(배치 청크를 못 받음 등) 새 id로 dagre에서 한 번 더 — 그래도 안 되면 문법 오류로 본다
+    const clean = function (id) { [id, 'd' + id].forEach(function (x) { const el = document.getElementById(x); if (el && !p.contains(el)) el.remove(); }); };
+    for (;;) {
+      const id = 'krr-mmd-' + (++seq);
+      mermaid.initialize(configFor(kind, P, useElk));
+      try {
+        const r = await mermaid.render(id, p.dataset.src);
+        p.innerHTML = r.svg; p.setAttribute('data-processed', 'true');
+        if (r.bindFunctions) r.bindFunctions(p);
+        break;
+      } catch (e) {
+        clean(id);
+        if (useElk) { useElk = false; continue; }
+        p.removeAttribute('data-processed'); p.textContent = p.dataset.src; p.classList.add('fallback', 'mermaid-error'); return;
+      }
+    }
+    p.classList.remove('fallback', 'mermaid-error');
     const svg = p.querySelector('svg');
     if (!svg) return;
     if (BOXY.test(kind)) forceBoxy(svg, P);

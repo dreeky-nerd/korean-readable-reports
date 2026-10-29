@@ -120,7 +120,7 @@ graph LR
 **★버그·수정①: sequenceDiagram의 actor/note rect가 CSS 대신 mermaid 기본색을 그대로 보여줄 수 있다.** 사용자 실제 브라우저(시크릿모드까지 포함, 캐시 요인 배제됨)에서 재현: `<rect class="actor" fill="#eaeaea" stroke="#666">`처럼 mermaid가 액터 박스에 프레젠테이션 속성으로 자체 기본색을 직접 굽는데, 우리 `themeCSS`의 스타일시트 규칙(스펙상 프레젠테이션 속성보다 항상 우선해야 함)이 그 환경에서 이겨야 정상인데 안 이겼다. **원인은 특정 못함**(mermaid@11.17.2로 버전 고정까지 했는데도 재현 — 처음 세운 "CDN 버전 드리프트" 가설은 틀렸다). **조치**: CSS 캐스케이드에 기대지 않는다. `mermaid.run()` 완료 직후 JS로 fill·stroke·stroke-width를 **`style.setProperty(...,'important')`와 `setAttribute(...)` 둘 다** 강제로 못박는다(코드는 `template.html`의 `renderDiagrams` 함수, `mermaid.run` 호출 바로 다음, `setBoth` 헬퍼). inline style만으론 부족해서(그것도 씹힌 사례가 실제로 나옴) XML 프레젠테이션 속성 자체까지 덮어써야 CSS를 통째로 무시하는 렌더러에서도 값이 맞다. [검증 2026-09-23 · 사용자 실제 브라우저 DOM 덤프로 최종 확인 — `fill="#cfe8f3"` 속성값 자체가 바뀐 것까지 확인됨]
 **예외 — 상태 다이어그램의 시작(●)·끝(◉) 점은 강제 색칠에서 뺀다.** 모든 `.node` 도형을 노드 채움색으로 덮으면 시작 점이 옅은 파랑이 되고, 끝 점의 바깥 고리와 안쪽 점이 같은 색이 되어 과녁 모양이 사라진다. `renderDiagrams`의 노드 루프가 id가 `_start-숫자`/`_end-숫자`로 끝나는 노드를 건너뛰어 mermaid 기본색(`lineColor`)을 유지한다. [검증 2026-09-23 · 내장브라우저 실측 — 수정 전 시작·끝 점 fill 모두 #cfe8f3, 수정 후 시작 #9d9da6·끝 바깥/안쪽 구분, 일반 노드·시퀀스 actor/note 색은 변화 없음]
 
-**★버그·수정②: actor/note에 그림자(filter)를 걸 때 셀렉터를 `rect.actor`/`rect.note`로 태그까지 명시해야 한다.** bare `.actor`/`.note`는 라벨 `<text class="actor actor-box">`에도 붙어있어서, 거기 `filter: drop-shadow(...)`가 걸리면 텍스트가 겹쳐 보이는 버그가 재현된다(2026-09-22 최초 발견 당시엔 "actor/note는 그림자 자체를 포기"로 회피했는데, **회피가 아니라 셀렉터 스코프 문제였다** — 태그를 명시하니 그림자도 정상, 텍스트도 안 깨짐). `fill`/`stroke`는 원래도 안전했다(자식 `<tspan>`이 자기 `fill:#332d2f;stroke:none`을 따로 갖고 있어서 부모 텍스트 요소에 뭘 설정해도 실제로 그려지는 글자색엔 영향 없음) — 문제는 오직 `filter`뿐이었다. [검증 2026-09-23 · 내장브라우저 실측 — `.actor`에 filter 걸면 글자 겹침 재현, `rect.actor`로 좁히면 정상]
+**★버그·수정②: actor/note에 그림자(filter)를 걸 때 셀렉터를 `rect.actor`/`rect.note`로 태그까지 명시해야 한다.** bare `.actor`/`.note`는 라벨 `<text class="actor actor-box">`에도 붙어있어서, 거기 `filter: drop-shadow(...)`가 걸리면 텍스트가 겹쳐 보이는 버그가 재현된다(2026-09-22 최초 발견 당시엔 "actor/note는 그림자 자체를 포기"로 회피했는데, **회피가 아니라 셀렉터 스코프 문제였다** — 태그를 명시하니 그림자도 정상, 텍스트도 안 깨짐). `fill`/`stroke`는 원래도 안전했다(자식 `<tspan>`이 자기 `fill:#332d2f;stroke:none`을 따로 갖고 있어서 부모 텍스트 요소에 뭘 설정해도 실제로 그려지는 글자색엔 영향 없음) — 문제는 오직 `filter`뿐이었다. [검증 2026-09-23 · 내장브라우저 실측 — `.actor`에 filter 걸면 글자 겹침 재현, `rect.actor`로 좁히면 정상] (2026-10-29부터 그림자를 아예 쓰지 않는다 — 아래 "편집형 스타일". 셀렉터를 `rect.actor`로 좁히는 규칙은 테두리 두께에 그대로 쓴다)
 
 **★버그·수정③: flowchart 노드 라벨만 `font-weight:700`이 걸려있고 sequenceDiagram의 actor·message·note 텍스트는 안 걸려서 같은 문서 안에서 굵기가 안 맞았다.** `.node .label, .nodeLabel`엔 있는데 대응하는 sequence 쪽 셀렉터가 themeCSS에 없었던 누락. **조치**: `text.actor, .messageText, .noteText, .labelText, .loopText { font-weight: 700 !important; }` 추가(②의 filter 겹침 버그와 달리 `font-weight`는 텍스트 자체 속성이라 `rect.actor`로 좁힐 필요 없이 `text.actor`로 바로 지정해도 안전). [검증 2026-09-23 · 내장브라우저 실측 · 렌더 후 스크린샷으로 actor/message/note 전부 굵게 확인]
 
@@ -132,9 +132,9 @@ graph LR
 
 | 종류 | 결과 | 비고 |
 |---|---|---|
-| flowchart · stateDiagram-v2 · block-beta | 쓴다 | 브루탈리스트 박스 + 역할·상태 색. block-beta는 붙어 있는 블록 사이 화살표가 안 보임 → 사이에 `space` 블록을 둔다 |
+| flowchart · stateDiagram-v2 · block-beta | 쓴다 | 편집형 상자(그림자 없음·가는 테두리) + 역할·상태 색, 흐름도·상태는 ELK 직각 배치(아래 "편집형 스타일"). block-beta는 붙어 있는 블록 사이 화살표가 안 보임 → 사이에 `space` 블록을 둔다 |
 | sequenceDiagram | 쓴다 | 분기(alt)·반복(loop)·메모·활성 구간 모두 정상 |
-| classDiagram · erDiagram | 쓴다 | 선·글자 색만 맞춤(칸마다 그림자 붙이면 무거움). ER 엔티티 이름은 한글 그대로 가능, 별칭 `P["도서관"]`은 관계 줄에서 문법 오류 |
+| classDiagram · erDiagram | 쓴다 | 선·글자 색만 맞춤. ER 엔티티 이름은 한글 그대로 가능, 별칭 `P["도서관"]`은 관계 줄에서 문법 오류 |
 | gantt | 쓴다 | 색 언어 적용: 예정=회색, active=파랑, done=초록, crit=빨강. 글자 13px, 날짜 월/일 |
 | mindmap · timeline · kanban | 쓴다 | 가지·구간·열은 분류 색(역할 색 4 + 모래·회색) |
 | xychart-beta · pie · gitGraph · radar-beta | 쓴다 | 조각·막대·가지는 Urban 핵심색 중간 채도(옅은 틴트는 안 보임). 파이는 §4대로 되도록 막대로 |
@@ -144,47 +144,40 @@ graph LR
 
 **연결선이 가는 회색으로 나오던 문제**: 예전 셀렉터 `.edgePath .path`는 v11에서 안 맞는다. 흐름도는 `.flowchart-link`, 클래스 `.relation`, ER `.relationshipLine`. 화살촉 채우기는 흐름도·상태·블록만 — 클래스(빈 삼각형·마름모)·ER(o 표시)은 속이 빈 모양이 곧 뜻이다.
 
-**종류별로 따로 초기화한다**: `renderDiagrams`가 다이어그램마다 소스 첫 단어로 종류를 보고 `mermaid.initialize` → `mermaid.run({nodes:[p]})`를 하나씩 한다. 브루탈리스트 박스와 색 강제(2차 방어 코드)는 흐름도·상태·블록에만. 한 다이어그램의 문법 오류가 나머지를 막지 않는다.
+**종류별로 따로 초기화하고, 하나씩 줄 세워 그린다**: `drawOne`이 다이어그램마다 소스 첫 단어로 종류를 보고 `mermaid.initialize` → `mermaid.render('krr-mmd-<번호>', 소스)`를 한다. `initialize`는 전역 설정이라 모든 렌더를 한 줄(`queue`)에 세운다 — 펼친 칸의 그림과 테마 전환 다시 그리기가 겹쳐도 다른 그림의 설정을 받지 않는다. 노드 색 강제(2차 방어 코드)는 흐름도·상태·블록에만. 한 다이어그램의 문법 오류가 나머지를 막지 않고, 오류난 그림은 "문법 오류" 상자 안에 소스 글자로 보인다(`.mermaid-error`, qa가 센다).
+
+**★버그·수정: 여러 그림이 한 칸에 포개져 그려졌다.** 예전 `mermaid.run({nodes:[p]})`은 호출마다 id 생성기를 새로 만들고 id를 `Date.now()`로 정한다. 같은 밀리초에 그려진 그림들이 같은 svg id를 받아, 헤드리스 렌더(가상 시간)에서 실사용 흐름도 17개 중 15개가 같은 id를 받아 첫 그림 칸에 겹쳐 그려졌다. 일반 브라우저에서 같은 일이 생기는지는 [추정]. **조치**: 문서 수명 동안 늘어나는 번호로 `mermaid.render(id, 소스)`를 직접 부르고, 실패하면 임시 요소(`id`, `d<id>`)를 지운다. qa가 같은 id를 받은 그림을 센다. [완료] 2026-10-29 · 헤드리스 DOM 덤프로 id 17개 모두 다름 확인
+
+### 편집형 스타일 (2026-10-29, 브루탈리스트를 대체)
+
+사용자가 굵은 테두리·딱딱한 그림자의 브루탈리스트 그림(`modern-mermaid.live` 각색)을 "너무 못생겼다"고 했다. `cathrynlavery/diagram-design`(MIT)의 원칙을 가져왔다. 코드·서체는 가져오지 않았다. **실제 값의 진실은 `template.html`**(`palette`·`configFor`·`paint`)이다.
+
+- **그림자 없음, 가는 테두리.** 노드 테두리 1.25px, 처리 상자(rect)만 모서리 6px. 마름모·원통·원은 모양이 곧 뜻이라 그대로 둔다. 묶음(subgraph)은 옅은 회색 바탕에 모서리 8px.
+- **연결선은 회색 1.5px, 화살촉도 같은 색.** 선 위 글자는 불투명 바탕 위에 둔다. Mermaid 기본 바탕 rect가 반투명(0.5)이라 선이 글자를 뚫고 지나갔다.
+- **ELK 배치(흐름도·상태).** `@mermaid-js/layout-elk@0.2.3`(Mermaid 11용)을 흐름도·상태 그림이 있을 때만 받는다. 연결선이 직각으로 꺾이고 상자를 피해 간다. dagre는 사선·곡선이 남고, `curve: 'step'`은 직각이지만 이상하게 꺾였다. 순환 끊기는 `DEPTH_FIRST`다. 기본값 `GREEDY`는 되돌아가는 화살표가 있는 그림에서 시작 노드를 가운데로 옮겼다. `MODEL_ORDER`는 순환이 없어도 소스에 나중에 적은 노드로 가는 화살표를 위로 올려 그렸다. ELK 모듈을 못 받거나 ELK 렌더가 실패하면 새 id로 dagre에서 한 번 더 그린다. [완료] 2026-10-29 · 실사용 흐름도·상태 17개 + 예시를 헤드리스로 렌더해 화면 비교
+- **색은 뜻이 있을 때만.** 노드 class별 처리는 아래와 같다.
+
+| class | 뜻 | 모양 |
+|---|---|---|
+| (없음) | 보통 단계 | 흰 바탕 + 본문색 테두리 |
+| `chg` | 그림의 핵심·바뀌는 곳(1~2개) | 옅은 주황 + 주황 테두리 2.25px |
+| `bad` / `fail` | 문제가 생기는 곳 / 실패 | 옅은 빨강 + 빨강 테두리(`bad`는 점선) |
+| `done` · `info` · `caution` · `neutral` | 완료 · 진행 중 · 주의 · 이전·보통 | 같은 계열 옅은 채움 + 테두리 |
+| `ext` · `entry` · `logic` · `data` | 외부 주체 · 진입점 · 처리 · 데이터 | 아주 옅은 역할 색조(분홍·연보라·하늘·청록) + 본문색 테두리. `ext`만 점선(바깥에 있는 주체라는 뜻 — 선택 사항·불확실이 아님) |
+
+한 노드에 class가 여럿이면 `bad` → `fail` → `chg` → `caution` → `done` → `info` → `neutral` → 역할 순으로 하나만 쓴다. 역할이 강조·실패를 가리지 않는다. 색은 다이어그램 소스에서 **class 이름만** 붙인다(hex는 템플릿이 라이트/다크에 맞게 칠함 — §9 v2.1):
+```
+class 대출기록 chg
+class 거절 bad
+class 회원앱 entry
+class 도서DB data
+```
+
+**그림 한 장의 예산**(diagram-design의 복잡도 기준): 흐름도 노드 9개·연결 12개 안쪽, 강조(`chg`) 1~2개, 시퀀스 참여자 5개 안쪽. 넘으면 큰 단계 5~7개의 개요 그림 + 단계별 상세 그림으로 나눈다. lint는 노드 12개·연결 16개를 넘거나 강조가 3개 이상이면 힌트를 낸다(규칙 15).
+
+**sequenceDiagram**: 참여자 상자를 아래에 한 번 더 그리지 않는다(`mirrorActors: false`). 생명선은 회색 점선이다. 메모(Note)는 옅은 주황이다.
 
 **보이지 않는 다이어그램은 펼칠 때 그린다**: 그리는 순간 크기를 잴 수 없는 곳(내용을 display:none으로 숨기는 브라우저의 접힌 `<details>` 등)에 있으면 흐름도는 "Syntax error", 간트·마인드맵은 빈 칸이 된다. 이런 다이어그램은 `data-pending`으로 두고 `<details>`가 열릴 때 그린다. (요즘 Chrome은 접힌 details 안도 크기를 재서 바로 그려진다 — 둘 다 확인함)
-
-### 브루탈리스트 스타일 (색은 우리 팔레트, 굵은 테두리+그림자는 참고)
-
-출처: `modern-mermaid.live`(MIT, `gotoailab/modern_mermaid`)의 Brutalist 테마 CSS. **실제 초기화 코드의 진실은 `template.html`**(다크모드 분기 포함) — 아래 블록은 개념 설명용. 원본은 장식색을 `nth-child`로 무작위 순환시키지만, 우리는 그 대신 **§1 색언어(성공=초록/실패=빨강/진행중=파랑/중립=회색)를 mermaid `classDef`로 직접 지정**한다(장식이 아니라 의미).
-
-```js
-mermaid.initialize({
-  startOnLoad: true,
-  theme: 'base',
-  themeVariables: {
-    fontFamily: '"Pretendard", -apple-system, sans-serif',
-    primaryColor: '#cfe8f3', primaryBorderColor: '#1696d2', primaryTextColor: '#332d2f',
-    lineColor: '#9d9da6', secondaryColor: '#dcedd9', tertiaryColor: '#f5f5f5'
-  },
-  themeCSS: `
-    .node rect, .node polygon, .node circle {
-      stroke: #332d2f !important; stroke-width: 2.5px !important;
-      filter: drop-shadow(4px 4px 0px #332d2f);
-    }
-    .node .label, .nodeLabel { font-weight: 700 !important; }
-    .edgePath .path { stroke: #332d2f !important; stroke-width: 2px !important; stroke-linecap: square; }
-    .arrowheadPath { fill: #332d2f !important; stroke: #332d2f !important; }
-    .edgeLabel { background-color: #ffffff !important; font-weight: 700 !important; }
-    .cluster rect { stroke: #332d2f !important; stroke-width: 2px !important; filter: drop-shadow(5px 5px 0px #332d2f); }
-  `
-});
-```
-
-색을 상태별로 쓸 땐 다이어그램 소스에서 **클래스 이름만** 붙인다(hex는 템플릿이 라이트/다크에 맞게 칠함 — §9 v2.1):
-```
-class 완료노드 done
-class 실패노드 fail
-class 주의노드 caution
-class 진행노드 info
-class 이전노드 neutral
-```
-
-**sequenceDiagram의 actor/note 그림자는 `rect.actor`·`rect.note`로 태그를 좁혀서 건다.** 예전(2026-09-22) 기록은 "actor/note엔 그림자 금지"였지만 원인은 셀렉터 범위였다 — bare `.actor`가 라벨 `<text>`에도 붙어 텍스트가 겹쳤던 것. 자세한 내용은 §6 "★버그·수정②". [검증 2026-09-23 · 내장브라우저 실측]
 
 ## 7. 국내 기술블로그 관찰(우아한형제들·토스, 실물 확인)
 
@@ -215,7 +208,7 @@ class 이전노드 neutral
 
 ## 9. template.html v2 — 모던 카드 레이아웃 (2026-09-22)
 
-HTML5 UP·Start Bootstrap 류 무료 템플릿 사이트의 공통 문법(히어로 헤더, 카드+옅은 그림자, 넉넉한 여백, 스티키 상단바, 반응형, 다크모드)을 `template.html`에 옮겼다. **기존 클래스명은 전부 그대로**라 예전 보고서도 수정 없이 새 스타일을 받는다. §1 팔레트·Pretendard·Mermaid 브루탈리스트 설정·actor 그림자 금지 규칙도 유지.
+HTML5 UP·Start Bootstrap 류 무료 템플릿 사이트의 공통 문법(히어로 헤더, 카드+옅은 그림자, 넉넉한 여백, 스티키 상단바, 반응형, 다크모드)을 `template.html`에 옮겼다. **기존 클래스명은 전부 그대로**라 예전 보고서도 수정 없이 새 스타일을 받는다. §1 팔레트·Pretendard·Mermaid 설정(당시 브루탈리스트, 2026-10-29 편집형으로 교체)도 유지.
 
 바뀐 것:
 - 상단 스티키 바(제목·작업일·읽기 진행바) + 히어로(eyebrow·H1·메타 pill·BLUF `.callout`은 "요약" 라벨 자동 표시).
@@ -235,9 +228,9 @@ HTML5 UP·Start Bootstrap 류 무료 템플릿 사이트의 공통 문법(히어
 
 - **템플릿을 손으로 채우지 않는다.** `scripts/render.js report.md` 가 md를 이 템플릿에 얹는다(규약은 스크립트 상단 주석). lint(`scripts/lint.js`)도 같이 돈다.
 - **Mermaid 상태색은 classDef 대신 클래스 이름으로.** 다이어그램 소스에 `class 노드명 done`(또는 `fail` `caution` `info` `neutral`)만 쓴다. 템플릿 themeCSS가 라이트/다크에 맞는 fill을 칠한다. `classDef`로 hex를 박으면 다크모드에서 색이 안 맞는다. [검증 2026-09-22 · 내장브라우저 실측 · mermaid@11 — classDef 없이 `class`만으로 DOM에 클래스 붙는 것 확인]
-- **다크모드 Mermaid.** 다크 테마(v2.2부터 `data-theme="dark"`)면 themeVariables·테두리·그림자 색을 다크 세트로 초기화. 다이어그램 카드도 `--surface` 색(흰 판 없음). [검증 2026-09-22 · 내장브라우저 실측]
+- **다크모드 Mermaid.** 다크 테마(v2.2부터 `data-theme="dark"`)면 themeVariables·테두리 색을 다크 세트로 초기화. 다이어그램 카드도 `--surface` 색(흰 판 없음). [검증 2026-09-22 · 내장브라우저 실측]
 - **복사 버튼.** `file://`로 연 문서는 `navigator.clipboard`가 없다 → `execCommand('copy')` 폴백. 실패 시 버튼에 "실패" 표시.
-- **CDN 폴백.** Mermaid 모듈 로드 실패 또는 4초 내 미렌더 시 `pre.mermaid`에 `.fallback` 클래스 → 소스 텍스트를 모노스페이스로 그대로 보여준다. 폐쇄망에서 다이어그램 자리가 비지 않는다. 4초를 넘겨 렌더가 *성공*하면(느린 VDI) `mermaid.run()` 완료 후 `.fallback`을 다시 걷어낸다. [검증 2026-09-22 · CDN URL 깨뜨린 사본으로 실측]
+- **CDN 폴백.** Mermaid 모듈 로드 실패 또는 4초 내 미렌더 시 `pre.mermaid`에 `.fallback` 클래스 → 소스 텍스트를 모노스페이스로 그대로 보여준다. 폐쇄망에서 다이어그램 자리가 비지 않는다. 4초를 넘겨 렌더가 *성공*하면(느린 VDI) 그 그림을 다 그린 뒤 `.fallback`을 다시 걷어낸다. [검증 2026-09-22 · CDN URL 깨뜨린 사본으로 실측]
 
 ### v2.2 (2026-09-23) — 라이트 기본, 다크는 선택
 
@@ -257,7 +250,7 @@ OS 다크 + 저장값 없음 → 라이트로 열림. 토글 → 다크 전환, 
 
 ### v2.3 (2026-09-23) — 순서 흐름은 flow 카드로, 흐름도는 역할 색으로
 
-**순서 흐름은 ` ```flow ` 카드로 그린다.** Mermaid(dagre 자동 배치)는 가지 없는 흐름을 폭과 상관없이 항상 한 줄로 늘어놓고, 폭 기준 줄바꿈 기능이 없다. 서브그래프로 S자를 만드는 방법도 불안정하다 — 서브그래프 안 노드가 바깥과 연결되면 Mermaid가 그 서브그래프의 방향 설정을 무시한다. 그래서 가지 없는 흐름은 렌더러 자체 부품으로 그린다: 카드가 화면 폭에 맞춰 줄바꿈되고, 같은 줄은 가로 화살표, 줄이 바뀌는 곳은 앞 카드 아래에서 다음 카드 위로 곡선(S자)으로 잇는다. 좁은 화면에선 한 줄에 하나씩 세로로 쌓인다. 가지·합류·반복이 있으면 Mermaid를 쓴다.
+**순서 흐름은 ` ```flow ` 카드로 그린다.** Mermaid(dagre 자동 배치)는 가지 없는 흐름을 폭과 상관없이 항상 한 줄로 늘어놓고, 폭 기준 줄바꿈 기능이 없다. 서브그래프로 S자를 만드는 방법도 불안정하다 — 서브그래프 안 노드가 바깥과 연결되면 Mermaid가 그 서브그래프의 방향 설정을 무시한다. 그래서 가지 없는 흐름은 렌더러 자체 부품으로 그린다: 카드가 화면 폭에 맞춰 줄바꿈되고, 같은 줄은 가로 화살표, 줄이 바뀌는 곳은 앞 카드 아래에서 줄 사이 틈을 따라 직각으로 꺾어 다음 카드 위로 잇는다(2026-10-29부터 — 그전엔 곡선 S자. 카드도 그림자 없이 가는 테두리). 좁은 화면에선 한 줄에 하나씩 세로로 쌓인다. 가지·합류·반복이 있으면 Mermaid를 쓴다.
 
 ```
 ```flow
@@ -270,7 +263,7 @@ DB 테이블 | 대출·현황 반영 | data
 
 한 줄 = 한 단계, `제목 | 설명 | 역할` (설명·역할 생략 가능). 번호(01, 02…)는 자동.
 
-**흐름도·구조도는 역할 색을 쓴다.** 색은 여전히 의미를 나타낼 때만 쓴다. 상태가 없는 흐름도가 전부 같은 파랑으로 나오던 건 설계 의도였지만, 흐름도에선 "역할"도 의미다. 역할 색 4개는 상태 색(초록·빨강·주황·노랑)과 겹치지 않게 골랐다: `ext` 외부 주체(분홍) · `entry` 진입점—컨트롤러·API·화면(연보라) · `logic` 처리—서비스·배치(하늘) · `data` 데이터—쿼리·DB·저장소(청록). Mermaid에선 `class A ext`, flow 카드에선 세 번째 칸. **한 다이어그램 안에서는 역할 색과 상태 색(done/fail/…) 중 하나만 쓴다** — 섞으면 "분홍이 외부인지 경고인지" 헷갈린다. 라이트·다크 두 벌이 템플릿 토큰(`--role-*`)과 Mermaid `fill`·2차 방어 코드(`stateFill`)에 같이 들어 있다.
+**흐름도·구조도는 역할 색을 쓴다.** 색은 여전히 의미를 나타낼 때만 쓴다. 상태가 없는 흐름도가 전부 같은 파랑으로 나오던 건 설계 의도였지만, 흐름도에선 "역할"도 의미다. 역할 색 4개는 상태 색(초록·빨강·주황·노랑)과 겹치지 않게 골랐다: `ext` 외부 주체(분홍) · `entry` 진입점—컨트롤러·API·화면(연보라) · `logic` 처리—서비스·배치(하늘) · `data` 데이터—쿼리·DB·저장소(청록). Mermaid에선 `class A ext`, flow 카드에선 세 번째 칸. **한 다이어그램 안에서는 역할 색과 상태 색(done/fail/…) 중 하나만 쓴다** — 섞으면 "분홍이 외부인지 경고인지" 헷갈린다. 라이트·다크 두 벌이 템플릿 토큰(`--role-*`)과 Mermaid `palette().treat`에 같이 들어 있다. 2026-10-29부터 역할 색은 더 옅은 색조이고 `ext`는 점선 테두리가 붙는다(위 §6 "편집형 스타일").
 
 [검증 2026-09-23 · 내장브라우저 실측 — 6단계 flow가 3+3 두 줄·곡선 1개, 420px 폭에선 1열 6줄·화살표 5개·가로 스크롤 없음, 다크 전환 시 화살표 색 자동 전환, Mermaid 역할 색 4종 fill 확인]
 
@@ -322,7 +315,7 @@ DB 테이블 | 대출·현황 반영 | data
 
 **좁은 카드의 긴 이름** — flow·stats·cards 안의 10자 넘는 영문 단어에는 render.js가 `_ . / ::` 뒤와 camelCase 경계에 줄바꿈 지점(`<wbr>`)을 넣는다. 폭이 모자랄 때만 쓰이고 복사해도 글자가 늘지 않는다. 숫자 카드 값이 "INV_ITEM_HIST" 같은 이름이면 큰 숫자 크기(1.85em)로는 4열 카드(본문 폭 약 167px)를 넘으므로, 가장 긴 단어의 폭을 어림해 넘치면 블록 전체를 작은 글자(`is-text`, 1.22em)로 바꾸고 900px 이하 화면에서는 2열로 넘긴다. 실측(2026-09-30, 이름은 예시로 바꿈): flow 설명의 `InvoiceMailStatusNotifyTasklet의`가 쪼갤 곳이 없어 카드 밖으로 37px 삐져나왔고, stats 값 `INV317_K42P`가 `INV317_K|42P`로 글자 중간에서 잘렸다. [검증 2026-09-30 · 1280/1000/850/800/390px 폭 넘침 0건 스크립트 확인 + 화면 캡처]
 
-**톤** — 카드는 문서 본문과 같은 얇은 선·옅은 그림자다. 굵은 테두리·딱딱한 그림자(브루탈리스트)는 다이어그램과 ```flow 카드 전용이라, 카드까지 쓰면 글 영역이 무거워진다. 강조는 파란 테두리와 옅은 파랑 바탕만 쓴다(숫자 카드는 왼쪽 색 띠).
+**톤** — 카드는 문서 본문과 같은 얇은 선·옅은 그림자다. 다이어그램과 ```flow 카드도 2026-10-29부터 그림자 없는 가는 테두리라(§6 "편집형 스타일") 카드와 같은 무게로 읽힌다. 강조는 파란 테두리와 옅은 파랑 바탕만 쓴다(숫자 카드는 왼쪽 색 띠).
 
 [검증 2026-09-23 · 내장브라우저 실측 — 라이트·다크 캡처, 한 줄 카드 높이 동일(격자 2개 모두), 400px 폭에서 1열·가로 스크롤 없음]
 
