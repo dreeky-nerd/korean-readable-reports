@@ -29,6 +29,7 @@
  *   15  flow·mermaid 한 그림에 역할 색(ext…)과 상태 색(done…)을 섞음
  *       (힌트) 그림이 나을 내용을 글로만 씀 — 주어 있는 처리 단계 3개 이상 나열, 화살표 3단계 이상. --strict 실패 사유 아님
  *       (힌트) flow 단계에 실패 조건("실패하면") — 갈라지는 흐름은 Mermaid
+ *       (힌트) svg 두 장이 글 없이 이어지는데 제목이 없음 — 전후를 구분하게 여는 줄에 제목
  *       (힌트) 흐름 그림 + 고치는 이야기인데 svg 없음 → 전후 그림 / 기준값 줄("기준은 30,000원입니다")과 같은 단위 숫자 2개 이상,
  *              또는 같은 단위 숫자를 나란히 놓은 표(3~8행)인데 bars 없음 → 막대
  *   14  자연스러운 한국어 — 은유 소제목("요청이 지나가는 길", "~ 지도"), 의인화·번역투 동사(지나가다·조립하다·창구를 열다·뽑아내다),
@@ -150,7 +151,7 @@ function scanFences(lines, start) {
   for (let i = start; i < lines.length; i++) {
     const m = lines[i].match(FENCE_RE);
     if (!cur) {
-      if (m) { cur = { open: i, close: -1, char: m[1][0], len: m[1].length, kind: m[2].toLowerCase(), body: [] }; blocks.push(cur); at[i] = cur; }
+      if (m) { cur = { open: i, close: -1, char: m[1][0], len: m[1].length, kind: m[2].toLowerCase(), info: (m[3] || '').trim(), body: [] }; blocks.push(cur); at[i] = cur; }
       continue;
     }
     at[i] = cur;
@@ -1298,6 +1299,12 @@ function lint(src, opts = {}) {
       const hit = fb.kind === 'flow' && fb.body.find(([, l]) => FAIL_IF.test(l));
       if (hit) warn(hit[0], 15, '```flow 단계에 실패 조건 — 갈라지는 흐름이면 Mermaid flowchart로 정상 경로와 실패 경로를 나눠 그리기', true);
     }
+    // 전후 그림 두 장이 제목 없이 붙으면 어느 쪽이 전인지 화면에 안 보인다(2026-11-06 시험 문서)
+    blocks.forEach((b, k) => {
+      const a = blocks[k - 1];
+      if (!a || a.kind !== 'svg' || b.kind !== 'svg' || a.close < 0 || (a.info && b.info)) return;
+      if (lines.slice(a.close + 1, b.open).every(l => !l.trim())) warn(b.open, 15, '```svg 두 장이 글 없이 이어짐 — 어느 쪽이 전이고 후인지 보이게 ```svg 고치기 전, ```svg 고친 뒤처럼 여는 줄에 제목을 붙이기', true);
+    });
     // 그림 블록(svg·bars)은 짚어 주지 않으면 쓰지 않는다 — 2026-10-23 시나리오 2건이 원인·수정 문서에서 flow·표·카드만 썼다
     // (고치는 곳이 흐름 한 지점인 문서, "무료 배송 기준 30,000원" vs 27,000원·32,000원, 두 주의 단계별 비율 표)
     const has = k => blocks.some(b => b.kind === k);

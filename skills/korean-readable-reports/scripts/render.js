@@ -40,6 +40,7 @@
  *   ```svg        직접 그린 그림. <svg viewBox aria-label> 하나. 허용 태그·속성(lint.js SVG_TAGS·SVG_ATTRS)만 남기고
  *                 색은 class로(node·ln·lbl·t1·t2 + bad·chg·mute·bare — 템플릿 .fig). 화살촉은 class="ln"이 붙인다
  *   ```bars       가로 막대(누적 가능) + 기준선. 한 줄 = "라벨 | 값1 + 값2:chg | 보조 설명 | 결과", "기준선 17 | 연체 기준"
+ *                 svg·bars 여는 줄 뒤 글자(```svg 고치기 전)는 그림 위에 보이는 제목
  *   ●●○           2~5개 연속이면 정도 표시(간격·주황)
  *   ```browser URL  웹 페이지 원문 인용을 브라우저 창(주소창 + 창 점 3개) 안에 넣음. 본문은 md(#### 제목·불릿·**굵게** 가능)
  *   ```lang       .code-dark 패널 (라벨 = 첫 토큰; shell-session, js title="x" 처럼 하이픈·속성 있어도 됨)
@@ -379,20 +380,23 @@ function sanitizeHtml(html, svg = false) {
   });
 }
 
+// 그림 제목: 여는 줄 뒤 글자(```svg 고치기 전)를 화면에 보인다 — aria-label은 눈에 안 보여 전후 그림을 구분하지 못했다
+const figTitle = info => info ? `<div class="fig-title">${inline(info)}</div>\n` : '';
+
 // ```svg 블록: 직접 그린 그림을 .fig 상자에 넣는다. 주석은 버리고, <svg>를 안 닫았으면 닫는다(안 닫으면 뒤의 본문이 전부 그림 속으로 들어가 안 보인다)
-function renderSvg(lines) {
+function renderSvg(lines, info) {
   let s = sanitizeHtml(stripComments(lines.join('\n')), true).trim();
   if (!s) return '';
   s = s.replace(/<svg(?![^>]*\srole=)/, '<svg role="img"');
   const open = (s.match(/<svg[\s>]/g) || []).length - (s.match(/<\/svg>/g) || []).length;
-  return `<div class="fig">\n${s}${'</svg>'.repeat(Math.max(0, open))}\n</div>`;
+  return `<div class="fig">\n${figTitle(info)}${s}${'</svg>'.repeat(Math.max(0, open))}\n</div>`;
 }
 
 // ```bars 블록 → 가로 막대 SVG. 라벨 칸·결과 칸 폭은 글자 수로 어림하고, 조각 안 값은 들어갈 때만 쓴다(안 들어가면 숫자만, 그것도 안 되면 생략 —
 // 마우스를 올리면 <title>로 보임). 막대는 항상 0에서 시작(design-guide §4)
 // ponytail: 글자 폭은 어림(한글 1em·영숫자 0.6em) — 실제와 다르면 qa.js가 넘침·겹침으로 알린다
 const textEm = s => [...s].reduce((a, c) => a + (/[가-힣ㄱ-ㅎ一-鿿]/.test(c) ? 1 : /[A-Z0-9%]/.test(c) ? 0.66 : /\s/.test(c) ? 0.3 : 0.58), 0);
-function renderBars(lines) {
+function renderBars(lines, info) {
   const { threshold, rows } = parseBars(lines.map((l, i) => [i, l]));
   if (!rows.length) return '';
   const W = 1000, ROW = 64, BAR = 40;
@@ -433,7 +437,7 @@ function renderBars(lines) {
   });
   const desc = rows.map(r => `${r.title}${r.sub ? `(${r.sub})` : ''} ${r.segs.map(s => s.text).join(' + ')}${r.result ? ` → ${r.result}` : ''}`).join('; ')
     + (threshold ? `; 기준선 ${threshold.label}` : '');
-  return `<div class="fig"><svg viewBox="0 0 ${W} ${H + 4}" role="img" aria-label="${esc('막대그래프: ' + desc)}">\n${out.join('\n')}\n</svg></div>`;
+  return `<div class="fig">${figTitle(info)}<svg viewBox="0 0 ${W} ${H + 4}" role="img" aria-label="${esc('막대그래프: ' + desc)}">\n${out.join('\n')}\n</svg></div>`;
 }
 
 // 짝 맞추기용: 코드 span과 한 줄 주석 속 태그는 태그가 아니다(lint의 details 판정과 같은 기준). 위치는 원문 그대로
@@ -502,8 +506,8 @@ function renderBlocks(lines, nested) {
       else if (lang === 'stats') out.push(softBreak(renderStats(buf)));
       else if (lang === 'cards') out.push(softBreak(renderCards(buf, info)));
       else if (lang === 'browser') out.push(renderBrowser(buf, info));
-      else if (lang === 'svg') out.push(renderSvg(buf));
-      else if (lang === 'bars') out.push(renderBars(buf));
+      else if (lang === 'svg') out.push(renderSvg(buf, info));
+      else if (lang === 'bars') out.push(renderBars(buf, info));
       else out.push(`<div class="code-dark"><div class="panel-label">${esc(lang || 'code')}</div><pre>${esc(buf.join('\n'))}</pre></div>`);
       continue;
     }

@@ -238,7 +238,7 @@ easy.
     | components and how they connect (architecture) | Mermaid `flowchart LR` with role colors |
     | states and what moves between them | Mermaid `stateDiagram-v2` |
     | dates, durations, dependencies | Mermaid `gantt` |
-    | the same flow before and after a fix — where it breaks, what changes | two ` ```svg ` figures drawn on the same coordinates: the broken box/line `bad` (red dashed), the one changed box/line `chg` (orange), the rest gray — the reader spots the difference without reading (skeleton: `references/svg-figures.md` 4-7) |
+    | the same flow before and after a fix — where it breaks, what changes | two figures, ` ```svg 고치기 전 ` and ` ```svg 고친 뒤 ` (the words after `svg` show as a visible title), drawn on the same coordinates: the broken box/line `bad` (red dashed), the one changed box/line `chg` (orange), the rest gray — the reader spots the difference without reading (skeleton: `references/svg-figures.md` 4-7) |
     | layers stacked in order (화면 → API → 업무 규칙 → 저장소) and which layer something happens in | ` ```svg ` layer stack — one `chg` layer (svg-figures.md 4-5) |
     | events on dates where the gaps between them matter (설치 → 누락 발견 → 일주일 뒤 수정) | ` ```svg ` timeline with x proportional to the date (svg-figures.md 4-6); durations and dependencies stay Mermaid `gantt` |
     | items placed by two judgments (효과 × 품) to pick what comes first | ` ```svg ` 2×2 quadrant; say what decided each position (svg-figures.md 4-8) |

@@ -1346,6 +1346,19 @@ test('qa: 그림 안 글자가 상자 밖으로 나가거나 겹치면 exit 1, �
   q = runQa(good.output);
   assert.equal(q.status, 0, q.stdout + q.stderr);
 });
+// 2026-11-06 시험 문서: 전후 그림 두 장이 제목 없이 붙어 어느 쪽이 전인지 화면에 안 보였다(aria-label에만 있음)
+test('그림 제목: ```svg·```bars 여는 줄 글자는 보이는 제목, 제목 없이 붙은 svg 두 장은 힌트', () => {
+  const fig = title => svgFig('<text class="t1" x="90" y="55" text-anchor="middle">첫째</text>').replace('```svg', '```svg' + title);
+  const r = render('# 제목\n\n' + fig(' 고치기 전 <b>') + '\n```bars 3년 총비용\n가 | 값 10\n```\n');
+  assert.ok(/<div class="fig">\n<div class="fig-title">고치기 전 &lt;b&gt;<\/div>\n<svg/.test(r.html), r.html.match(/<div class="fig">[\s\S]{0,120}/)[0]);
+  assert.ok(r.html.includes('<div class="fig"><div class="fig-title">3년 총비용</div>\n<svg'), r.html.match(/<div class="fig">[\s\S]{0,120}/g)[1]);
+  assert.ok(!render('# 제목\n\n' + fig('')).html.includes('<div class="fig-title">'));
+  const hints = doc => lint(fm + '# 제목\n\n' + doc).filter(f => f.hint && /여는 줄에 제목을 붙이기/.test(f.msg)).length;
+  assert.equal(hints(fig('') + '\n' + fig('')), 1);
+  assert.equal(hints(fig(' 고치기 전') + '\n' + fig('')), 1);
+  assert.equal(hints(fig(' 고치기 전') + '\n' + fig(' 고친 뒤')), 0);
+  assert.equal(hints(fig('') + '\n고친 뒤에는 이렇게 바뀝니다.\n\n' + fig('')), 0);
+});
 // 2026-11-06 실측: 화면용 최소 폭 때문에 인쇄하면 그림 오른쪽이 207px 잘렸는데 qa는 화면만 봐서 통과했다
 test('qa: 그림·넓은 표는 쪽 폭에 맞춰 줄어 인쇄해도 안 잘리고, 줄지 않는 상자는 exit 1', () => {
   if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');
@@ -1554,7 +1567,7 @@ test('qa 연결선: 모서리 간격 7.8은 경고, 8·8.2는 통과(회전 변�
 // svg-figures.md의 뼈대 8종은 복사해 쓰는 원본이다 — lint 구조 경고·qa 글자 문제·연결선 경고가 하나라도 있으면 복사본마다 퍼진다
 test('svg 뼈대 8종: lint 구조 경고 0, qa 문제·연결선 경고 0', () => {
   const doc = fs.readFileSync(path.join(__dirname, '..', 'references', 'svg-figures.md'), 'utf8');
-  const figs = doc.match(/```svg\n[\s\S]*?\n```/g);
+  const figs = doc.match(/^```svg[^\n]*\n[\s\S]*?\n```/gm);
   assert.equal(figs.length, 8);
   const struct = d => lint(fm + '# 제목\n\n' + d).filter(f => f.rule === '구조').map(f => f.msg).join('\n');
   for (const f of figs) assert.equal(struct(f + '\n'), '', f.slice(0, 120));
