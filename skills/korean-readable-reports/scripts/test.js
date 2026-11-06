@@ -1346,6 +1346,22 @@ test('qa: 그림 안 글자가 상자 밖으로 나가거나 겹치면 exit 1, �
   q = runQa(good.output);
   assert.equal(q.status, 0, q.stdout + q.stderr);
 });
+// 2026-11-06 실측: 화면용 최소 폭 때문에 인쇄하면 그림 오른쪽이 207px 잘렸는데 qa는 화면만 봐서 통과했다
+test('qa: 그림·넓은 표는 쪽 폭에 맞춰 줄어 인쇄해도 안 잘리고, 줄지 않는 상자는 exit 1', () => {
+  if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');
+  const cols = Array.from({length: 7}, () => '가나다라마바');
+  const table = '| ' + cols.join(' | ') + ' |\n|' + '---|'.repeat(7) + '\n| ' + cols.join(' | ') + ' |\n';
+  const fits = render('# 제목\n\n' + svgFig('<text class="t1" x="90" y="55" text-anchor="middle">첫째</text>') + '\n' + barsBlock + '\n' + table);
+  let q = runQa(fits.output);
+  assert.equal(q.status, 0, q.stdout + q.stderr);
+  assert.ok(!/인쇄하면 잘리는/.test(q.stdout), q.stdout);
+  // 화면에서는 가로 스크롤이 허용된 상자라 넘침이 아니고, 인쇄 규칙이 줄이지 못하면 종이에서만 잘린다
+  const f = path.join(dir, 'qa-paper.html');
+  fs.writeFileSync(f, '<!doctype html><html><head><meta charset="utf-8"></head><body><main><div class="fig" style="overflow-x:auto;max-width:600px"><div style="width:900px">넓은 상자</div></div></main></body></html>');
+  q = runQa(f);
+  assert.equal(q.status, 1, q.stdout + q.stderr);
+  assert.ok(/인쇄하면 잘리는 곳 1개/.test(q.stdout) && /넘침 0곳/.test(q.stdout), q.stdout);
+});
 test('qa: 화면보다 넓은 md 그림도 칸 폭에 맞춰 줄어 넘침 없음', () => {
   if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');
   fs.writeFileSync(path.join(dir, 'wide.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="300"><rect width="2200" height="300" fill="#ccc"/></svg>');

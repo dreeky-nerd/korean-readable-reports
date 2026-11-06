@@ -13,6 +13,7 @@
  *     이미지  불러오지 못한 그림
  *     그림    ```svg·```bars 안 글자가 자기 상자·그림 밖으로 나감, 다른 상자나 글자와 겹침(폭과 무관하게 한 번만 보고)
  *     연결선  svg의 ln·node·lbl만 첫 폭에서 루트 SVG 단위로 검사(관통·라벨 근접·겹침·연결점·모서리·테두리). 경고만, 표본 상한 초과는 미검사
+ *     종이    인쇄 규칙을 켠 사본을 A4 본문 폭(718px)에서 열어 그림·표·코드 상자에서 잘리는 곳을 찾음. Mermaid는 못 그려 안 봄(CSS로 쪽 폭에 맞춤)
  *     파일    상대 링크가 가리키는 파일이 없음(옆 보고서 md를 렌더하지 않아 .html이 없는 경우 등)
  *     Mermaid 문법 오류로 그림 대신 소스가 보임 · 같은 id를 받은 그림(한 칸에 포개짐) — 문제.
  *             12초 안에 안 그려짐(CDN이 막혔거나 느림)·접힌 칸 안이라 미검사 — 알리기만
@@ -273,8 +274,26 @@ function measure(f, w) {
   });
   return { want: w, width: win.innerWidth, over: over, anchors: anchors, images: images, figs: figs, unchecked: unchecked };
 }
+function finish(print) { var p = document.createElement('pre'); p.textContent = 'KRRQA' + encodeURIComponent(JSON.stringify({ results: results, print: print })) + 'KRRQA'; document.body.appendChild(p); }
+function paper() {
+  var f = document.createElement('iframe');
+  f.style.cssText = 'width:718px;height:900px;border:0;display:block';
+  f.onload = function () {
+    var fonts = f.contentDocument.fonts;
+    (fonts ? fonts.ready : Promise.resolve()).then(function () { setTimeout(function () {
+      var doc = f.contentDocument, clips = [];
+      [].forEach.call(doc.querySelectorAll('details'), function (d) { d.open = true; });
+      [].forEach.call(doc.querySelectorAll('.fig, .table-wrap, .code-dark'), function (el) {
+        if (el.clientWidth && el.scrollWidth > el.clientWidth + 1) clips.push({ el: name(el), px: el.scrollWidth - el.clientWidth, text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 40) });
+      });
+      f.remove(); finish(clips);
+    }, 300); });
+  };
+  f.srcdoc = SRC.replace(/@media print\\b/g, '@media all');
+  document.body.appendChild(f);
+}
 function next(i) {
-  if (i === WIDTHS.length) { var p = document.createElement('pre'); p.textContent = 'KRRQA' + encodeURIComponent(JSON.stringify(results)) + 'KRRQA'; document.body.appendChild(p); return; }
+  if (i === WIDTHS.length) { paper(); return; }
   var f = document.createElement('iframe');
   f.style.cssText = 'width:' + WIDTHS[i] + 'px;height:900px;border:0;display:block';
   f.onload = function () {
@@ -344,7 +363,7 @@ function measure(browser, file) {
         mermaid = r.error ? {failed: r.error} : r.value;
       } catch (e) { mermaid = {failed: e.message}; }
     }
-    return {results: q.value, mermaid};
+    return {results: q.value.results, print: q.value.print, mermaid};
   } finally {
     try { fs.rmSync(tmp, {recursive: true, force: true}); } catch (e) { /* 브라우저가 프로필을 늦게 놓으면 남는다 — tmp라 둔다 */ }
   }
@@ -400,7 +419,9 @@ function main() {
     if (mm.pending) console.log(`  접힌 칸 안 Mermaid ${mm.pending}개는 펼칠 때 그리므로 미검사`);
     problems += mm.error + mm.dup;
   }
-  problems += anchors.size + images.size + errors.length;
+  if (m.print.length) console.log(`  인쇄하면 잘리는 곳 ${m.print.length}개 — 종이에는 가로 스크롤이 없음. 표 열을 줄이거나 긴 낱말을 끊기:`);
+  for (const c of m.print) console.log(`    - ${c.px}px  ${c.el}  "${c.text}"`);
+  problems += anchors.size + images.size + errors.length + m.print.length;
   const files = missingFiles(file);
   if (files.length) console.log(`  없는 파일로 가는 링크 ${files.length}개: ${files.join(', ')} — 옆 보고서(-근거.md 등)면 그 md도 렌더하기`);
   problems += files.length;

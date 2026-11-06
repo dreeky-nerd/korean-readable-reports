@@ -439,6 +439,13 @@
     :root { print-color-adjust: exact; -webkit-print-color-adjust: exact; }
     body { background: #fff; }
     .block, .callout, .table-wrap { box-shadow: none; }
+    /* 종이에는 가로 스크롤이 없어 넘친 만큼 잘린다 — 쪽 폭에 맞춰 줄인다(2026-11-06 실측: svg 207px, Mermaid 296px 잘림) */
+    .fig > svg { min-width: 0; }
+    pre.mermaid svg { max-width: 100%; height: auto; }
+    /* 표는 글자·여백을 줄여 맞춘다 — overflow-wrap: anywhere는 14열 표의 칸이 한 글자 폭으로 무너져 글자가 세로로 쌓였다 */
+    table { font-size: 0.78em; }
+    th, td { padding: 6px 7px; }
+    th.key, td.key, th.status, td.status { white-space: normal; }
   }
 </style>
 </head>
