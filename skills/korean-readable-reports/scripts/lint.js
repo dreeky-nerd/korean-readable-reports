@@ -30,6 +30,7 @@
  *       (힌트) 그림이 나을 내용을 글로만 씀 — 주어 있는 처리 단계 3개 이상 나열, 화살표 3단계 이상. --strict 실패 사유 아님
  *       (힌트) flow 단계에 실패 조건("실패하면") — 갈라지는 흐름은 Mermaid
  *       (힌트) svg 두 장이 글 없이 이어지는데 제목이 없음 — 전후를 구분하게 여는 줄에 제목
+ *       (힌트) 날짜만 이어지는 flow·표 → svg 타임라인 / 받는 문구 인용 → cards compare / [추천]이 있는 표의 숫자 열 → bars
  *       (힌트) 흐름 그림 + 고치는 이야기인데 svg 없음 → 전후 그림 / 기준값 줄("기준은 30,000원입니다")과 같은 단위 숫자 2개 이상,
  *              또는 같은 단위 숫자를 나란히 놓은 표(3~8행)인데 bars 없음 → 막대
  *   14  자연스러운 한국어 — 은유 소제목("요청이 지나가는 길", "~ 지도"), 의인화·번역투 동사(지나가다·조립하다·창구를 열다·뽑아내다),
@@ -1312,13 +1313,13 @@ function lint(src, opts = {}) {
     const FIX = /고치면|고친 뒤|고친 후|수정하면|수정 후|수정 방안|고치는 방법|바꾸면|되돌리면|해결 방안/;
     const flowFig = blocks.find(b => b.kind === 'flow' || b.kind === 'mermaid');
     if (flowFig && !has('svg') && lines.some((l, i) => prose(i) && FIX.test(l)))
-      warn(flowFig.open, 15, '흐름 그림 + 고치는 이야기 — 고치는 곳이 이 흐름 안에 있으면 고치기 전·후를 ```svg 두 장으로(같은 좌표, 깨진 곳 bad·바뀌는 곳 chg). 뼈대는 design-guide §10', true);
+      warn(flowFig.open, 15, '흐름 그림 + 고치는 이야기 — 고치는 곳이 이 흐름 안에 있으면 고치기 전·후를 ```svg 두 장으로(같은 좌표, 깨진 곳 bad·바뀌는 곳 chg). 뼈대는 references/svg-figures.md 4-7', true);
     if (!has('bars')) {
-      const UNIT = '(원|%|점|일|건|명|ms|초|분|시간)';
+      const UNIT = '(억|만|원|%|점|일|건|명|ms|초|분|시간)';
       // 문턱값으로 말한 것만 — "지급액 기준으로는 8.8%", "카드결제 기준 5,000원 상품"의 기준은 '~로 따지면'이라 뺀다(실제 보고서 오탐)
-      const LIMIT = new RegExp(`(기준|목표|한도|상한|하한)(?:선|치|값)?(?:은|는|이|가)?\\s*[:：]?\\s*(\\d[\\d,.]*)\\s*${UNIT}(?=\\s*(?:이상|이하|초과|미만|입니다|이에요|예요|이다|이고|이며|인데|[.,)]|$))`);
+      const LIMIT = new RegExp(`(기준|목표|한도|상한|하한|평소)(?:선|치|값)?(?:은|는|이|가)?\\s*(?:하루|일|주|월)?\\s*약?\\s*[:：]?\\s*(\\d[\\d,.]*)\\s*${UNIT}(?=\\s*(?:이상|이하|초과|미만|입니다|이에요|예요|이다|이고|이며|인데|이던|보다|대비|[에를을의로와과]|[.,)]|$))`);
       const NUM = new RegExp(`(\\d[\\d,.]*)\\s*${UNIT}`, 'g');
-      const NUM_CELL = /^\d[\d,.]*\s*(%|원|건|명|점|일|ms|초|분)$/;
+      const NUM_CELL = /^\d[\d,.]*\s*(억\s*원?|만\s*원?|%|원|건|명|점|일|ms|초|분)$/;
       let secStart = start, hinted = false;
       for (let i = start; i < lines.length && !hinted; i++) {
         if (/^##\s/.test(lines[i])) secStart = i;
@@ -1336,9 +1337,30 @@ function lint(src, opts = {}) {
           let j = i + 2; const rows = [];
           while (j < lines.length && /^\s*\|/.test(lines[j])) rows.push(splitCells(lines[j++]));
           const numeric = rows.filter(r => r.filter(c => NUM_CELL.test(c.trim())).length >= 2).length;
-          if (rows.length >= 3 && rows.length <= 8 && numeric === rows.length) { warn(i, 15, '숫자를 나란히 비교하는 표 — 차이 자체가 결론이면 ```bars 막대를 표 위에(기준값이 있으면 기준선). 표는 근거로 남겨도 됨', true); hinted = true; }
+          // 안을 고르는 표는 숫자 열이 하나여도 비교가 결론이다(2026-11-06 시험: 본부장 보고의 4개 안 총비용)
+          const picked = lines.slice(i + 2, j).some(l => /\[추천\]/.test(l));
+          const column = rows.length && rows[0].some((_, c) => rows.every(r => NUM_CELL.test((r[c] || '').trim())));
+          if (rows.length >= 3 && rows.length <= 8 && (numeric === rows.length || (picked && column))) { warn(i, 15, '숫자를 나란히 비교하는 표 — 차이 자체가 결론이면 ```bars 막대를 표 위에(기준값이 있으면 기준선). 표는 근거로 남겨도 됨', true); hinted = true; }
         }
       }
+    }
+    // 날짜 간격은 표·flow로는 안 보인다 — 2026-11-06 시험 3건이 모두 날짜 표나 날짜 flow로 썼다
+    const DATE = /^\d{1,2}\/\d{1,2}(?:\s+\d{1,2}:\d{2})?$|^\d{1,2}월\s*\d{1,2}일$/;
+    if (!blocks.some(b => b.kind === 'svg' && b.body.some(([, l]) => /class="dot/.test(l)))) {
+      const dated = blocks.find(b => { const t = b.kind === 'flow' ? b.body.filter(([, l]) => l.trim()) : []; return t.length >= 3 && t.every(([, l]) => DATE.test(l.split('|')[0].trim())); });
+      let at = dated ? dated.open : -1;
+      for (let i = start; i < lines.length && at < 0; i++) {
+        if (!prose(i) || !/^\s*\|/.test(lines[i]) || /^\s*\|/.test(lines[i - 1] || '') || !/^\s*\|?\s*:?-+/.test(lines[i + 1] || '')) continue;
+        let j = i + 2; const first = [];
+        while (j < lines.length && /^\s*\|/.test(lines[j])) first.push(splitCells(lines[j++])[0].trim());
+        if (first.length >= 4 && first.every(c => DATE.test(c))) at = i;
+      }
+      if (at >= 0) warn(at, 15, '날짜가 이어지는 일정 — 간격이 중요하면 ```svg 타임라인으로(뼈대 references/svg-figures.md 4-6). 표는 근거로 남겨도 됨', true);
+    }
+    // 받는 문구는 인용문 하나로는 전후가 안 보인다(2026-11-06 시험: 이미 나간 해지 문자와 CS 안내 초안)
+    if (!blocks.some(b => b.kind === 'cards' && /\bcompare\b/.test(b.info))) {
+      const q = lines.findIndex((l, i) => prose(i) && /^>\s*["“]/.test(l) && /문자|문구|메일|메시지|알림|화면|안내|초안/.test(lines.slice(Math.max(start, i - 3), i).join(' ')));
+      if (q >= 0) warn(q, 15, '받는 문구를 인용함 — 고치기 전·후가 있으면 ```cards compare 말풍선으로 나란히', true);
     }
   }
 

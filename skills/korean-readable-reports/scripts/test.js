@@ -1278,6 +1278,22 @@ test('힌트: 흐름+고치는 이야기 → svg, 기준값과 숫자 → bars, 
   const table = '## 단계\n\n| 단계 | 9/8 주 | 10/13 주 |\n|---|---|---|\n| 시작 | 14.8% | 14.6% |\n| 인증 | 78% | 61% |\n| 완료 | 72% | 71% |\n';
   assert.ok(/숫자를 나란히 비교하는 표/.test(hint(table)));
   assert.ok(!/숫자를 나란히/.test(hint(table + '\n' + barsBlock)));
+  // 2026-11-06 시험: 문턱값 문장과 안 비교 표를 놓쳐 본부장 보고에 그래프가 0개였다
+  assert.ok(/기준값\(97%\)/.test(hint('## 도달률\n\n5월 97.1%에서 10월 93.6%로 떨어졌고, 6월부터 목표 97%에 못 미칩니다.\n')));
+  assert.ok(/기준값\(60건\)/.test(hint('## 해지\n\n평소 하루 약 60건이던 해지가 412건, 438건으로 늘었습니다.\n')));
+  const row = (a, b) => `| ${a} | ${b} |\n`;
+  const options = '## 안\n\n| 안 | 3년 총비용 |\n|---|---|\n' + row('1안', '12.70억') + row('2안 [추천]', '11.25억') + row('3안', '12.31억');
+  assert.ok(/숫자를 나란히/.test(hint(options)));
+  assert.ok(!/숫자를 나란히/.test(hint(options.replace(' [추천]', ''))));
+  const dates = n => '## 일정\n\n| 날짜 | 할 일 |\n|---|---|\n' + ['11/14', '11/20', '11/27', '12/1'].slice(0, n).map(d => row(d, '작업')).join('');
+  assert.ok(/날짜가 이어지는/.test(hint(dates(4))));
+  assert.ok(!/날짜가 이어지는/.test(hint(dates(3))));
+  assert.ok(/날짜가 이어지는/.test(hint('## 일정\n\n```flow\n11/20 | 결정 | entry\n12/1 | 공지 | logic\n12/31 | 전환 | data\n```\n')));
+  assert.ok(!/날짜가 이어지는/.test(hint(dates(4) + '\n```svg\n<svg viewBox="0 0 10 10" aria-label="일정"><circle class="dot" cx="5" cy="5" r="2"/></svg>\n```\n')));
+  const quote = '## 안내\n\n이미 나간 문자입니다.\n\n> "구독이 해지되었습니다."\n';
+  assert.ok(/받는 문구를 인용/.test(hint(quote)));
+  assert.ok(!/받는 문구를 인용/.test(hint(quote + '\n```cards compare\n전\n가입니다.\n\n후\n나입니다.\n```\n')));
+  assert.ok(!/받는 문구를 인용/.test(hint('## 회의\n\n회의에서 나온 말입니다.\n\n> "다음 주에 봅시다."\n')));
 });
 // 2026-10-29: "글씨가 많으면 못생기게 나온다" — 최근 보고서 157건 중 41건에 그림·표 없이 800자 넘는 섹션.
 // 가장 큰 사례는 대상 6개마다 같은 굵은 항목 5개를 번호 목록 문장으로 반복한 조사 보고서였다

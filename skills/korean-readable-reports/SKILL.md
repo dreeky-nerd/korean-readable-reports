@@ -248,7 +248,7 @@ easy.
     | the same bold item labels repeated under 3+ subjects (list items like `1. **비용:** …`, `2. **속도:** …` under `### A`, `### B`, `### C`) | subject × label table at the top of the section — cells are keywords, `●○○`, or a badge; the sentences go under it in `<details>` |
     | 2–4 key numbers that *are* the finding (rule 6 exception) | ` ```stats ` cards — `label \| value \| note \| status`, placed right after the summary or at the top of the section |
     | 2+ parallel items that each need a sentence or bullets (modules, findings, options) | ` ```cards ` — blank line between cards, first line is the title; mark the chosen option `[추천]`. Layout adapts to text length (short → grid, medium → 2 columns, long → one card per row), so keep titles short and put detail in the body |
-    | a number over 3+ points or across 3+ items | table; a chart only when the trend itself is the finding (design-guide §4) |
+    | a number over 3+ points or across 3+ items | ` ```bars ` above the table when the difference is the message (a trend, options against each other, a target); a table alone when the reader only looks values up (design-guide §4) |
     | original text quoted from a web page (official doc, license terms) | ` ```browser <URL> ` — the page text verbatim inside a browser-window frame; URL and check date also go on the `출처:` line |
 
     The picture replaces the list it depicts: one takeaway sentence above it,
@@ -328,7 +328,8 @@ easy.
    mismatch). Fix every finding in the md. Hints are printed separately;
    judge each one. They cover rule 15 ("this looks like a flow — draw it?",
    "a fix inside this flow — draw it before/after?", "numbers against a
-   limit — bars?"). A rule-15 hint is not optional: draw what it names, or
+   limit or options compared — bars?", "dates in a row — timeline?", "a quoted
+   message — compare?"). A rule-15 hint is not optional: draw what it names, or
    tell the user in one line why that picture would not help. Hints also cover
    consistency: a summary number missing from the body,
    "세 가지입니다" above a list of two, a "뒤에서 다루겠습니다" to follow up.
