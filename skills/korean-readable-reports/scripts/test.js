@@ -1416,7 +1416,9 @@ test('글 폭: 읽는 글만 45rem, 그림·표·상자는 단 폭 그대로, �
   const m = (out.stdout || '').match(/<pre id="probe-out">([^<]*)<\/pre>/);
   assert.ok(m, 'probe 없음: ' + (out.stderr || '').slice(0, 200));
   const o = JSON.parse(m[1].replace(/&quot;/g, '"'));
-  for (const k of ['p', 'li', 'calloutP', 'detailsP', 'sources']) assert.ok(o[k] > 0 && o[k] <= 720, `${k} ${o[k]}px`);
+  for (const k of ['p', 'li', 'detailsP', 'sources']) assert.ok(o[k] > 0 && o[k] <= 720, `${k} ${o[k]}px`);
+  // 요약 상자 글은 상자 폭 그대로 — 720px에서 끊으면 한 줄 한 문장 요약이 문장마다 두 줄로 꺾였다(2026-11-09)
+  assert.ok(o.calloutP > 900, `calloutP ${o.calloutP}px`);
   for (const k of ['callout', 'img', 'table', 'flow', 'details']) assert.equal(o[k], 1060, `${k} ${o[k]}px`);
   assert.ok(o.rawLi > 900 && o.cellP > 900, `표를 품은 항목 ${o.rawLi}px · 표 칸 안 문단 ${o.cellP}px — 둘 다 안 좁힘`);
   assert.ok(o.detailsTable > 1000 && o.cardSources >= o.card, JSON.stringify(o));

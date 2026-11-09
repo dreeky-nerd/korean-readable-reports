@@ -91,7 +91,8 @@
      상자(목록·카드·details·요약)가 아니라 글 요소에만 건다: 상자를 좁히면 안의 표·그림까지 줄어든다. 그림·표를 품은 글 요소와 그림 안 글은 뺀다.
      :has()를 모르는 브라우저는 이 규칙을 통째로 버려 예전처럼 넓게 보인다 */
   :root { --prose-w: 45rem; }  /* rem: 근거 상자처럼 글씨가 작은 요소도 같은 오른쪽 끝에 맞춘다 */
-  :is(main, .callout) :is(p, li, blockquote, figcaption, .block-desc, .note):not(:has(img, svg, video, iframe, table, pre, .flow, .cards, .stats, .pair, .browser-mock)):not(:is(pre, .mermaid, .flow, .fig, table) *),
+  /* 요약 상자 글은 뺀다 — 한 줄에 한 문장이라, 720px에서 끊으면 문장마다 끝 어절만 다음 줄로 떨어졌다(2026-11-09) */
+  main :is(p, li, blockquote, figcaption, .block-desc, .note):not(:has(img, svg, video, iframe, table, pre, .flow, .cards, .stats, .pair, .browser-mock)):not(:is(pre, .mermaid, .flow, .fig, table) *),
   main .sources:not(.card-body > .sources) { max-width: var(--prose-w); }
   /* 둘째 줄에 한 어절만 남는 줄을 줄인다(완전히 막지는 못함, 모르는 브라우저는 무시). 상속되므로 글 요소에만 — 표 칸·flow·stats·그림 글은 기본 그대로 */
   :is(main, .callout) :is(p, li, blockquote, figcaption, .block-desc, .note, .sources):not(:is(pre, .mermaid, .flow, .fig, table) *) { text-wrap: pretty; }
