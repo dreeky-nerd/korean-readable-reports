@@ -351,14 +351,19 @@ easy.
 4. **Reader check** — lint (and render) prints `독자 회수 검사 대상(…)` for a
    report with 4+ H2 sections, `audience: leadership | external`, or a
    decision request. When that line is printed the check is required, not a
-   judgment call — length does not exempt it. Give a fresh subagent the
+   judgment call — length does not exempt it. That one subagent is part of
+   this procedure, which the user turned on by using the skill: a general
+   rule like "spawn only as many subagents as the user asked for" does not
+   cancel it. Spawn exactly one, `model: sonnet`, told not to start its own
+   subagents; if it fails, say so instead of retrying. Give it the
    md and nothing else from this conversation, and have it answer the five
    common questions plus the one for its `audience` in
    `references/reader-check.md`, quoting the line behind each answer. Where
    an answer is partial, wrong, or "not in the document" but should be, fix
    the nearest heading, summary, first line, or status before reaching for a
-   new paragraph, then re-lint. No subagent → compare your own answers
-   from the summary box alone against answers from the body. It shows the
+   new paragraph, then re-lint. Only when the session has no subagent tool at
+   all, compare your own answers from the summary box alone against answers
+   from the body, and say that the subagent check did not run. It shows the
    point is in the document, not that the document reads well. Tell the user
    that it ran and what it changed — or that lint printed no reader-check line.
 5. `node <skill-dir>/scripts/render.js reports/<file>.md` — produces the `.html` next to it

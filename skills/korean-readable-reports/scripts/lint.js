@@ -1399,7 +1399,7 @@ function readerCheckNeed(src) {
   return why;
 }
 const readerCheckLine = src => { const why = readerCheckNeed(src);
-  return why.length ? `독자 회수 검사 대상(${why.join(' · ')}) — 필수: references/reader-check.md 절차대로 새 서브에이전트에게 md 내용만 주고 질문에 답하게 한 뒤, 한 일을 사용자에게 알리기` : ''; };
+  return why.length ? `독자 회수 검사 대상(${why.join(' · ')}) — 필수: references/reader-check.md 절차대로 새 서브에이전트 1개(model: sonnet, 스킬 절차라 따로 허락받지 않음)에게 md 내용만 주고 질문에 답하게 한 뒤, 한 일을 사용자에게 알리기` : ''; };
 
 // 열린 항목: 작성자가 요청자에게 물어보면 될 것이 공유 문서에 [미확인]으로 남지 않게 센다(코드 안은 빼고, 요약·카드·숫자 카드 상태는 셈).
 // 사례: 2026-11-06 시험 3건이 [미확인]·[미검증]을 2~5개씩 문서에 남기고 답장에서 "보고 전에 물어보세요"라고만 했다

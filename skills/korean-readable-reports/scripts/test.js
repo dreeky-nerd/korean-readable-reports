@@ -1448,6 +1448,8 @@ test('독자 회수 검사 대상은 lint가 판정해 출력(H2 4개·리더·�
   assert.deepEqual(readerCheckNeed(fm + '# 제목\n\n```cards\nB안 [추천]\n본문입니다.\n```\n'), ['결정 요청']);
   assert.deepEqual(readerCheckNeed(fm + '# 제목\n\n```text\n## 코드 안 제목\n[추천]\n```\n'), []);
   assert.ok(/독자 회수 검사 대상\(H2 4개\)/.test(render('# 제목\n' + h2(4)).stdout));
+  // 2026-11-06 시험: "서브에이전트는 지시한 만큼만" 규칙을 이유로 건너뜀 — 안내 줄에 1개·sonnet·허락 불필요를 적는다
+  assert.ok(/서브에이전트 1개\(model: sonnet, 스킬 절차라 따로 허락받지 않음\)/.test(require('./lint.js').readerCheckLine(fm + '# 제목\n' + h2(4))));
   assert.ok(!/독자 회수 검사/.test(plain('# 제목\n' + h2(4)).stdout));
 });
 // 2026-11-06 시험 3건이 [미확인]·[미검증]을 2~5개씩 문서에 남겼다 — 공유 문서에 둘 게 아니라 요청자에게 먼저 물을 것
