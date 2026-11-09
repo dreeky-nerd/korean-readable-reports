@@ -1450,6 +1450,16 @@ test('독자 회수 검사 대상은 lint가 판정해 출력(H2 4개·리더·�
   assert.ok(/독자 회수 검사 대상\(H2 4개\)/.test(render('# 제목\n' + h2(4)).stdout));
   assert.ok(!/독자 회수 검사/.test(plain('# 제목\n' + h2(4)).stdout));
 });
+// 2026-11-06 시험 3건이 [미확인]·[미검증]을 2~5개씩 문서에 남겼다 — 공유 문서에 둘 게 아니라 요청자에게 먼저 물을 것
+test('열린 항목: [미확인]·[미검증]·확인 필요를 세어 lint·render가 한 줄로 알림(코드 안은 빼고 숫자 카드 상태는 셈), --plain은 안 냄', () => {
+  const {openItemsLine} = require('./lint.js');
+  const body = '# 제목\n\n## 배경\n\n- **요청** — 요청입니다.\n- **현상** — 일정은 정해지지 않았습니다 [미확인].\n\n수치는 아직 [미검증]입니다.\n개발팀 확인이 필요합니다.\n\n'
+    + '```stats\n도달률 | 98.3% | 테스트 1만 건 | 미검증\n```\n\n`[미확인]`은 코드라 안 셉니다.\n\n```text\n[미확인]\n```\n';
+  assert.ok(/열린 항목 4개\(\[미확인\] 1 · \[미검증\] 2 · 확인 필요 1\)/.test(openItemsLine(fm + body)), openItemsLine(fm + body));
+  assert.equal(openItemsLine(fm + '# 제목\n\n## 배경\n\n본문입니다.\n'), '');
+  assert.ok(/열린 항목 4개/.test(render(body).stdout));
+  assert.ok(!/열린 항목/.test(plain(body).stdout));
+});
 // Mermaid는 폭 검사와 따로, 원래 페이지에서 그려지기를 기다려 본다. CDN을 못 받으면(폐쇄망·샌드박스) 건너뜀
 test('qa: Mermaid 문법 오류는 exit 1, 고치면 통과', () => {
   if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');

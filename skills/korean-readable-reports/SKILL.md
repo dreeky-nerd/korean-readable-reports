@@ -140,8 +140,9 @@ easy.
     ```
 
     `요청` and `현상` are required; drop the others only when they truly don't
-    apply. Unknown numbers or sources are never filled in: [미확인] after a
-    check that came up empty, [미검증] when nothing was checked.
+    apply. Unknown numbers or sources are never filled in. Ask the requester
+    first (workflow 3, open items); what still can't be known is [미확인]
+    after a check that came up empty, [미검증] when nothing was checked.
     Every report has a `## 배경` section and it comes first — an overview of
     how the system works belongs in the next section, not in its place.
 14. **Write native Korean, not translated English.** A professional Korean
@@ -333,6 +334,20 @@ easy.
    tell the user in one line why that picture would not help. Hints also cover
    consistency: a summary number missing from the body,
    "세 가지입니다" above a list of two, a "뒤에서 다루겠습니다" to follow up.
+   **Open items go to the requester, not the document.** Lint prints
+   `열린 항목 N개` for [미확인], [미검증] and "확인 필요" left in the
+   document. A shared report is not the place for the writer's own open
+   questions. Sort them before rendering:
+   - The requester could settle it (a number, a date, which option, whether
+     something happened) → ask in one numbered chat message, wait, and write
+     only the answer.
+   - It waits on someone outside the conversation (another team, a vendor) →
+     keep it as a fact with who and by when: "K사 계약서 초안은 법무팀이
+     11/12까지 받습니다", not "[미확인]".
+   - A source's own hedge stays as attribution: "개발팀은 46초면 끝난다고
+     봅니다".
+   If no one can answer now (no requester in the session), keep the tag and
+   put the questions at the top of your reply.
 4. **Reader check** — lint (and render) prints `독자 회수 검사 대상(…)` for a
    report with 4+ H2 sections, `audience: leadership | external`, or a
    decision request. When that line is printed the check is required, not a
@@ -422,6 +437,7 @@ easy.
 - [ ] Tone reads like explaining to a teammate.
 - [ ] Every sentence sits on its own line, without stacking short facts that need a connecting word.
 - [ ] Reader check run whenever lint printed `독자 회수 검사 대상`; misses fixed at the nearest heading, summary, first line, or status first.
+- [ ] Every `열린 항목` the requester could answer was asked in chat and replaced by the answer; only outside dependencies remain, with who and by when.
 - [ ] Lint run and clean; HTML rendered with `scripts/render.js`, `scripts/qa.js` exits 0 (or no browser — said so), and delivered.
 
 ## When NOT to apply

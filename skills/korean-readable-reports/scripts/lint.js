@@ -1401,7 +1401,28 @@ function readerCheckNeed(src) {
 const readerCheckLine = src => { const why = readerCheckNeed(src);
   return why.length ? `독자 회수 검사 대상(${why.join(' · ')}) — 필수: references/reader-check.md 절차대로 새 서브에이전트에게 md 내용만 주고 질문에 답하게 한 뒤, 한 일을 사용자에게 알리기` : ''; };
 
-module.exports = { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, FENCE_RE, STATUS_TAGS, measureReading, readerCheckNeed, readerCheckLine, stripComments, decodeEnt, CODE_SPAN, maskCode };
+// 열린 항목: 작성자가 요청자에게 물어보면 될 것이 공유 문서에 [미확인]으로 남지 않게 센다(코드 안은 빼고, 요약·카드·숫자 카드 상태는 셈).
+// 사례: 2026-11-06 시험 3건이 [미확인]·[미검증]을 2~5개씩 문서에 남기고 답장에서 "보고 전에 물어보세요"라고만 했다
+function openItems(src) {
+  const lines = src.replace(/\r\n/g, '\n').split('\n');
+  const { meta, start } = parseFrontmatter(lines);
+  const { at } = scanFences(lines, start);
+  const body = lines.filter((l, i) => i >= start && (!at[i] || (at[i].kind === 'cards' && at[i].open !== i)));
+  const stats = lines.filter((l, i) => at[i] && at[i].kind === 'stats' && at[i].open !== i).map(l => (l.split('|')[3] || '').trim());
+  const text = [meta.summary || '', ...body].map(maskCode).join('\n');
+  return {
+    '[미확인]': (text.match(/\[미확인\]/g) || []).length + stats.filter(s => s === '미확인').length,
+    '[미검증]': (text.match(/\[미검증\]/g) || []).length + stats.filter(s => s === '미검증').length,
+    '확인 필요': (text.match(/확인(?:이)? 필요/g) || []).length,
+  };
+}
+const openItemsLine = src => {
+  const n = openItems(src), parts = Object.entries(n).filter(([, v]) => v).map(([k, v]) => `${k} ${v}`);
+  const total = Object.values(n).reduce((a, v) => a + v, 0);
+  return total ? `열린 항목 ${total}개(${parts.join(' · ')}) — 요청자가 답할 수 있는 것은 문서에 남기지 말고 대화로 한 번에 묻고 답만 넣기. 외부 답을 기다리는 것만 "누가 언제까지"로 쓰기` : '';
+};
+
+module.exports = { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, FENCE_RE, STATUS_TAGS, measureReading, readerCheckNeed, readerCheckLine, openItems, openItemsLine, stripComments, decodeEnt, CODE_SPAN, maskCode };
 
 if (require.main === module) {
   const args = process.argv.slice(2);
@@ -1413,5 +1434,6 @@ if (require.main === module) {
   const opts = { plain: args.includes('--plain'), renderer: args.includes('--renderer'), readerReview: args.includes('--reader-review'), external: args.includes('--external') };
   const errors = report(file, lint(src, opts));
   if (!opts.plain && readerCheckLine(src)) console.log(readerCheckLine(src));
+  if (!opts.plain && openItemsLine(src)) console.log(openItemsLine(src));
   process.exit(args.includes('--strict') && errors ? 1 : 0);
 }
