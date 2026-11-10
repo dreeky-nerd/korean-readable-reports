@@ -25,7 +25,7 @@
  *       (힌트) 8자 넘는 괄호 단서 12곳 이상 또는 두 개 든 줄 3줄 이상(조건은 근거 줄로) / 유보 두 겹("~고 봅니다 [추정]")
  *   9   <details> 열림/닫힘 짝이 안 맞음
  *   11  한 줄에 문장 2개 이상 (마침표 뒤 공백 없어도 잡음, 말줄임표는 제외)
- *   13  "## 배경" 없음·첫 섹션 아님 / 배경에 요청·현상 라벨 없음 / "비유하자면"·"그래서 이번에" 같은 이야기체 표현
+ *   13  "## 배경" 없음·배경이 첫 섹션(결정·할 일 다음에 둔다) / 배경에 요청·현상 라벨 없음 / "비유하자면"·"그래서 이번에" 같은 이야기체 표현
  *   15  flow·mermaid 한 그림에 역할 색(ext…)과 상태 색(done…)을 섞음
  *       (힌트) 그림이 나을 내용을 글로만 씀 — 주어 있는 처리 단계 3개 이상 나열, 화살표 3단계 이상. --strict 실패 사유 아님
  *       (힌트) flow 단계에 실패 조건("실패하면") — 갈라지는 흐름은 Mermaid
@@ -845,17 +845,18 @@ function lint(src, opts = {}) {
     if (inBg) finish();
   }
 
-  // 규칙 13: 배경 섹션이 있고 첫 H2여야 한다
+  // 규칙 13: 배경 섹션은 있어야 하고, 결정·할 일·결론 다음에 둔다(맨 앞이면 블라인드 비교 6번 모두 독자가 늦게 닿았다, 2026-11-10)
   {
-    let firstH2 = -1, firstH2Text = '', hasBg = false;
+    let firstH2 = -1, firstH2Text = '', hasBg = false, h2s = 0;
     for (let i = start; i < lines.length; i++) {
       if (inCode(i) || !/^##\s/.test(lines[i])) continue;
       const t = lines[i].replace(/^##\s+/, '');
       if (firstH2 < 0) { firstH2 = i; firstH2Text = t; }
       if (/^(배경|background)/i.test(t)) hasBg = true;
+      h2s++;
     }
-    if (firstH2 >= 0 && !hasBg) warn(firstH2, 13, '"## 배경" 섹션 없음 — 첫 섹션은 요청 분석(요청·현상·원인…)');
-    else if (hasBg && !/^(배경|background)/i.test(firstH2Text)) warn(firstH2, 13, `첫 섹션이 "${firstH2Text}" — "## 배경"을 맨 앞으로`);
+    if (firstH2 >= 0 && !hasBg) warn(firstH2, 13, '"## 배경" 섹션 없음 — 결정·할 일 다음에 요청 분석(요청·현상…) 섹션 두기');
+    else if (h2s > 1 && /^(배경|background)/i.test(firstH2Text)) warn(firstH2, 13, `첫 섹션이 "${firstH2Text}" — 결정할 일·할 일·결론을 먼저 쓰고 배경은 그 뒤로`);
   }
 
   // 규칙 14: 자연스러운 한국어 — 은유 소제목 / 번역투 동사·구어체 / 번역투(영어 구조) / 업무 관용투 / 용어 섞임.

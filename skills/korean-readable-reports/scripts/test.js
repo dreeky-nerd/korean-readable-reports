@@ -603,8 +603,19 @@ test('긴 불릿: 맨 앞 볼드 제목 끝 마침표만 제외', () => {
   assert.equal(hits('- **정말?** 확인했다. 저장했다.').length, 1, '다른 종결부호 유지');
   assert.equal(hits('- 설명 **제목.** 확인했다. 저장했다.').length, 1, '중간 볼드는 유지');
 });
+// 2026-11-10 블라인드 비교 6번 모두, 배경이 맨 앞이라 독자가 결정·할 일에 늦게 닿았다
+test('규칙 13: 배경은 결정·할 일 다음 — 맨 앞이면 경고, 둘째면 통과, 하나뿐이거나 plain이면 조용', () => {
+  const r13 = (d, o) => lint(fm + d, o).filter(f => f.rule === 13 && !f.hint).map(f => f.msg);
+  const bg = '## 배경\n- **요청** — 확인합니다.\n- **현상** — 동작합니다.\n';
+  const todo = '## 할 일\n- 오늘 배포합니다.\n';
+  assert.deepEqual(r13('# 제목\n\n> 요약입니다.\n\n' + bg + '\n' + todo), ['첫 섹션이 "배경" — 결정할 일·할 일·결론을 먼저 쓰고 배경은 그 뒤로']);
+  assert.deepEqual(r13('# 제목\n\n> 요약입니다.\n\n' + todo + '\n' + bg), []);
+  assert.deepEqual(r13('# 제목\n\n> 요약입니다.\n\n' + bg), []);
+  assert.deepEqual(r13('# 제목\n\n> 요약입니다.\n\n' + todo), ['"## 배경" 섹션 없음 — 결정·할 일 다음에 요청 분석(요청·현상…) 섹션 두기']);
+  assert.deepEqual(r13('# 제목\n\n' + bg + '\n' + todo, {plain: true}), []);
+});
 test('긴 불릿: plain 비적용, 신규 경고만으로 일반 0·strict 1', () => {
-  const doc = fm + '# 제목\n\n> 요약입니다.\n\n## 배경\n- **요청** — 확인합니다.\n- **현상** — 동작합니다.\n\n## 결과\n- 확인했다. 저장했다. 끝났다.\n';
+  const doc = fm + '# 제목\n\n> 요약입니다.\n\n## 결과\n- 확인했다. 저장했다. 끝났다.\n\n## 배경\n- **요청** — 확인합니다.\n- **현상** — 동작합니다.\n';
   const warnings = lint(doc).filter(f => !f.hint);
   assert.equal(warnings.length, 1, JSON.stringify(warnings));
   assert.equal(warnings[0].rule, 11);

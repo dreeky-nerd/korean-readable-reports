@@ -124,7 +124,8 @@ easy.
     It also runs the lint (below) and prints findings. Fix them in the md and
     re-render; do not patch the HTML. md conventions the renderer understands
     are listed at the top of `scripts/render.js`.
-13. **Background is an analysis of the request, not a story.** Work from the
+13. **Background is an analysis of the request, not a story — and it comes
+    after what the reader acts on.** Work from the
     actual request (ticket, message, meeting note) and restate it precisely —
     never invent a backstory or narrate chronologically ("until now… so…").
     Write it as labeled lines, each a full sentence:
@@ -134,17 +135,24 @@ easy.
     - **요청** — who asked for what, restated exactly (source, date).
     - **현상** — the observable problem, with frequency or impact in numbers.
     - **원인** — root cause, or the leading hypothesis marked [추정].
-    - **요구사항** — conditions the result must meet (incl. what must NOT change).
+    - **요구사항** — conditions the requester or source stated (incl. what must NOT change).
     - **범위 밖** — what this work deliberately does not cover.
     - **판단 기준** — how success will be judged.
     ```
 
     `요청` and `현상` are required; drop the others only when they truly don't
-    apply. Unknown numbers or sources are never filled in. Ask the requester
+    apply. `요구사항` holds only conditions someone stated: a target stays a
+    target ("목표 97%"), never "97%를 지켜야"; with none stated, drop the line.
+    Unknown numbers or sources are never filled in. Ask the requester
     first (workflow 3, open items); what still can't be known is [미확인]
     after a check that came up empty, [미검증] when nothing was checked.
-    Every report has a `## 배경` section and it comes first — an overview of
-    how the system works belongs in the next section, not in its place.
+    Every report has a `## 배경` section, but not as the first one. The first
+    H2 is what this reader does with the document — the decision to make,
+    the to-dos, or, for a status or analysis, the conclusion — and `## 배경`
+    follows it (lint warns when 배경 is first). In a blind test (2026-11-10,
+    three documents, six comparisons) a judge found the decision or to-do
+    faster in the version without 배경 in front every time. An overview of
+    how the system works goes after 배경, not in its place.
 14. **Write native Korean, not translated English.** A professional Korean
     tech doc states facts in plain nouns and verbs. Avoid:
     - Metaphor or personified headings — "요청이 지나가는 길", "~의 여정",
@@ -429,7 +437,7 @@ easy.
 - [ ] Reader and level are known.
 - [ ] Each section's first line is the plain takeaway.
 - [ ] Summary box is ≤3 short sentences, no analogy, no stacked modifiers.
-- [ ] `## 배경` comes first and is labeled request analysis (요청·현상 at least), not a story; any analogy is one clause beside a hard concept.
+- [ ] The first section is the decision, to-dos, or conclusion; `## 배경` comes after it and is labeled request analysis (요청·현상 at least), not a story; 요구사항 only as stated; any analogy is one clause beside a hard concept.
 - [ ] Korean reads native: no metaphor headings, translated verbs, colloquial intensifiers, announcing sentences, translationese (에 의해·하기 위해서는), or office habits (해당·진행합니다·하시기 바랍니다); one term per concept (references/ko-terms.md).
 - [ ] Every section was checked against the rule-15 table; ordered processing steps, exchanges, and architecture are drawn, not listed.
 - [ ] No section is a wall of sentences: each long one became keyword + core line in a flow, table, or cards, with the original sentences in `<details>`.
