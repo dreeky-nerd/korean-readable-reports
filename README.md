@@ -77,7 +77,7 @@ cp -r korean-readable-reports/skills/korean-readable-reports <project>/.claude/s
 | `skills/korean-readable-reports/SKILL.md` | 에이전트가 따르는 규칙·작업 순서·체크리스트 |
 | `…/scripts/render.js` | md를 HTML 한 장으로 렌더(라이트·다크, Mermaid, 직접 그린 그림·막대그래프·전용 블록), lint도 함께 실행 |
 | `…/scripts/lint.js` | 기계로 검사할 수 있는 규칙 검사 |
-| `…/scripts/qa.js` | 만든 HTML을 헤드리스 Chrome·Edge로 1280·768·390px에서 열어 넘침·깨진 #링크·안 열린 그림·그림 안 글자 넘침과 겹침·Mermaid 문법 오류·인쇄 때 잘리는 곳 검사, 손그림 연결선 경고(설치된 브라우저만 씀) |
+| `…/scripts/qa.js` | 만든 HTML을 헤드리스 Chrome·Edge로 1280·768·390px에서 열어 넘침·깨진 #링크·안 열린 그림·그림 안 글자 넘침과 겹침·Mermaid 문법 오류·인쇄 때 잘리는 곳·라이트/다크 글자 대비 검사, 손그림 연결선 경고(설치된 브라우저만 씀) |
 | `…/scripts/test.js` | 렌더러·lint 회귀 시험 |
 | `…/references/template.html` | 렌더러가 채우는 페이지 디자인 |
 | `…/references/examples.md` | 실패 유형별 고치기 전후 예시 16쌍, 독자별로 같은 내용을 다르게 쓰는 예 |

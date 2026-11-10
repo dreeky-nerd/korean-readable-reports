@@ -1391,6 +1391,28 @@ test('qa: 그림·넓은 표는 쪽 폭에 맞춰 줄어 인쇄해도 안 잘리
   assert.equal(q.status, 1, q.stdout + q.stderr);
   assert.ok(/인쇄하면 잘리는 곳 1개/.test(q.stdout) && /넘침 0곳/.test(q.stdout), q.stdout);
 });
+// 2026-11-10: 다크 모드와 v2.6 그림 색은 대비를 잰 적이 없었다(impeccable audit의 WCAG 4.5:1 기준)
+test('qa: 글자 대비 — 템플릿 글자·그림은 라이트·다크 통과, 옅은 글자는 테마·그라디언트·그림마다 exit 1', () => {
+  if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');
+  const svg = '```svg\n<svg viewBox="0 0 600 200" aria-label="색 시험">\n<rect class="zone" x="0" y="0" width="600" height="200"/>\n'
+    + '<rect class="node" x="10" y="10" width="170" height="80"/>\n<text class="t1" x="20" y="40">보통</text>\n<text class="t2" x="20" y="70">보조 글</text>\n'
+    + '<rect class="node bad" x="210" y="10" width="170" height="80"/>\n<text class="bad" x="220" y="40">문제</text>\n'
+    + '<rect class="node chg" x="410" y="10" width="170" height="80"/>\n<text class="chg" x="420" y="40">바뀜</text>\n<text class="tag" x="420" y="70">TAG</text>\n'
+    + '<text class="lbl" x="250" y="150">라벨</text>\n</svg>\n```\n';
+  const ok = render('# 제목\n\n> 요약 문장입니다.\n\n## 본문\n\n' + svg + '\n```bars\n기준선 50 | 기준 50\n가 | 값 40 + 값 30:chg + 값 20:bad | 보조 | 결과\n```\n\n'
+    + '```cards compare\n[실패] 지금 문구\n잘못 해지되었습니다.\n\n[추천] 고친 문구\n복구합니다.\n```\n\n```stats\n해지 | 1,284건 | 평소의 약 7배 | 위험\n```\n\n확신 ●●○\n');
+  let q = runQa(ok.output);
+  assert.ok(!/글자 대비 부족/.test(q.stdout), q.stdout);
+  const f = path.join(dir, 'qa-contrast.html');
+  fs.writeFileSync(f, ok.html.replace('<div class="callout"><p>', '<div class="callout"><p style="color:#8fa3b5">')
+    .replace('</main>', '<p class="pale">옅은 글자</p><p class="night">다크에서 안 보임</p><div class="fig"><svg viewBox="0 0 300 60"><rect class="node bad" x="0" y="0" width="300" height="60"/><text x="10" y="35" style="fill:#f0a0a0">옅은 빨강</text></svg></div>'
+      + '<style>.pale { color: #aaa; } :root[data-theme="dark"] .night { color: #333; }</style></main>'));
+  q = runQa(f);
+  assert.equal(q.status, 1, q.stdout + q.stderr);
+  for (const re of [/라이트 [\d.]+:1 \(기준 4\.5\)\s+p\s.*"요약 문장/, /라이트 [\d.]+:1 \(기준 4\.5\)\s+p\.pale/, /다크 [\d.]+:1 \(기준 4\.5\)\s+p\.night/, /라이트 [\d.]+:1 \(기준 3\)\s+svg text\s.*"옅은 빨강/])
+    assert.ok(re.test(q.stdout), re + '\n' + q.stdout);
+  assert.ok(!/다크 .*p\.pale|라이트 .*p\.night/.test(q.stdout), q.stdout);
+});
 test('qa: 화면보다 넓은 md 그림도 칸 폭에 맞춰 줄어 넘침 없음', () => {
   if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');
   fs.writeFileSync(path.join(dir, 'wide.svg'), '<svg xmlns="http://www.w3.org/2000/svg" width="2200" height="300"><rect width="2200" height="300" fill="#ccc"/></svg>');

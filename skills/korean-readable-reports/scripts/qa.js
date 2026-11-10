@@ -14,6 +14,7 @@
  *     그림    ```svg·```bars 안 글자가 자기 상자·그림 밖으로 나감, 다른 상자나 글자와 겹침(폭과 무관하게 한 번만 보고)
  *     연결선  svg의 ln·node·lbl만 첫 폭에서 루트 SVG 단위로 검사(관통·라벨 근접·겹침·연결점·모서리·테두리). 경고만, 표본 상한 초과는 미검사
  *     종이    인쇄 규칙을 켠 사본을 A4 본문 폭(718px)에서 열어 그림·표·코드 상자에서 잘리는 곳을 찾음. Mermaid는 못 그려 안 봄(CSS로 쪽 폭에 맞춤)
+ *     대비    첫 폭에서 라이트·다크 둘 다, 글자와 바탕 대비가 WCAG 기준(본문 4.5:1, 큰 글자·●○○ 3:1) 미만. Mermaid 글자는 안 봄
  *     파일    상대 링크가 가리키는 파일이 없음(옆 보고서 md를 렌더하지 않아 .html이 없는 경우 등)
  *     Mermaid 문법 오류로 그림 대신 소스가 보임 · 같은 id를 받은 그림(한 칸에 포개짐) — 문제.
  *             12초 안에 안 그려짐(CDN이 막혔거나 느림)·접힌 칸 안이라 미검사 — 알리기만
@@ -226,6 +227,73 @@ function connectors(svg, fig, figs, unchecked) {
     });
   });
 }
+// 글자 대비(WCAG): 본문 4.5:1, 큰 글자(24px, 굵게 18.66px 이상)와 ●○○ 표시 3:1. 바탕은 조상 배경을 바깥부터 겹쳐 구하고,
+// 그라디언트는 색 지점마다 재서 가장 나쁜 값을 쓴다. 그림 글자는 글자를 품은 도형을 큰 것부터 겹친 색, 후광(.lbl)은 후광 색이 바탕
+function rgb(s) {
+  if (!s || s === 'none' || s === 'transparent') return null;
+  var m = s.match(/^rgba?\\(([^)]+)\\)/) || s.match(/^color\\(srgb ([^)]+)\\)/), k = /^color/.test(s) ? 255 : 1;
+  if (!m) return undefined;
+  var p = m[1].split(/[\\s,\\/]+/).filter(Boolean).map(parseFloat);
+  return { r: p[0] * k, g: p[1] * k, b: p[2] * k, a: p.length > 3 ? p[3] : 1 };
+}
+function lay(top, under) { var a = top.a; return { r: top.r * a + under.r * (1 - a), g: top.g * a + under.g * (1 - a), b: top.b * a + under.b * (1 - a), a: 1 }; }
+function lum(c) { var f = function (v) { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }; return 0.2126 * f(c.r) + 0.7152 * f(c.g) + 0.0722 * f(c.b); }
+function ratio(a, b) { var x = lum(a), y = lum(b); return (Math.max(x, y) + 0.05) / (Math.min(x, y) + 0.05); }
+function hex(c) { return '#' + [c.r, c.g, c.b].map(function (v) { return ('0' + Math.round(v).toString(16)).slice(-2); }).join(''); }
+function backdrops(win, el) {
+  var layers = [];
+  for (var e = el; e && e.nodeType === 1; e = e.parentElement) {
+    var s = win.getComputedStyle(e), img = s.backgroundImage, c = rgb(s.backgroundColor);
+    if (c === undefined || /url\\(/.test(img)) return null;
+    if (/gradient/.test(img)) layers.push((img.match(/rgba?\\([^)]*\\)|color\\(srgb[^)]*\\)/g) || []).map(rgb));
+    if (c && c.a > 0) layers.push([c]);
+    if (c && c.a >= 1) break;
+  }
+  var out = [{ r: 255, g: 255, b: 255, a: 1 }];
+  for (var i = layers.length - 1; i >= 0; i--) out = [].concat.apply([], out.map(function (u) { return layers[i].map(function (c) { return lay(c, u); }); }));
+  return out;
+}
+function contrast(win, doc, theme, found) {
+  var opac = new Map(), alpha = function (el) {
+    if (!el || el.nodeType !== 1) return 1;
+    if (!opac.has(el)) opac.set(el, parseFloat(win.getComputedStyle(el).opacity) * alpha(el.parentElement));
+    return opac.get(el);
+  };
+  var check = function (el, fg, bgs, px, bold, text, where) {
+    if (!fg || !bgs || !text) return;
+    var need = el.closest('.dots') ? 3 : (px >= 24 || (bold && px >= 18.66)) ? 3 : 4.5;
+    var a = fg.a * alpha(el); if (!a) return;
+    var worst = null;
+    bgs.forEach(function (bg) { var c = lay({ r: fg.r, g: fg.g, b: fg.b, a: a }, bg), r = ratio(c, bg); if (!worst || r < worst.r) worst = { r: r, c: c, bg: bg }; });
+    if (worst.r < need - 0.005) found.push({ theme: theme, where: where, ratio: Math.round(worst.r * 100) / 100, need: need, fg: hex(worst.c), bg: hex(worst.bg), text: text.replace(/\\s+/g, ' ').trim().slice(0, 30) });
+  };
+  var walker = doc.createTreeWalker(doc.body, 4), n, seen = new Set();
+  while ((n = walker.nextNode())) {
+    var el = n.parentElement;
+    if (!n.nodeValue.trim() || !el || seen.has(el) || el.closest('script, style, svg, pre.mermaid, noscript')) continue;
+    seen.add(el);
+    var range = doc.createRange(); range.selectNodeContents(n);
+    var rr = range.getBoundingClientRect(), s = win.getComputedStyle(el);
+    if (rr.width < 2 || rr.height < 2 || s.visibility !== 'visible') continue;
+    check(el, rgb(s.color), backdrops(win, el), parseFloat(s.fontSize), parseInt(s.fontWeight, 10) >= 700, n.nodeValue, name(el));
+  }
+  [].forEach.call(doc.querySelectorAll('.fig > svg text'), function (t) {
+    var s = win.getComputedStyle(t), b = t.getBoundingClientRect(), svg = t.ownerSVGElement;
+    if (!b.width || !svg) return;
+    var cx = (b.left + b.right) / 2, cy = (b.top + b.bottom) / 2, bgs = backdrops(win, svg);
+    if (!bgs) return;
+    var halo = /^stroke/.test(s.paintOrder || '') && parseFloat(s.strokeWidth) >= 3 && rgb(s.stroke);
+    var shapes = halo ? [] : [].filter.call(svg.querySelectorAll('rect, .node, .seg, .zone'), function (r) {
+      var q = r.getBoundingClientRect(); return q.width && cx >= q.left && cx <= q.right && cy >= q.top && cy <= q.bottom;
+    }).sort(function (p, q) { var x = p.getBoundingClientRect(), y = q.getBoundingClientRect(); return y.width * y.height - x.width * x.height; });
+    var layers = halo ? [halo] : shapes.map(function (r) { var rs = win.getComputedStyle(r), c = rgb(rs.fill); if (c) c.a *= parseFloat(rs.fillOpacity || 1); return c; });
+    if (layers.some(function (c) { return c === undefined; })) return;
+    layers.forEach(function (c) { if (c) bgs = bgs.map(function (u) { return lay(c, u); }); });
+    var ctm = t.getScreenCTM(), px = parseFloat(s.fontSize) * (ctm ? Math.hypot(ctm.a, ctm.b) : 1);
+    var cls = (t.getAttribute('class') || '').trim();
+    check(t, rgb(s.fill), bgs, px, parseInt(s.fontWeight, 10) >= 700, t.textContent || '', 'svg text' + (cls ? '.' + cls.split(/\\s+/).join('.') : ''));
+  });
+}
 function measure(f, w) {
   var win = f.contentWindow, doc = f.contentDocument, de = doc.documentElement, over = [];
   // 클릭을 받지 않는 절대 위치 장식(flow 화살표 SVG)은 상자 밖으로 조금 나가도 글자가 잘리지 않는다 — 재는 동안 숨긴다
@@ -272,7 +340,16 @@ function measure(f, w) {
       else try { connectors(svg, k + 1, figs, unchecked); } catch (e) { unchecked.push({ fig: k + 1, why: '측정 오류 — ' + e.message }); }
     }
   });
-  return { want: w, width: win.innerWidth, over: over, anchors: anchors, images: images, figs: figs, unchecked: unchecked };
+  // 대비는 폭과 무관 — 첫 폭에서 라이트·다크 둘 다. 전환 애니메이션이 있으면 바뀌는 중간 색을 읽으므로 끈다
+  var low = [];
+  if (w === WIDTHS[0]) {
+    var was = de.getAttribute('data-theme'), still = doc.createElement('style');
+    still.textContent = '*, *::before, *::after { transition: none !important; animation: none !important; }';
+    doc.head.appendChild(still);
+    ['light', 'dark'].forEach(function (th) { de.setAttribute('data-theme', th); contrast(win, doc, th, low); });
+    if (was) de.setAttribute('data-theme', was); else de.removeAttribute('data-theme');
+  }
+  return { want: w, width: win.innerWidth, over: over, anchors: anchors, images: images, figs: figs, unchecked: unchecked, low: low };
 }
 function finish(print) { var p = document.createElement('pre'); p.textContent = 'KRRQA' + encodeURIComponent(JSON.stringify({ results: results, print: print })) + 'KRRQA'; document.body.appendChild(p); }
 function paper() {
@@ -419,6 +496,17 @@ function main() {
     if (mm.pending) console.log(`  접힌 칸 안 Mermaid ${mm.pending}개는 펼칠 때 그리므로 미검사`);
     problems += mm.error + mm.dup;
   }
+  // 같은 글자색·바탕색·요소는 한 줄로 — 표 칸마다 같은 대비가 반복된다
+  const low = new Map();
+  for (const r of m.results) for (const c of r.low || []) {
+    const key = `${c.theme}|${c.where}|${c.fg}|${c.bg}`;
+    if (low.has(key)) low.get(key).n++; else low.set(key, {...c, n: 1});
+  }
+  if (low.size) {
+    console.log(`  글자 대비 부족 ${low.size}종 — 글자색이나 바탕색을 바꾸기(기준: 본문 4.5:1, 큰 글자 3:1):`);
+    for (const c of low.values()) console.log(`    - ${c.theme === 'dark' ? '다크' : '라이트'} ${c.ratio}:1 (기준 ${c.need})  ${c.where}  ${c.fg} / ${c.bg}  "${c.text}"${c.n > 1 ? ` 외 ${c.n - 1}곳` : ''}`);
+  }
+  problems += low.size;
   if (m.print.length) console.log(`  인쇄하면 잘리는 곳 ${m.print.length}개 — 종이에는 가로 스크롤이 없음. 표 열을 줄이거나 긴 낱말을 끊기:`);
   for (const c of m.print) console.log(`    - ${c.px}px  ${c.el}  "${c.text}"`);
   problems += anchors.size + images.size + errors.length + m.print.length;

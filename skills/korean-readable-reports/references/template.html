@@ -315,8 +315,8 @@
   .bubble > :last-child { margin-bottom: 0; }
   .bubble.bad { border-color: var(--fig-bad); background: var(--fig-bad-bg); }
   .bubble.chg { border-color: var(--fig-chg); background: var(--fig-chg-bg); }
-  /* ●●○ 정도 표시 — 글자는 그대로 두고 간격·색만 */
-  .dots { letter-spacing: 2px; color: var(--fig-chg); white-space: nowrap; }
+  /* ●●○ 정도 표시 — 글자는 그대로 두고 간격·색만. 글자라 -ink 주황(--fig-chg는 회청 바탕에서 2.2:1이었다, 2026-11-10 qa 대비) */
+  .dots { letter-spacing: 2px; color: var(--fig-chg-ink); white-space: nowrap; }
 
   /* ```stats — 핵심 수치 카드(Start Bootstrap SB Admin 2 숫자 카드 + HTML5 UP Stellar 숫자 띠 참고).
      왼쪽 색 띠 = 상태(요약 박스와 같은 강조 문법). 숫자는 본문보다 크게, 자릿수 정렬 */

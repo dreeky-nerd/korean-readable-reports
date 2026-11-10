@@ -381,7 +381,8 @@ easy.
    that don't exist, images that failed to load, and text in a ` ```svg ` /
    ` ```bars ` figure that leaves its box or overlaps other text, Mermaid
    diagrams that failed to parse (shown as source in a "문법 오류" box), and
-   boxes that would be cut off on A4 paper ("인쇄하면 잘리는 곳").
+   boxes that would be cut off on A4 paper ("인쇄하면 잘리는 곳"), and text
+   below WCAG contrast in the light or dark theme ("글자 대비 부족").
    ` ```svg ` connector problems print as warnings ("그림 연결선 경고") and
    don't change the exit code — fix them anyway in a figure you just drew. Exit 1 → fix the md (usually a long unbroken name in a card) and
    re-render; exit 2 means no browser was found — say so instead of claiming the
