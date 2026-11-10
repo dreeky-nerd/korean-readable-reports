@@ -665,6 +665,15 @@ test('표 칸: 한국어 문장 끝과 <br>에서 줄바꿈', () => {
   const r = render('# 제목\n\n| 항목 | 설명 |\n| --- | --- |\n| A | 먼저 확인합니다. 그다음 저장합니다. |\n| B | 첫 줄<br>둘째 줄 |', ['--no-lint']);
   assert.ok(r.html.includes('확인합니다.<br>그다음')); assert.ok(r.html.includes('첫 줄<br>둘째 줄'));
 });
+test('직접 쓴 <br>: 인용문·문단·목록·요약에서 줄바꿈, 줄 끝 것은 겹치지 않음, 코드 안은 글자', () => {
+  const r = render('# 제목\n\n> 요약 첫 줄<br>\n> 요약 둘째 줄\n\n## 절\n\n> 안내 첫 줄<br>\n> 안내 둘째 줄<br>\n\n문단 앞<br>문단 뒤\n\n- 항목 앞<br>항목 뒤\n\n`a<br>b`', ['--no-lint']);
+  assert.ok(r.html.includes('<div class="callout"><p>요약 첫 줄<br>\n요약 둘째 줄</p></div>'));
+  assert.ok(r.html.includes('<blockquote>안내 첫 줄<br>안내 둘째 줄</blockquote>'));
+  assert.ok(r.html.includes('문단 앞<br>문단 뒤')); assert.ok(r.html.includes('항목 앞<br>항목 뒤'));
+  assert.ok(r.html.includes('<code>a&lt;br&gt;b</code>')); assert.ok(!r.html.includes('&lt;br&gt;<br>'));
+  const p = plain('# 제목\n\n첫 줄<br>\n둘째 줄', ['--strict']);
+  assert.ok(p.html.includes('<p>첫 줄<br>\n둘째 줄</p>'));
+});
 test('browser 블록은 주소창 있는 창 안에 원문 표시', () => {
   const r = render('# 제목\n\n```browser https://example.com/terms\n#### 이용 약관\n- 원문 한 줄\n```', ['--no-lint']);
   assert.ok(r.html.includes('class="browser-mock"')); assert.ok(r.html.includes('example.com/terms')); assert.ok(r.html.includes('원문 한 줄'));

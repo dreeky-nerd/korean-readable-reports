@@ -134,6 +134,9 @@ function inline(text) {
   s = esc(s);
   s = s.replace(TAG_RE, (_, t) => `<span class="tag ${STATUS_TAGS[t]}">${t}</span>`);
   s = s.replace(/[●○]{2,5}/g, d => `<span class="dots">${d}</span>`);
+  // 직접 쓴 <br>은 어디서나 줄바꿈(인용문 안 것이 글자로 보였다, 2026-11-10). 줄 끝 것은 줄바꿈이 이미 <br>이라 버린다
+  if (hardBreaks) s = s.replace(/&lt;br\s*\/?&gt;[ \t]*(?=\n|$)/gi, '');
+  s = s.replace(/&lt;br\s*\/?&gt;/gi, '<br>');
   s = s.replace(/\*\*(\S(?:[^*\n]*?\S)?)\*\*/g, '<strong>$1</strong>');
   // 기울임: 여는 *는 앞이 글자가 아니고 뒤가 공백이 아닐 때, 닫는 *는 앞이 공백이 아닐 때만 — "3 * 4 * 5", "*.log" 보호
   s = s.replace(/(^|[^\w*])\*(\S(?:[^*\n]*?\S)?)\*(?![\w*])/g, '$1<em>$2</em>');
@@ -162,7 +165,7 @@ const PIPE = NUL + 'P' + NUL;
 // 구절이 목록으로 쪼개지고, 백틱 안 쉼표에서 코드가 깨졌다(2026-10-14 시험). "vs. ", "e.g. " 뒤에서도 줄이 바뀌던 것을 막는다
 function cellHtml(raw) {
   return inline(raw).split(/(<code>[\s\S]*?<\/code>|<[^>]+>)/).map((part, i) => i % 2 ? part
-    : part.replace(/&lt;br\s*\/?&gt;/g, '<br>').replace(/([다요죠음함됨임]\.)\s+(?=\S)/g, '$1<br>')).join('');
+    : part.replace(/([다요죠음함됨임]\.)\s+(?=\S)/g, '$1<br>')).join('');
 }
 function renderTable(rows) {
   const cells = r => r.trim().replace(/\\\|/g, PIPE).replace(/^\||\|$/g, '').split('|').map(c => c.trim().split(PIPE).join('|'));
