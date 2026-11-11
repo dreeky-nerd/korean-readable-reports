@@ -153,6 +153,12 @@ easy.
     three documents, six comparisons) a judge found the decision or to-do
     faster in the version without 배경 in front every time. An overview of
     how the system works goes after 배경, not in its place.
+    When several teams read it (`audience: cross-team`), that first section
+    holds one table of each team's to-dos — `팀 | 할 일 | 기한` — so each team
+    finds its share in one place instead of across sections (lint hints when
+    it is missing). Fill it only with owners, dates, and decisions the source
+    gives: an undecided item says who decides, a target date stays 목표, and
+    no team gets a task the source didn't give it.
 14. **Write native Korean, not translated English.** A professional Korean
     tech doc states facts in plain nouns and verbs. Avoid:
     - Metaphor or personified headings — "요청이 지나가는 길", "~의 여정",
@@ -437,7 +443,7 @@ easy.
 - [ ] Reader and level are known.
 - [ ] Each section's first line is the plain takeaway.
 - [ ] Summary box is ≤3 short sentences, no analogy, no stacked modifiers.
-- [ ] The first section is the decision, to-dos, or conclusion; `## 배경` comes after it and is labeled request analysis (요청·현상 at least), not a story; 요구사항 only as stated; any analogy is one clause beside a hard concept.
+- [ ] The first section is the decision, to-dos, or conclusion (cross-team: one `팀 | 할 일 | 기한` table, from the source only); `## 배경` comes after it and is labeled request analysis (요청·현상 at least), not a story; 요구사항 only as stated; any analogy is one clause beside a hard concept.
 - [ ] Korean reads native: no metaphor headings, translated verbs, colloquial intensifiers, announcing sentences, translationese (에 의해·하기 위해서는), or office habits (해당·진행합니다·하시기 바랍니다); one term per concept (references/ko-terms.md).
 - [ ] Every section was checked against the rule-15 table; ordered processing steps, exchanges, and architecture are drawn, not listed.
 - [ ] No section is a wall of sentences: each long one became keyword + core line in a flow, table, or cards, with the original sentences in `<details>`.

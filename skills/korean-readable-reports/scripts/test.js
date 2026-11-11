@@ -614,6 +614,19 @@ test('규칙 13: 배경은 결정·할 일 다음 — 맨 앞이면 경고, 둘�
   assert.deepEqual(r13('# 제목\n\n> 요약입니다.\n\n' + todo), ['"## 배경" 섹션 없음 — 결정·할 일 다음에 요청 분석(요청·현상…) 섹션 두기']);
   assert.deepEqual(r13('# 제목\n\n' + bg + '\n' + todo, {plain: true}), []);
 });
+// 같은 비교: 여러 팀 문서에서 할 일이 절마다 흩어져 팀이 자기 몫을 못 찾았다
+test('규칙 13(힌트): cross-team 문서는 첫 섹션에 팀·담당 열 있는 표 — 없거나 뒤 섹션에만 있으면 힌트', () => {
+  const ct = fm.replace(/audience: \w+/, 'audience: cross-team');
+  const hit = d => lint(ct + '# 제목\n\n> 요약입니다.\n\n' + d).filter(f => /팀별 할 일 표/.test(f.msg));
+  const bg = '\n## 배경\n- **요청** — 확인합니다.\n- **현상** — 동작합니다.\n';
+  const table = h => `| ${h} | 할 일 | 기한 |\n|---|---|---|\n| 개발팀 | 배포합니다 | 11/6(목표) |\n`;
+  for (const h of ['팀', '담당', '**담당 팀**', 'Owner']) assert.equal(hit('## 할 일\n\n' + table(h) + bg).length, 0, h);
+  const f = hit('## 할 일\n\n오늘 배포합니다.\n' + bg);
+  assert.equal(f.length, 1); assert.ok(f[0].hint); assert.equal(f[0].line, 10);
+  assert.equal(hit('## 할 일\n\n오늘 배포합니다.\n' + bg + '\n## 재발 방지\n\n' + table('담당')).length, 1, '뒤 섹션 표는 안 셈');
+  assert.equal(hit('## 할 일\n\n```\n| 팀 | 할 일 |\n|---|---|\n```\n' + bg).length, 1, '코드 안 표는 안 셈');
+  assert.equal(lint(fm + '# 제목\n\n> 요약입니다.\n\n## 할 일\n\n오늘 배포합니다.\n' + bg).filter(f => /팀별 할 일 표/.test(f.msg)).length, 0, 'team 문서는 조용');
+});
 test('긴 불릿: plain 비적용, 신규 경고만으로 일반 0·strict 1', () => {
   const doc = fm + '# 제목\n\n> 요약입니다.\n\n## 결과\n- 확인했다. 저장했다. 끝났다.\n\n## 배경\n- **요청** — 확인합니다.\n- **현상** — 동작합니다.\n';
   const warnings = lint(doc).filter(f => !f.hint);

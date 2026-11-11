@@ -26,6 +26,7 @@
  *   9   <details> 열림/닫힘 짝이 안 맞음
  *   11  한 줄에 문장 2개 이상 (마침표 뒤 공백 없어도 잡음, 말줄임표는 제외)
  *   13  "## 배경" 없음·배경이 첫 섹션(결정·할 일 다음에 둔다) / 배경에 요청·현상 라벨 없음 / "비유하자면"·"그래서 이번에" 같은 이야기체 표현
+ *       (힌트) audience cross-team인데 첫 섹션에 팀·담당 열 있는 표가 없음
  *   15  flow·mermaid 한 그림에 역할 색(ext…)과 상태 색(done…)을 섞음
  *       (힌트) 그림이 나을 내용을 글로만 씀 — 주어 있는 처리 단계 3개 이상 나열, 화살표 3단계 이상. --strict 실패 사유 아님
  *       (힌트) flow 단계에 실패 조건("실패하면") — 갈라지는 흐름은 Mermaid
@@ -857,6 +858,16 @@ function lint(src, opts = {}) {
     }
     if (firstH2 >= 0 && !hasBg) warn(firstH2, 13, '"## 배경" 섹션 없음 — 결정·할 일 다음에 요청 분석(요청·현상…) 섹션 두기');
     else if (h2s > 1 && /^(배경|background)/i.test(firstH2Text)) warn(firstH2, 13, `첫 섹션이 "${firstH2Text}" — 결정할 일·할 일·결론을 먼저 쓰고 배경은 그 뒤로`);
+    // 여러 팀 문서: 첫 섹션에 팀·담당 열 있는 표가 없으면 힌트(할 일이 절마다 흩어져 팀이 자기 몫을 못 찾았다, 2026-11-10)
+    if (/^cross-team$/i.test((meta.audience || '').trim()) && firstH2 >= 0) {
+      let end = lines.length, teamTable = false;
+      for (let i = firstH2 + 1; i < lines.length; i++) if (!inCode(i) && /^##\s/.test(lines[i])) { end = i; break; }
+      for (let i = firstH2 + 1; i < end - 1; i++) {
+        if (inCode(i) || !/^\s*\|/.test(lines[i]) || !isSep(lines[i + 1])) continue;
+        if (lines[i].split('|').some(c => /^(팀|담당(\s*팀)?|team|owner)$/i.test(c.replace(/\*\*/g, '').trim()))) teamTable = true;
+      }
+      if (!teamTable) warn(firstH2, 13, '여러 팀이 보는 문서인데 첫 섹션에 팀별 할 일 표가 없음 — "팀 | 할 일 | 기한" 표로 모으기(자료에 있는 담당·날짜만, 목표는 목표로)', true);
+    }
   }
 
   // 규칙 14: 자연스러운 한국어 — 은유 소제목 / 번역투 동사·구어체 / 번역투(영어 구조) / 업무 관용투 / 용어 섞임.
