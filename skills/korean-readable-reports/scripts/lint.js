@@ -22,7 +22,7 @@
  *   6   본문 문장 안에 file:line (근거: 줄·코드펜스·표 제외) / (힌트) 작업 파일 이름(input.md·notes.txt…, 코드·링크 주소 제외)
  *   7   표 본문 칸 60자 초과·2문장 이상(첫 열·details 포함) / 설명 칸이 코드만 있음
  *   8   H1 두 개 이상 / H2 7개 초과 / 섹션 본문 12줄 초과(코드·표·details 제외) / H2 전에 H3 / 전체 읽을 글 6000자 초과(힌트)
- *       (힌트) 8자 넘는 괄호 단서 12곳 이상 또는 두 개 든 줄 3줄 이상(조건은 근거 줄로) / 유보 두 겹("~고 봅니다 [추정]")
+ *       (힌트) 8자 넘는 괄호 단서 12곳 이상 또는 두 개 든 줄 3줄 이상(조건은 근거 줄로) / 유보 두 겹("~고 봅니다 [추정]") / 기한 열에 "즉시"
  *   9   <details> 열림/닫힘 짝이 안 맞음
  *   11  한 줄에 문장 2개 이상 (마침표 뒤 공백 없어도 잡음, 말줄임표는 제외)
  *   13  "## 배경" 없음·배경이 첫 섹션(결정·할 일 다음에 둔다) / 배경에 요청·현상 라벨 없음 / "비유하자면"·"그래서 이번에" 같은 이야기체 표현
@@ -853,6 +853,18 @@ function lint(src, opts = {}) {
     if (inCode(i)) continue;
     const m = replaceLinks(lines[i].replace(CODE_SPAN, ''), (img, label) => label).match(/(?<![\w.\-/])(?:input|notes?|memo|draft|raw|scratch|te?mp|메모|자료)\.(?:md|txt)\b/i);
     if (m) warn(i, 6, `작업 파일 이름 "${m[0]}" — 독자가 열 수 없는 파일이면 출처를 누구의 메모·회의·티켓과 날짜로`, true);
+  }
+
+  // 규칙 8(힌트): 기한 열의 "즉시" — 자료에 없는 기한을 지어 넣었다(2026-11-11 재생성의 팀별 할 일 표)
+  const cellsOf = l => l.trim().replace(/^\||\|$/g, '').split('|').map(c => c.replace(/\*\*/g, '').trim());
+  for (let i = start; i < lines.length - 1; i++) {
+    if (inCode(i) || !/^\s*\|/.test(lines[i]) || !isSep(lines[i + 1])) continue;
+    const col = cellsOf(lines[i]).findIndex(c => /^(기한|마감|언제|시점|due|deadline)$/i.test(c));
+    if (col < 0) continue;
+    for (let j = i + 2; j < lines.length && !inCode(j) && /^\s*\|/.test(lines[j]); j++) {
+      const cell = cellsOf(lines[j])[col] || '';
+      if (/^(즉시|바로|당장|asap)$/i.test(cell)) warn(j, 8, `기한 "${cell}" — 자료에 있는 기한인지 확인하고, 없으면 "미정"으로`, true);
+    }
   }
 
   // 규칙 13: 배경 섹션은 있어야 하고, 결정·할 일·결론 다음에 둔다(맨 앞이면 블라인드 비교 6번 모두 독자가 늦게 닿았다, 2026-11-10)

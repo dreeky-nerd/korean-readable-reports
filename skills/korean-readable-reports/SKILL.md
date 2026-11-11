@@ -370,6 +370,23 @@ easy.
      끝난다고 봅니다".
    If no one can answer now (no requester in the session), keep the tag and
    put the questions at the top of your reply.
+   **Source check — the parts read first, against the source.** Before
+   rendering, open the source next to the summary box, the first section
+   (decision, to-do table) and every ` ```stats ` card, and check each number
+   and date in them:
+   - A number keeps the meaning the source gives it. When the source has two
+     nearby numbers ("평소보다 늘어난 연체 약 300건, 실제 연체도 섞임" and
+     "반납 누락으로 본 건 212건"), the claim gets the number the source
+     attaches to that claim.
+   - A date keeps the source's own word for how sure it is — 가능, 목표,
+     예정, 확정 — and a task with no date in the source is 미정, never
+     "즉시" or a date you picked (lint hints on 즉시 in a 기한 column).
+   - A date you computed from an assumption the source didn't make (a start
+     date nobody fixed) stays out of these parts.
+   In a rerun on 2026-11-11 the reader check passed while the summary gave
+   the larger excess count as the count of wrong cases and the to-do table
+   turned a "가능" date into "목표" — the reader check sees only the
+   document, so this one is yours.
 4. **Reader check** — lint (and render) prints `독자 회수 검사 대상(…)` for a
    report with 4+ H2 sections, `audience: leadership | external`, or a
    decision request. When that line is printed the check is required, not a
@@ -458,6 +475,7 @@ easy.
 - [ ] Each diagram answers one question: ≤ 9 nodes / 12 arrows (else overview + detail), one or two `chg` boxes, right-angle svg connectors with no qa connector warnings.
 - [ ] Quotes only around someone else's words; emphasis is bold, once per paragraph at most.
 - [ ] Conditions (sample, period, basis) sit on `근거:` lines or in `<details>`; one parenthetical per sentence; each hedge said once.
+- [ ] Source check done: in the summary, first section and stats cards every number has the source's meaning, every date keeps 가능/목표/예정/확정, and no date the source didn't give.
 - [ ] No unglossed jargon / coined names / bare formulas.
 - [ ] No `file:line` or code in body prose (moved to end-notes).
 - [ ] Table cells read as sentences; slop removed.

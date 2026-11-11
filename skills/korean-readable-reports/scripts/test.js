@@ -642,6 +642,17 @@ test('힌트: 작업 파일 이름(input.md 등)·배경의 문서 작성 경위
   assert.equal(meta(bg('전임 담당자가 9/30까지 근무하고 10/1부터 후임이 대출 연동 서버 운영을 맡습니다.')).length, 0);
   assert.equal(meta('## 다음 단계\n\n보고서를 작성합니다.\n').length, 0, '배경 밖은 조용');
 });
+// 2026-11-11 재생성: 팀 표 기한 칸에 자료에 없는 "즉시"를 넣었다
+test('힌트: 기한 열의 "즉시"·"바로" — 다른 열·코드 안은 조용', () => {
+  const hit = d => lint(fm + '# 제목\n\n> 요약입니다.\n\n## 할 일\n\n' + d).filter(f => /기한 "/.test(f.msg));
+  const t = (h, rows) => `| 팀 | 할 일 | ${h} |\n|---|---|---|\n` + rows.map(r => `| ${r.join(' | ')} |\n`).join('');
+  const f = hit(t('기한', [['개발팀', '배포', '11/6 목표'], ['CS', '응대', '즉시']]));
+  assert.equal(f.length, 1); assert.ok(f[0].hint); assert.equal(f[0].rule, 8); assert.equal(f[0].line, 15);
+  assert.equal(hit(t('**마감**', [['CS', '응대', '바로']])).length, 1);
+  assert.equal(hit(t('기한', [['운영팀', '즉시 차단', '미정']])).length, 0, '할 일 열의 즉시');
+  assert.equal(hit(t('비고', [['CS', '응대', '즉시']])).length, 0, '기한 열 아님');
+  assert.equal(hit('```\n' + t('기한', [['CS', '응대', '즉시']]) + '```\n').length, 0, '코드 안');
+});
 test('긴 불릿: plain 비적용, 신규 경고만으로 일반 0·strict 1', () => {
   const doc = fm + '# 제목\n\n> 요약입니다.\n\n## 결과\n- 확인했다. 저장했다. 끝났다.\n\n## 배경\n- **요청** — 확인합니다.\n- **현상** — 동작합니다.\n';
   const warnings = lint(doc).filter(f => !f.hint);
