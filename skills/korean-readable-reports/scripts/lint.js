@@ -10,6 +10,7 @@
  *        --renderer      (--plain에서) 렌더용 frontmatter title·date·audience 필수. 기본 모드는 항상 필수
  *        --reader-review (--plain에서) 본문 file:line 검사(규칙 6) 켜기. 기본 모드는 항상 켜짐
  *        --external      audience와 무관하게 외부 공유 검사(규칙 1) 켜기
+ *   node lint.js text.md --polish   → 윤문만: 규칙 14(자연스러운 한국어)만. 구조·줄바꿈·배치·frontmatter는 안 봄
  *
  * 검사 항목(규칙 번호는 SKILL.md, "fm"/"구조"는 렌더 안전용):
  *   fm  frontmatter 없음·안 닫힘 / title·date·audience 누락 (audience 없으면 외부 공유 검사가 조용히 꺼지므로 필수)
@@ -369,6 +370,8 @@ function measureReading(src) {
 }
 
 function lint(src, opts = {}) {
+  // --polish: 윤문만 — 자연스러운 한국어(규칙 14)만 남기고 구조·줄바꿈·배치 규칙은 보지 않는다
+  if (opts.polish) return lint(src, { ...opts, polish: false, plain: false }).filter(f => f.rule === 14);
   src = src.replace(/\r\n/g, '\n');
   if (src.startsWith(BOM)) src = src.slice(1);
   const rawLines = src.split('\n');
@@ -1460,13 +1463,13 @@ module.exports = { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS,
 if (require.main === module) {
   const args = process.argv.slice(2);
   const file = args.find(a => !a.startsWith('-'));
-  if (!file || args.includes('--help') || args.includes('-h')) { console.error('usage: node lint.js <report.md> [--strict] [--plain [--renderer] [--reader-review]] [--external]'); process.exit(args.includes('--help') || args.includes('-h') ? 0 : 1); }
+  if (!file || args.includes('--help') || args.includes('-h')) { console.error('usage: node lint.js <report.md> [--strict] [--plain [--renderer] [--reader-review]] [--polish] [--external]'); process.exit(args.includes('--help') || args.includes('-h') ? 0 : 1); }
   let src;
   try { src = fs.readFileSync(file, 'utf8'); }
   catch (e) { console.error(`lint: 입력 파일을 읽을 수 없음 — ${file} (${e.code || e.message})`); process.exit(2); }
-  const opts = { plain: args.includes('--plain'), renderer: args.includes('--renderer'), readerReview: args.includes('--reader-review'), external: args.includes('--external') };
+  const opts = { polish: args.includes('--polish'), plain: args.includes('--plain'), renderer: args.includes('--renderer'), readerReview: args.includes('--reader-review'), external: args.includes('--external') };
   const errors = report(file, lint(src, opts));
-  if (!opts.plain && readerCheckLine(src)) console.log(readerCheckLine(src));
-  if (!opts.plain && openItemsLine(src)) console.log(openItemsLine(src));
+  if (!opts.plain && !opts.polish && readerCheckLine(src)) console.log(readerCheckLine(src));
+  if (!opts.plain && !opts.polish && openItemsLine(src)) console.log(openItemsLine(src));
   process.exit(args.includes('--strict') && errors ? 1 : 0);
 }

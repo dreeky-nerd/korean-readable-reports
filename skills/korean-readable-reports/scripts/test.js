@@ -66,6 +66,12 @@ test('기본: 같은 문서에 문체 규칙 경고', () => {
 });
 test('plain: 일반 검사는 메타데이터 강제 안 함', () => assert.deepEqual(lint('# 제목\n본문', {plain: true}), []));
 test('plain: 렌더 검사에는 제목·기준일·독자 필수', () => assert.equal(lint('# 제목', {plain: true, renderer: true}).filter(f => f.rule === 'fm').length, 3));
+test('polish: 윤문 규칙(14)만 — 구조·줄바꿈·frontmatter 경고 없음', () => {
+  const doc = '# 제목\n\n- 항목 하나\n- 설정을 진행합니다. 값은 파라메터로 받는다.\n';
+  const all = lint(doc), only = lint(doc, {polish: true});
+  assert.ok(all.some(f => f.rule !== 14), '기본 모드는 다른 규칙도 경고');
+  assert.ok(only.length > 0 && only.every(f => f.rule === 14), JSON.stringify(only));
+});
 test('잘못된 날짜 거부', () => {
   const bad = fm.replace('2026-09-22', '2026-02-30');
   assert.ok(lint(bad).some(f => f.rule === 'fm'));

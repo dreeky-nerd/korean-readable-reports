@@ -1,11 +1,11 @@
 ---
 name: korean-readable-reports
 description: >-
-  Use only when the user asks for a report, analysis, findings, or status doc
-  made with this skill (by name, or "보고서로 정리해줘 / HTML 보고서"). Never
-  load it to rewrite or lay out other Korean text — UI copy, game dialogue,
-  project docs, code comments, chat replies. Fights AI verbosity/slop and
-  makes deep content easy to read.
+  Use only when the user asks for it: (1) a report, analysis, findings, or
+  status doc made with this skill ("보고서로 정리해줘 / HTML 보고서"), or
+  (2) 윤문만 — polish the Korean of given text in place, keeping its
+  structure, line breaks, and tone. Never load it on your own to rewrite or
+  lay out other Korean text. Fights AI verbosity/slop.
 license: MIT (see LICENSE)
 ---
 
@@ -22,18 +22,27 @@ path shown when the skill loads (a manual install is
 plugin cache). Scripts and references are relative to it, never to the
 project's working directory.
 
-## Scope — this report only
+## Two modes — pick by what the user asked
 
-These rules shape **the one report this skill is writing** and nothing else.
-They are not a house style for the project you happen to be in.
+**보고서** (default): write or rebuild a report with every rule below.
 
-- Do not rewrite, re-break, split, or rearrange Korean text outside that
-  report: UI copy, game dialogue, prompts, the project's own docs and plans,
-  code comments, commit messages, chat replies. Keep the project's tone.
-- Text the user wrote and asked to keep — quote it as is, even inside the
-  report. Lint warnings on quoted text are not a reason to edit it.
-- Do not run `lint.js` or `render.js` on project files the user did not ask to
-  turn into a report.
+**윤문만** ("윤문해줘", "문장만 다듬어줘", or text in another project): fix
+the wording only. Use rule 14 and `references/ko-terms.md` — 번역투, 업무
+관용투, 표기, 용어 섞임, 은유 소제목, 강조 따옴표 — plus rule 8's "keep the
+source's certainty". Everything else stays as it was:
+
+- Same headings, section order, paragraphs, line breaks, lists, tables, and
+  length. Do not split lines (rule 11), add a summary box or 배경, reorder,
+  turn bullets into prose or back, or add figures or HTML.
+- Same register and voice: 반말 game dialogue stays 반말, a UI label stays a
+  label, the project's coined names stay.
+- Change a sentence only when a rule-14 item applies; if unsure, leave it.
+- Check with `node <skill-dir>/scripts/lint.js <file> --polish` — it reports
+  rule 14 only.
+
+Neither mode touches Korean text the user did not hand over: other files, UI
+copy, prompts, code comments, commit messages. Text the user wrote and asked
+to keep is quoted as is, even inside a report.
 
 ## Rules
 
