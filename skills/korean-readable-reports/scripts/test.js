@@ -627,6 +627,21 @@ test('규칙 13(힌트): cross-team 문서는 첫 섹션에 팀·담당 열 있�
   assert.equal(hit('## 할 일\n\n```\n| 팀 | 할 일 |\n|---|---|\n```\n' + bg).length, 1, '코드 안 표는 안 셈');
   assert.equal(lint(fm + '# 제목\n\n> 요약입니다.\n\n## 할 일\n\n오늘 배포합니다.\n' + bg).filter(f => /팀별 할 일 표/.test(f.msg)).length, 0, 'team 문서는 조용');
 });
+// 같은 비교: 인수인계 문서가 "메모를 바탕으로 문서를 만듭니다"·"근거: 메모(input.md)"로 작성 경위를 남겨 그대로 못 보냈다
+test('힌트: 작업 파일 이름(input.md 등)·배경의 문서 작성 경위 — 코드·링크·다른 절은 조용', () => {
+  const hits = (d, re) => lint(fm + '# 제목\n\n> 요약입니다.\n\n## 할 일\n\n오늘 배포합니다.\n\n' + d).filter(f => re.test(f.msg));
+  const file = d => hits(d, /작업 파일 이름/), meta = d => hits(d, /작성 경위/);
+  const bg = r => `## 배경\n- **요청** — ${r}\n- **현상** — 동작합니다.\n`;
+  assert.equal(file('근거: 전임자의 인수인계 메모(input.md)를 정리했습니다.\n').length, 1);
+  for (const n of ['notes.txt', '메모.md', 'raw.md']) assert.equal(file(`근거: ${n}\n`).length, 1, n);
+  const f = file('근거: input.md\n')[0]; assert.ok(f.hint); assert.equal(f.rule, 6); assert.equal(f.line, 14);
+  for (const ok of ['`input.md`를 읽습니다.\n', '[상세](notes.md)\n', '```\ninput.md\n```\n', '근거: user-input.md 설정 파일\n', '근거: 11/10 전임자 메모\n']) assert.equal(file(ok).length, 0, ok);
+  assert.equal(meta(bg('전임자 메모를 바탕으로 후임이 읽을 인수인계 문서를 만듭니다.')).length, 1);
+  assert.equal(meta(bg('메모를 정리해 보고서를 작성했습니다.')).length, 1);
+  assert.ok(meta(bg('메모를 바탕으로 문서를 만듭니다.'))[0].hint);
+  assert.equal(meta(bg('전임 담당자가 9/30까지 근무하고 10/1부터 후임이 대출 연동 서버 운영을 맡습니다.')).length, 0);
+  assert.equal(meta('## 다음 단계\n\n보고서를 작성합니다.\n').length, 0, '배경 밖은 조용');
+});
 test('긴 불릿: plain 비적용, 신규 경고만으로 일반 0·strict 1', () => {
   const doc = fm + '# 제목\n\n> 요약입니다.\n\n## 결과\n- 확인했다. 저장했다. 끝났다.\n\n## 배경\n- **요청** — 확인합니다.\n- **현상** — 동작합니다.\n';
   const warnings = lint(doc).filter(f => !f.hint);
@@ -1312,18 +1327,18 @@ test('힌트: 흐름+고치는 이야기 → svg, 기준값과 숫자 → bars, 
   assert.ok(/숫자를 나란히 비교하는 표/.test(hint(table)));
   assert.ok(!/숫자를 나란히/.test(hint(table + '\n' + barsBlock)));
   // 2026-11-06 시험: 문턱값 문장과 안 비교 표를 놓쳐 본부장 보고에 그래프가 0개였다
-  assert.ok(/기준값\(97%\)/.test(hint('## 도달률\n\n5월 97.1%에서 10월 93.6%로 떨어졌고, 6월부터 목표 97%에 못 미칩니다.\n')));
-  assert.ok(/기준값\(60건\)/.test(hint('## 해지\n\n평소 하루 약 60건이던 해지가 412건, 438건으로 늘었습니다.\n')));
+  assert.ok(/기준값\(95%\)/.test(hint('## 자동 반납률\n\n3월 95.4%에서 8월 91.2%로 떨어졌고, 4월부터 목표 95%에 못 미칩니다.\n')));
+  assert.ok(/기준값\(40건\)/.test(hint('## 수동 반납\n\n평소 하루 약 40건이던 수동 반납이 215건, 231건으로 늘었습니다.\n')));
   const row = (a, b) => `| ${a} | ${b} |\n`;
-  const options = '## 안\n\n| 안 | 3년 총비용 |\n|---|---|\n' + row('1안', '12.70억') + row('2안 [추천]', '11.25억') + row('3안', '12.31억');
+  const options = '## 안\n\n| 안 | 3년 총비용 |\n|---|---|\n' + row('1안', '4.20억') + row('2안 [추천]', '3.65억') + row('3안', '3.98억');
   assert.ok(/숫자를 나란히/.test(hint(options)));
   assert.ok(!/숫자를 나란히/.test(hint(options.replace(' [추천]', ''))));
-  const dates = n => '## 일정\n\n| 날짜 | 할 일 |\n|---|---|\n' + ['11/14', '11/20', '11/27', '12/1'].slice(0, n).map(d => row(d, '작업')).join('');
+  const dates = n => '## 일정\n\n| 날짜 | 할 일 |\n|---|---|\n' + ['9/2', '9/9', '9/16', '9/30'].slice(0, n).map(d => row(d, '작업')).join('');
   assert.ok(/날짜가 이어지는/.test(hint(dates(4))));
   assert.ok(!/날짜가 이어지는/.test(hint(dates(3))));
-  assert.ok(/날짜가 이어지는/.test(hint('## 일정\n\n```flow\n11/20 | 결정 | entry\n12/1 | 공지 | logic\n12/31 | 전환 | data\n```\n')));
+  assert.ok(/날짜가 이어지는/.test(hint('## 일정\n\n```flow\n9/9 | 결정 | entry\n9/16 | 공지 | logic\n9/30 | 전환 | data\n```\n')));
   assert.ok(!/날짜가 이어지는/.test(hint(dates(4) + '\n```svg\n<svg viewBox="0 0 10 10" aria-label="일정"><circle class="dot" cx="5" cy="5" r="2"/></svg>\n```\n')));
-  const quote = '## 안내\n\n이미 나간 문자입니다.\n\n> "구독이 해지되었습니다."\n';
+  const quote = '## 안내\n\n이미 나간 문자입니다.\n\n> "반납 기한이 지났습니다."\n';
   assert.ok(/받는 문구를 인용/.test(hint(quote)));
   assert.ok(!/받는 문구를 인용/.test(hint(quote + '\n```cards compare\n전\n가입니다.\n\n후\n나입니다.\n```\n')));
   assert.ok(!/받는 문구를 인용/.test(hint('## 회의\n\n회의에서 나온 말입니다.\n\n> "다음 주에 봅시다."\n')));
@@ -1433,7 +1448,7 @@ test('qa: 글자 대비 — 템플릿 글자·그림은 라이트·다크 통과
     + '<rect class="node chg" x="410" y="10" width="170" height="80"/>\n<text class="chg" x="420" y="40">바뀜</text>\n<text class="tag" x="420" y="70">TAG</text>\n'
     + '<text class="lbl" x="250" y="150">라벨</text>\n</svg>\n```\n';
   const ok = render('# 제목\n\n> 요약 문장입니다.\n\n## 본문\n\n' + svg + '\n```bars\n기준선 50 | 기준 50\n가 | 값 40 + 값 30:chg + 값 20:bad | 보조 | 결과\n```\n\n'
-    + '```cards compare\n[실패] 지금 문구\n잘못 해지되었습니다.\n\n[추천] 고친 문구\n복구합니다.\n```\n\n```stats\n해지 | 1,284건 | 평소의 약 7배 | 위험\n```\n\n확신 ●●○\n');
+    + '```cards compare\n[실패] 지금 문구\n반납이 처리되지 않았습니다.\n\n[추천] 고친 문구\n반납이 처리되었습니다.\n```\n\n```stats\n수동 반납 | 412건 | 평소의 약 7배 | 위험\n```\n\n확신 ●●○\n');
   let q = runQa(ok.output);
   assert.ok(!/글자 대비 부족/.test(q.stdout), q.stdout);
   const f = path.join(dir, 'qa-contrast.html');
@@ -1511,7 +1526,7 @@ test('독자 회수 검사 대상은 lint가 판정해 출력(H2 4개·리더·�
 test('열린 항목: [미확인]·[미검증]·확인 필요를 세어 lint·render가 한 줄로 알림(코드 안은 빼고 숫자 카드 상태는 셈), --plain은 안 냄', () => {
   const {openItemsLine} = require('./lint.js');
   const body = '# 제목\n\n## 배경\n\n- **요청** — 요청입니다.\n- **현상** — 일정은 정해지지 않았습니다 [미확인].\n\n수치는 아직 [미검증]입니다.\n개발팀 확인이 필요합니다.\n\n'
-    + '```stats\n도달률 | 98.3% | 테스트 1만 건 | 미검증\n```\n\n`[미확인]`은 코드라 안 셉니다.\n\n```text\n[미확인]\n```\n';
+    + '```stats\n자동 반납률 | 98.1% | 시범 분관 2곳 | 미검증\n```\n\n`[미확인]`은 코드라 안 셉니다.\n\n```text\n[미확인]\n```\n';
   assert.ok(/열린 항목 4개\(\[미확인\] 1 · \[미검증\] 2 · 확인 필요 1\)/.test(openItemsLine(fm + body)), openItemsLine(fm + body));
   assert.equal(openItemsLine(fm + '# 제목\n\n## 배경\n\n본문입니다.\n'), '');
   assert.ok(/열린 항목 4개/.test(render(body).stdout));

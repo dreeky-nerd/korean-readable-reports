@@ -44,7 +44,10 @@ easy.
    ship your own coined names without a plain rewrite; turn formulas into words.
 6. **Evidence to the back.** No `file:line`, stack traces, or code mid-sentence.
    Put them in a small "basis/sources" note at the section's end (in md: a line
-   starting with `근거:` / `Sources:`). Exception: when a number *is* the
+   starting with `근거:` / `Sources:`). A `근거:` line names a source the
+   reader can recognise — whose memo, which meeting or ticket, and its date —
+   never the working file you were handed (`input.md`, `notes.txt`; lint
+   hints). Exception: when a number *is* the
    finding ("layout shift dropped from 0.138 to 0.036"), it stays in the
    sentence — the rule moves supporting evidence, not conclusions.
 7. **Table cells read as phrases**, not code (`deleteOverBytes(k)` → "removes
@@ -141,8 +144,13 @@ easy.
     ```
 
     `요청` and `현상` are required; drop the others only when they truly don't
-    apply. `요구사항` holds only conditions someone stated: a target stays a
-    target ("목표 97%"), never "97%를 지켜야"; with none stated, drop the line.
+    apply. `요청` is the work the document serves, never the request to write
+    it: in a handover it is what passes to whom and from when ("전임
+    담당자가 9/30까지 근무하고, 10/1부터 후임이 분관 대출 연동 서버 운영을
+    맡습니다"), and `현상` is the state the reader inherits. "메모를 바탕으로
+    문서를 만듭니다" and a 범위 밖 about this document's own sources are how
+    you worked, not what the reader needs (lint hints). `요구사항` holds only conditions someone stated: a target stays a
+    target ("반납 처리 목표 10초"), never "10초 안에 끝나야 합니다"; with none stated, drop the line.
     Unknown numbers or sources are never filled in. Ask the requester
     first (workflow 3, open items); what still can't be known is [미확인]
     after a check that came up empty, [미검증] when nothing was checked.
@@ -356,10 +364,10 @@ easy.
      something happened) → ask in one numbered chat message, wait, and write
      only the answer.
    - It waits on someone outside the conversation (another team, a vendor) →
-     keep it as a fact with who and by when: "K사 계약서 초안은 법무팀이
-     11/12까지 받습니다", not "[미확인]".
-   - A source's own hedge stays as attribution: "개발팀은 46초면 끝난다고
-     봅니다".
+     keep it as a fact with who and by when: "도서 공급사 견적은 구매팀이
+     9/12까지 받습니다", not "[미확인]".
+   - A source's own hedge stays as attribution: "운영팀은 이관이 하루면
+     끝난다고 봅니다".
    If no one can answer now (no requester in the session), keep the tag and
    put the questions at the top of your reply.
 4. **Reader check** — lint (and render) prints `독자 회수 검사 대상(…)` for a
