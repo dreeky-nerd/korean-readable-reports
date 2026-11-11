@@ -1,0 +1,5 @@
+interface:
+  display_name: "Korean Readable Reports"
+  short_description: "Render a requested report as readable Korean MD/HTML"
+policy:
+  allow_implicit_invocation: false

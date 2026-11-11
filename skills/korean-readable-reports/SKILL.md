@@ -1,8 +1,10 @@
 ---
 name: korean-readable-reports
 description: >-
-  Use when writing an analysis, report, findings, or status doc for humans to
-  read and share — not a spec an agent executes. Fights AI verbosity/slop and
+  Use only when the user asks for a report, analysis, findings, or status doc
+  made with this skill (by name, or "보고서로 정리해줘 / HTML 보고서"). Never
+  load it to rewrite or lay out other Korean text — UI copy, game dialogue,
+  project docs, code comments, chat replies. Fights AI verbosity/slop and
   makes deep content easy to read.
 license: MIT (see LICENSE)
 ---
@@ -19,6 +21,19 @@ path shown when the skill loads (a manual install is
 `~/.claude/skills/korean-readable-reports`; a plugin install lives in the
 plugin cache). Scripts and references are relative to it, never to the
 project's working directory.
+
+## Scope — this report only
+
+These rules shape **the one report this skill is writing** and nothing else.
+They are not a house style for the project you happen to be in.
+
+- Do not rewrite, re-break, split, or rearrange Korean text outside that
+  report: UI copy, game dialogue, prompts, the project's own docs and plans,
+  code comments, commit messages, chat replies. Keep the project's tone.
+- Text the user wrote and asked to keep — quote it as is, even inside the
+  report. Lint warnings on quoted text are not a reason to edit it.
+- Do not run `lint.js` or `render.js` on project files the user did not ask to
+  turn into a report.
 
 ## Rules
 
