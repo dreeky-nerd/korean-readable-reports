@@ -4,8 +4,9 @@ description: >-
   Use only when the user asks for it: (1) a report, analysis, findings, or
   status doc made with this skill ("보고서로 정리해줘 / HTML 보고서"), or
   (2) 윤문만 — polish the Korean of given text in place, keeping its
-  structure, line breaks, and tone. Never load it on your own to rewrite or
-  lay out other Korean text. Fights AI verbosity/slop.
+  structure, line breaks, and tone, or (3) 지적만 — point out AI-like
+  Korean without editing ("어디가 AI 같은지 봐줘"). Never load it on your own
+  to rewrite or lay out other Korean text. Fights AI verbosity/slop.
 license: MIT (see LICENSE)
 ---
 
@@ -36,9 +37,22 @@ source's certainty". Everything else stays as it was:
   turn bullets into prose or back, or add figures or HTML.
 - Same register and voice: 반말 game dialogue stays 반말, a UI label stays a
   label, the project's coined names stay.
+- Keep the writer's voice: vocabulary, rhythm, sentence length, humor,
+  hesitation, dialect, rough words, and natural subject omission. A strong
+  human sentence stays even if it breaks a pattern. Shorter is not better;
+  the edit is as big as the problem.
 - Change a sentence only when a rule-14 item applies; if unsure, leave it.
+  Add no fact, cause, purpose, example, or next step the text didn't have,
+  and no 이미·반드시·필수 it didn't say (ko-terms §4).
 - Check with `node <skill-dir>/scripts/lint.js <file> --polish` — it reports
   rule 14 only.
+- Return the edited text, then a short `바꾼 점`, and `확인할 점` only for a
+  claim that needs a source.
+
+**지적만** ("어디가 AI 같은지 봐줘", "검사만"): change nothing. For each
+hit give the pattern, the sentence quoted, why, and a one-line direction —
+no rewrite, no score, no guess about whether AI wrote it. `--polish` output
+is a starting list; drop hits that read fine in context.
 
 Neither mode touches Korean text the user did not hand over: other files, UI
 copy, prompts, code comments, commit messages. Text the user wrote and asked
