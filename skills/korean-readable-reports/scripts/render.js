@@ -185,8 +185,8 @@ function renderTable(rows) {
 }
 
 // 좁은 카드(flow·stats·cards) 안의 긴 영문 식별자에 줄바꿈 지점(<wbr>)을 넣는다 — _ . / :: 뒤, 소문자→대문자(camelCase) 사이.
-// 그대로 두면 "InvoiceMailStatusNotifyTasklet의"가 쪼개질 곳이 없어 카드 밖으로 삐져나오거나(2026-09-30 실측 flow),
-// 브라우저가 아무 글자에서나 끊는다("INV317_K|42P"). <wbr>는 폭이 모자랄 때만 쓰이고 복사해도 글자가 늘지 않는다.
+// 그대로 두면 "BranchLoanOverdueNotifyMailSender의"가 쪼개질 곳이 없어 카드 밖으로 삐져나오거나(2026-09-30 실측 flow),
+// 브라우저가 아무 글자에서나 끊는다("BRN317_K|42P"). <wbr>는 폭이 모자랄 때만 쓰이고 복사해도 글자가 늘지 않는다.
 // 태그 속성·<pre>(코드·Mermaid 소스)는 건드리지 않는다
 function softBreak(html) {
   return html.split(/(<pre[\s\S]*?<\/pre>|<[^>]+>)/).map((part, i) => i % 2 ? part
@@ -246,7 +246,7 @@ function renderStats(lines) {
   });
   // 열 수: 항목 카드와 같은 규칙 — 4개 이하면 개수만큼, 그 이상은 4로 나눠떨어지면 4, 아니면 3(6개가 4+2로 쪼개지지 않게)
   const n = cards.length, cols = n <= 4 ? n : n % 4 === 0 ? 4 : 3;
-  // 값 글자 크기: 숫자 카드(1.85em)는 "42건"처럼 짧은 값용. 값에 긴 이름("INV_ITEM_HIST")이 오면 그 크기로는 카드 폭을 넘어
+  // 값 글자 크기: 숫자 카드(1.85em)는 "42건"처럼 짧은 값용. 값에 긴 이름("BOOK_LOAN_HIST")이 오면 그 크기로는 카드 폭을 넘어
   // 글자 중간에서 잘린다(2026-09-30 실측: 4열 카드 본문 폭 약 167px). 가장 긴 단어의 폭을 어림해 한 개라도 넘으면
   // 블록 전체를 작은 글자(is-text)로 — 한 줄 안에서 값 크기가 들쭉날쭉하지 않게
   const inner = (1060 - 14 * (cols - 1)) / cols - 37;                // 본문 최대 폭 1060px(템플릿 --content-w) 기준 카드 안쪽 폭

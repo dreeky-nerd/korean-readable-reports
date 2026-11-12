@@ -20,7 +20,7 @@
  *             12초 안에 안 그려짐(CDN이 막혔거나 느림)·접힌 칸 안이라 미검사 — 알리기만
  *   브라우저 위치를 바꾸려면 KRR_BROWSER=경로. macOS는 Playwright의 chrome-headless-shell이 있으면 먼저 쓴다
  *
- * 사례: 2026-09-30 flow 설명의 `InvoiceMailStatusNotifyTasklet의`가 카드 밖으로 37px 삐져나온 것을 눈으로 보고서야 찾았다
+ * 사례: 2026-09-30 flow 설명의 `BranchLoanOverdueNotifyMailSender의`가 카드 밖으로 37px 삐져나온 것을 눈으로 보고서야 찾았다
  * (design-guide.md "좁은 카드의 긴 이름"). 이 검사가 그런 넘침을 렌더 직후에 잡는다.
  */
 const fs = require('node:fs');

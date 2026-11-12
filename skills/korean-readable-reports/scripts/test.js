@@ -1311,7 +1311,7 @@ const qa = path.join(__dirname, 'qa.js');
 const runQa = file => spawnSync(process.execPath, [qa, file], {encoding: 'utf8', timeout: 120000});
 test('qa: 렌더한 보고서는 세 폭 모두 넘침 없음', () => {
   if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');
-  const r = render('# 제목\n\n## 배경\n\n**요청** — 확인.\n\n```cards\n[추천] 긴 이름 카드\n`InvoiceMailStatusNotifyTasklet`의 INV_ITEM_HIST_DETAIL_BACKUP 테이블을 본다.\n\n둘째 카드\n짧은 본문.\n```\n\n```stats\n대상 | INV317_K42P_LONG | 근거 InvoiceBatchJob.xml:11-23 | 완료\n건수 | 12건 | | 중립\n```\n');
+  const r = render('# 제목\n\n## 배경\n\n**요청** — 확인.\n\n```cards\n[추천] 긴 이름 카드\n`BranchLoanOverdueNotifyMailSender`의 BOOK_LOAN_HIST_DETAIL_BACKUP 테이블을 본다.\n\n둘째 카드\n짧은 본문.\n```\n\n```stats\n대상 | BRN317_K42P_LONG | 근거 LoanBatchJob.xml:11-23 | 완료\n건수 | 12건 | | 중립\n```\n');
   assert.equal(r.status, 0, r.stdout + r.stderr);
   const q = runQa(r.output);
   assert.equal(q.status, 0, q.stdout + q.stderr);
