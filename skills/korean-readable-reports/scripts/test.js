@@ -755,6 +755,22 @@ test('직접 쓴 <br>: 인용문·문단·목록·요약에서 줄바꿈, 줄 �
   const p = plain('# 제목\n\n첫 줄<br>\n둘째 줄', ['--strict']);
   assert.ok(p.html.includes('<p>첫 줄<br>\n둘째 줄</p>'));
 });
+// 2026-11-06·09 본부장 보고 3건: 한 줄 한 문장으로 쓴 근거의 둘째 줄부터 상자 밖 본문으로 나왔다
+test('근거 묶음: 빈 줄 없이 이어 쓴 줄은 같은 상자, 목록·다른 근거·빈 줄에서 끊김 — lint도 같은 범위를 근거로 봄', () => {
+  const r = render('# 제목\n\n## 절\n\n본문입니다.\n\n근거: 첫 줄입니다.\n둘째 줄입니다.\n셋째 줄입니다.\n\n다음 문단입니다.\n\n근거: 가입니다.\n- 목록입니다.\n\n근거: 나입니다.\n출처: 다입니다.\n', ['--no-lint']);
+  assert.ok(r.html.includes('<div class="sources">근거: 첫 줄입니다.<br>둘째 줄입니다.<br>셋째 줄입니다.</div>'), r.html.match(/<div class="sources">[\s\S]*?<\/div>/g));
+  assert.ok(r.html.includes('<p>다음 문단입니다.</p>'));
+  assert.ok(r.html.includes('<div class="sources">근거: 가입니다.</div>') && /<li>목록입니다\.<\/li>/.test(r.html));
+  assert.ok(r.html.includes('<div class="sources">근거: 나입니다.</div>') && r.html.includes('<div class="sources">출처: 다입니다.</div>'));
+  const p = plain('# 제목\n\n근거: 첫 줄입니다.\n둘째 줄입니다.\n', ['--strict']);
+  assert.ok(p.html.includes('<div class="sources">근거: 첫 줄입니다. 둘째 줄입니다.</div>'), p.html.match(/<div class="sources">[\s\S]*?<\/div>/g));
+  const body = '# 제목\n\n> 요약입니다.\n\n## 할 일\n\n오늘 배포합니다.\n\n근거: 계산 기준입니다.\n';
+  const loc = d => lint(fm + d).filter(f => /file:line|코드 위치/.test(f.msg)).length;
+  assert.equal(loc(body + '위치는 src/loan.js:12입니다.\n'), 0, '이어 쓴 근거 줄의 file:line');
+  assert.equal(loc(body + '\n위치는 src/loan.js:12입니다.\n'), 1, '빈 줄 뒤는 본문');
+  const {measureReading} = require('./lint.js');
+  assert.equal(measureReading(fm + body + '이어 쓴 근거 문장이 꽤 깁니다.\n').chars, measureReading(fm + body).chars, '읽을 글 분량에서 뺌');
+});
 test('browser 블록은 주소창 있는 창 안에 원문 표시', () => {
   const r = render('# 제목\n\n```browser https://example.com/terms\n#### 이용 약관\n- 원문 한 줄\n```', ['--no-lint']);
   assert.ok(r.html.includes('class="browser-mock"')); assert.ok(r.html.includes('example.com/terms')); assert.ok(r.html.includes('원문 한 줄'));

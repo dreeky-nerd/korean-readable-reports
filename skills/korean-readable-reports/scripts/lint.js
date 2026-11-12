@@ -168,6 +168,13 @@ function scanFences(lines, start) {
 
 // 읽을 글만 센다: 표·접힌 글·요약·렌더용 블록 포함, 일반 코드·출처 제외.
 const SOURCES_LINE = /^\s*(?:>\s*)?(?:[-*+]\s*)?(?:\*\*)?(근거|출처|basis|sources)(?:\*\*)?\s*[:：]/i;
+// 근거 묶음: "근거:" 줄 뒤에 빈 줄 없이 이어 쓴 글 줄(한 줄 한 문장으로 쓴 근거). render.js도 이 기준으로 한 상자에 넣는다
+const basisContinues = l => !!l.trim() && !/^\s*(#{1,6}\s|>|\||([-*+]|\d+\.)\s|---+\s*$|<)/.test(l) && !FENCE_RE.test(l) && !SOURCES_RE.test(l);
+function basisFollows(lines) {
+  const r = new Array(lines.length).fill(false);
+  for (let i = 1; i < lines.length; i++) r[i] = (SOURCES_RE.test(lines[i - 1]) || r[i - 1]) && basisContinues(lines[i]);
+  return r;
+}
 // HTML 후보는 한 번만 훑는다. 닫히지 않은 태그·따옴표는 뒤의 <마다 다시 검색하지 않는다.
 // <!-- … --> 를 지운다(닫힘 없는 <!-- 는 그대로 둠 — /<!--[\s\S]*?-->/g 와 같은 결과). 그 정규식은 닫힘 없는 <!-- 가
 // 반복되면 시작 위치마다 끝까지 다시 훑어 제곱 시간이 걸렸다(2026-10-29 svg 블록 시험)
@@ -339,7 +346,7 @@ function measureReading(src) {
   const {meta, start, unclosed} = parseFrontmatter(lines);
   const {at} = scanFences(lines, start), readable = readingLines(lines, at);
   const chunks = [], cells = [], excluded = {sourceLines: 0, codeLines: 0, evidenceLines: 0};
-  const sources = sourceLines(lines, at, readable);
+  const sources = sourceLines(lines, at, readable), follows = basisFollows(lines);
   let table = false;
   if (meta.summary) chunks.push(visibleText(meta.summary, true));
   for (let i = start; i < lines.length; i++) {
@@ -347,7 +354,7 @@ function measureReading(src) {
     if (fb && (fb.open === i || fb.close === i)) { table = false; continue; }
     if (fb && !READABLE_BLOCK.test(fb.kind)) { excluded.codeLines++; continue; }
     if (sources[i]) { excluded.sourceLines++; table = false; continue; }
-    if (SOURCES_LINE.test(l)) { excluded.evidenceLines++; table = false; continue; }
+    if (SOURCES_LINE.test(l) || (!fb && follows[i])) { excluded.evidenceLines++; table = false; continue; }
     if (fb && /^(flow|stats)$/.test(fb.kind)) {
       const fields = l.split(/(?<!\\)\|/), control = fb.kind === 'flow' ? 2 : 3;
       const known = fb.kind === 'flow' ? FLOW_ROLE : BLOCK_STATE;
@@ -417,6 +424,7 @@ function lint(src, opts = {}) {
 
   const { at: fenceAt, blocks } = scanFences(lines, start);
   const inCode = i => !!fenceAt[i];
+  const basisCont = basisFollows(lines).map((v, i) => v && !fenceAt[i]);   // 근거 줄에 이어 쓴 줄 — 근거 줄처럼 본문 검사에서 뺀다
   for (const b of blocks) if (b.close < 0) warn(b.open, '구조', `코드펜스(${b.char.repeat(3)})가 닫히지 않음 — 이 뒤 내용이 전부 코드 패널로 들어감`);
 
   // 보이지 않는 문자(유니코드 서식 문자 Cf): 폭 없는 공백, 글 중간 BOM, 방향 제어, 태그 문자. AI 출력·복사로 섞여 화면엔 안 보이지만
@@ -578,7 +586,7 @@ function lint(src, opts = {}) {
   if (plain) {
     // --plain: 문체 규칙은 끄고, 독자 검토용 file:line만 요청 시
     if (opts.readerReview) for (let i = start; i < lines.length; i++) {
-      if (!inCode(i) && !SOURCES_RE.test(lines[i]) && FILE_LINE.test(lines[i])) warn(i, 6, '본문에 코드 위치 — 독자의 판단에 필요한지 검토, 아니면 "근거:" 줄로');
+      if (!inCode(i) && !SOURCES_RE.test(lines[i]) && !basisCont[i] && FILE_LINE.test(lines[i])) warn(i, 6, '본문에 코드 위치 — 독자의 판단에 필요한지 검토, 아니면 "근거:" 줄로');
     }
     return F.sort((a, b) => a.line - b.line);
   }
@@ -643,7 +651,7 @@ function lint(src, opts = {}) {
     for (let i = start; i < lines.length; i++) {
       const fb = fenceAt[i];
       if (fb && (i === fb.open || i === fb.close || !/^(flow|stats|cards)$/.test(fb.kind))) continue;
-      if (SOURCES_RE.test(unquoted[i])) continue;
+      if (SOURCES_RE.test(unquoted[i]) || basisCont[i]) continue;
       const text = proseLines[i].trim();
       const h = text.match(/^(#{1,6})\s+(.*)$/);
       if (h) { title = h[1] === '##' ? new Set(words(h[2])) : null; continue; }
@@ -753,7 +761,7 @@ function lint(src, opts = {}) {
     };
     const later = [];
     for (let i = start; i < lines.length; i++) {
-      if (fenceAt[i] || SOURCES_RE.test(lines[i])) continue;
+      if (fenceAt[i] || SOURCES_RE.test(lines[i]) || basisCont[i]) continue;
       const text = proseLines[i];
       if (/(뒤에서|아래에서|다음 (?:절|장|섹션)에서|나중에)[^.!?]{0,30}(다루겠습니다|설명하겠습니다|살펴보겠습니다|다루겠다|설명하겠다)(?![가-힣])/.test(text)) later.push(i);
       const tail = text.slice(-40);
@@ -792,7 +800,7 @@ function lint(src, opts = {}) {
     if (/^##\s/.test(l)) { flushSec(); h2Count++; secStart = i; secName = l.replace(/^##\s+/, ''); secLines = 0; continue; }
     if (/^###\s/.test(l) && h2Count === 0 && !h3BeforeH2) { h3BeforeH2 = true; warn(i, 8, 'H2 없이 H3가 먼저 나옴 — 섹션(##)부터'); }
     if (/^#{1,6}\s/.test(l)) continue;
-    if (SOURCES_RE.test(l)) continue;
+    if (SOURCES_RE.test(l) || basisCont[i]) continue;
     if (/^>/.test(l) && i === summaryLine) continue;
 
     const text = l.replace(/^>\s?/, '').replace(CODE_SPAN, '');
@@ -1019,7 +1027,7 @@ function lint(src, opts = {}) {
       const l = unquoted[i], fb = fenceAt[i];
       // 글 블록(flow·stats·cards)의 안쪽은 검사, 펜스 줄 자체와 코드·mermaid는 건너뜀
       if (fb && (i === fb.open || i === fb.close || !/^(flow|stats|cards)$/.test(fb.kind))) continue;
-      if (SOURCES_RE.test(l)) continue;
+      if (SOURCES_RE.test(l) || basisCont[i]) continue;
       // 추정: 표시 문구만 검사. 링크 목적지와 인용·코드는 제목/본문에서 같은 방식으로 제외한다.
       const text = i < start ? proseLines[i].replace(/^summary:\s*([|>][-+]?\s*$)?/, '') : proseLines[i];
       const em = text.match(EMOJI);
@@ -1082,7 +1090,7 @@ function lint(src, opts = {}) {
       const inDetails = details > 0 || readable.detailsAt[i].some(close => !close);
       for (const close of readable.detailsAt[i]) details = Math.max(0, details + (close ? -1 : 1));
       if (sourceDepth) continue;
-      if (SOURCES_LINE.test(raw)) { if (visibleText(raw).length > 200) longBasis.push(i); continue; }
+      if (SOURCES_LINE.test(raw) || basisCont[i]) { if (visibleText(raw).length > 200) longBasis.push(i); continue; }
       const l = noCode(raw).replace(/\]\((?:[^()\s]|\([^()\s]*\))*\)/g, ']');
       // 인용을 가린 글: 유보·접속어·괄호는 남의 말 안에서 세지 않는다
       const prose = i < start ? noCode(proseLines[i].replace(/^summary:\s*([|>][-+]?\s*$)?/, '')) : noCode(proseLines[i]);
@@ -1290,7 +1298,7 @@ function lint(src, opts = {}) {
         if (!g) continue;
         if (/^###\s/.test(l)) { h3 = new Set(); g.h3s.push(h3); continue; }
         if (/^\s*\|/.test(l)) { g.table = g.visual = true; continue; }
-        if (SOURCES_LINE.test(readable[i]) || /^#/.test(l) || !l.trim()) continue;
+        if (SOURCES_LINE.test(readable[i]) || basisCont[i] || /^#/.test(l) || !l.trim()) continue;
         const bare = readable[i].replace(CODE_SPAN, '');
         replaceLinks(bare, image => { if (image) g.visual = true; return ''; });
         if (tagIn(bare, /^img$/)) g.visual = true;
@@ -1474,7 +1482,7 @@ const openItemsLine = src => {
   return total ? `열린 항목 ${total}개(${parts.join(' · ')}) — 요청자가 답할 수 있는 것은 문서에 남기지 말고 대화로 한 번에 묻고 답만 넣기. 외부 답을 기다리는 것만 "누가 언제까지"로 쓰기` : '';
 };
 
-module.exports = { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, FENCE_RE, STATUS_TAGS, measureReading, readerCheckNeed, readerCheckLine, openItems, openItemsLine, stripComments, decodeEnt, CODE_SPAN, maskCode };
+module.exports = { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, FENCE_RE, STATUS_TAGS, basisContinues, measureReading, readerCheckNeed, readerCheckLine, openItems, openItemsLine, stripComments, decodeEnt, CODE_SPAN, maskCode };
 
 if (require.main === module) {
   const args = process.argv.slice(2);

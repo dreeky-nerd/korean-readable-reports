@@ -47,7 +47,7 @@
  *   | 표 |        .table-wrap. 헤더가 "상태"인 열 → .status, 첫 열이 짧으면 .key. 셀 안 파이프는 \| 로
  *   - 불릿        들여쓰기(2칸 이상)로 중첩 가능. 폭이 어긋나도 항목이 사라지지 않음
  *   [완료] [미검증] [미확인] [실패] [블로커] [선재] [주의] [정보] [추천] [추정] → 상태 태그 칩
- *   근거: … / 출처: …   줄 시작(들여쓰기 허용) → .sources 박스 (규칙 6)
+ *   근거: … / 출처: …   줄 시작(들여쓰기 허용) → .sources 박스 (규칙 6). 빈 줄 없이 이어 쓴 글 줄도 같은 박스(목록·표·제목·다른 근거에서 끊김)
  *   <details>     짝이 맞는 </details>까지 한 덩어리. 안쪽은 md로 다시 렌더(빈 줄·불릿·표 OK)
  *   raw HTML      줄 맨 앞이 허용 태그(details, div, figure, figcaption, img, p, ul, ol, table, pre, blockquote, section, br, hr)면
  *                 그 덩어리를 통과. 안의 태그도 허용 목록(lint.js HTML_TAGS)만 남기고, 속성은 class·id·src·href·alt·title·
@@ -56,7 +56,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, stripComments, decodeEnt, FENCE_RE, STATUS_TAGS, readerCheckLine, openItemsLine, CODE_SPAN, maskCode } = require('./lint.js');
+const { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, stripComments, decodeEnt, FENCE_RE, STATUS_TAGS, readerCheckLine, openItemsLine, CODE_SPAN, maskCode, basisContinues } = require('./lint.js');
 
 const args = process.argv.slice(2);
 if (!args.length || args.includes('-h') || args.includes('--help')) {
@@ -562,7 +562,12 @@ function renderBlocks(lines, nested) {
       out.push(renderList(items)); continue;
     }
 
-    if (SOURCES_RE.test(line)) { out.push(`<div class="sources">${inline(line.trim())}</div>`); i++; continue; }
+    if (SOURCES_RE.test(line)) {
+      // 빈 줄 없이 이어 쓴 줄도 같은 상자에(한 줄 한 문장으로 쓴 근거의 둘째 줄부터 본문으로 나갔다, 2026-11-06). 기준은 lint.js와 공유
+      const buf = [lines[i++].trim()];
+      while (i < lines.length && basisContinues(lines[i])) buf.push(lines[i++].trim());
+      out.push(`<div class="sources">${buf.map(inline).join(hardBreaks ? '<br>' : ' ')}</div>`); continue;
+    }
 
     if (HTML_ALLOW.test(line)) {
       const { buf, next, tag } = collectHtml(lines, i); i = next;
