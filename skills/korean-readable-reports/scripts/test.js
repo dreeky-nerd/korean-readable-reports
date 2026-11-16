@@ -198,6 +198,18 @@ test('규칙 2: 코드·인용·근거·글 블록 펜스 제외 및 줄 번호'
   const found = lint(doc).filter(f => f.rule === 2 && !/요약 박스/.test(f.msg));
   assert.equal(found.length, 1); assert.equal(found[0].line, 9);
 });
+// 2026-11-06 이슈 정리 "원인"·"수정 방안", 실제 보고서 15건 중 4건 "## 결론": 제목만 훑으면 결론이 안 보인다
+test('규칙 2(힌트): 결론 자리의 라벨 제목 — 문서당 한 번, 결론을 쓴 제목·설명 섹션·코드·plain은 조용', () => {
+  const doc = hs => fm + '# 제목\n\n> 요약입니다.\n\n' + hs.map(h => `## ${h}\n\n본문입니다.\n`).join('\n');
+  const hit = (hs, o) => lint(doc(hs), o).filter(f => /라벨 제목/.test(f.msg));
+  const f = hit(['결정 요청', '원인', '수정 방안', '배경']);
+  assert.equal(f.length, 1); assert.ok(f[0].hint); assert.equal(f[0].rule, 2); assert.equal(f[0].line, 14);
+  assert.ok(/라벨 제목 2개\("원인"·"수정 방안"\)/.test(f[0].msg), f[0].msg);
+  for (const h of ['결론', '4개 안 비교', '원인과 수정 방안', '영향 범위']) assert.equal(hit([h]).length, 1, h);
+  for (const h of ['원인: 반납 기록을 분관마다 따로 저장함', '시스템 구조', '재처리 절차', '배경', '복구와 재발 방지', '2안을 추천합니다']) assert.equal(hit([h]).length, 0, h);
+  assert.equal(lint(fm + '# 제목\n\n```md\n## 원인\n```\n').filter(x => /라벨 제목/.test(x.msg)).length, 0, '코드 안');
+  assert.equal(hit(['원인'], {plain: true}).length, 0, 'plain');
+});
 test('규칙 2: 제목 반복은 H2 첫 문장만, 새 정보·다른 구조 제외', () => {
   for (const body of [
     '## 오류 처리\n오류 처리는 재시도를 포함합니다. 오류 처리는 오류 처리입니다.',

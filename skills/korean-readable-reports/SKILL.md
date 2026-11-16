@@ -72,6 +72,10 @@ to keep is quoted as is, even inside a report.
    recommends an option, the box names it ("B안을 추천합니다"): a reader who
    stops at the box still knows what to pick. One modifier per noun, no
    analogy, no restated title.
+   A section that carries a finding — 원인, 결론, 수정 방안, 영향, 비교 —
+   says it in its heading too ("원인: 반납 기록을 분관마다 따로 저장함"), so
+   a reader who only scans the headings gets the story (lint hints on a bare
+   label). Descriptive sections (구조, 절차, 배경) keep plain labels.
 3. **Analogy only beside a hard concept, one clause.** When a mechanism is
    genuinely unfamiliar, one short comparison where it is explained (a cache →
    "reusing a picture you already drew"). Never in the summary box, never
