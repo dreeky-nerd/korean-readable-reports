@@ -14,6 +14,7 @@
  *     그림    ```svg·```bars 안 글자가 자기 상자·그림 밖으로 나감, 다른 상자나 글자와 겹침(폭과 무관하게 한 번만 보고)
  *     연결선  svg의 ln·node·lbl만 첫 폭에서 루트 SVG 단위로 검사(관통·라벨 근접·겹침·연결점·모서리·테두리). 경고만, 표본 상한 초과는 미검사
  *     종이    인쇄 규칙을 켠 사본을 A4 본문 폭(718px)에서 열어 그림·표·코드 상자에서 잘리는 곳을 찾음. Mermaid는 못 그려 안 봄(CSS로 쪽 폭에 맞춤)
+ *     쪽 수   같은 사본의 높이로 A4 쪽 수를 어림해 알림. audience: leadership 이 2쪽을 넘으면 경고(어림이라 문제 수에는 안 넣음)
  *     대비    첫 폭에서 라이트·다크 둘 다, 글자와 바탕 대비가 WCAG 기준(본문 4.5:1, 큰 글자·●○○ 3:1) 미만. Mermaid 글자는 안 봄
  *     파일    상대 링크가 가리키는 파일이 없음(옆 보고서 md를 렌더하지 않아 .html이 없는 경우 등)
  *     Mermaid 문법 오류로 그림 대신 소스가 보임 · 같은 id를 받은 그림(한 칸에 포개짐) — 문제.
@@ -30,6 +31,8 @@ const {spawnSync} = require('node:child_process');
 const {pathToFileURL} = require('node:url');
 
 const WIDTHS = [1280, 768, 390];
+// A4 297mm에서 크롬 기본 여백 위아래 10mm를 뺀 본문 높이(96dpi). 리더 보고 2쪽은 사용자 결정(2026-11-16, 실측 10건이 3~4쪽)
+const A4_BODY_H = 1047, LEADER_PAGES = 2;
 
 function findBrowser() {
   const env = process.env.KRR_BROWSER;
@@ -351,7 +354,7 @@ function measure(f, w) {
   }
   return { want: w, width: win.innerWidth, over: over, anchors: anchors, images: images, figs: figs, unchecked: unchecked, low: low };
 }
-function finish(print) { var p = document.createElement('pre'); p.textContent = 'KRRQA' + encodeURIComponent(JSON.stringify({ results: results, print: print })) + 'KRRQA'; document.body.appendChild(p); }
+function finish(print, height) { var p = document.createElement('pre'); p.textContent = 'KRRQA' + encodeURIComponent(JSON.stringify({ results: results, print: print, height: height })) + 'KRRQA'; document.body.appendChild(p); }
 function paper() {
   var f = document.createElement('iframe');
   f.style.cssText = 'width:718px;height:900px;border:0;display:block';
@@ -363,7 +366,9 @@ function paper() {
       [].forEach.call(doc.querySelectorAll('.fig, .table-wrap, .code-dark'), function (el) {
         if (el.clientWidth && el.scrollWidth > el.clientWidth + 1) clips.push({ el: name(el), px: el.scrollWidth - el.clientWidth, text: (el.textContent || '').replace(/\\s+/g, ' ').trim().slice(0, 40) });
       });
-      f.remove(); finish(clips);
+      // 인쇄 쪽 수 어림용 문서 높이(상세를 편 인쇄 사본, A4 본문 폭)
+      var height = Math.max(doc.documentElement.scrollHeight, doc.body ? doc.body.scrollHeight : 0);
+      f.remove(); finish(clips, height);
     }, 300); });
   };
   f.srcdoc = SRC.replace(/@media print\\b/g, '@media all');
@@ -440,7 +445,7 @@ function measure(browser, file) {
         mermaid = r.error ? {failed: r.error} : r.value;
       } catch (e) { mermaid = {failed: e.message}; }
     }
-    return {results: q.value.results, print: q.value.print, mermaid};
+    return {results: q.value.results, print: q.value.print, height: q.value.height, mermaid};
   } finally {
     try { fs.rmSync(tmp, {recursive: true, force: true}); } catch (e) { /* 브라우저가 프로필을 늦게 놓으면 남는다 — tmp라 둔다 */ }
   }
@@ -509,6 +514,13 @@ function main() {
   problems += low.size;
   if (m.print.length) console.log(`  인쇄하면 잘리는 곳 ${m.print.length}개 — 종이에는 가로 스크롤이 없음. 표 열을 줄이거나 긴 낱말을 끊기:`);
   for (const c of m.print) console.log(`    - ${c.px}px  ${c.el}  "${c.text}"`);
+  // 쪽 수 어림: A4 본문 높이 약 1047px(크롬 기본 여백 10mm). 쪽 나눔·Mermaid 크기는 못 봐서 어림이라 문제 수에는 넣지 않는다
+  if (m.height) {
+    const pages = m.height / A4_BODY_H;
+    console.log(`  인쇄 A4 약 ${pages.toFixed(1)}쪽(어림)`);
+    const aud = (fs.readFileSync(file, 'utf8').match(/<html[^>]*\sdata-audience="([^"]*)"/i) || [])[1];
+    if (aud === 'leadership' && pages > LEADER_PAGES) console.log(`  리더 보고가 A4 약 ${pages.toFixed(1)}쪽 — ${LEADER_PAGES}쪽 안으로: 결정·안 비교·위험만 남기고 나머지는 -근거.md로 옮긴 뒤 다시 렌더(문제 수에는 넣지 않음)`);
+  }
   problems += anchors.size + images.size + errors.length + m.print.length;
   const files = missingFiles(file);
   if (files.length) console.log(`  없는 파일로 가는 링크 ${files.length}개: ${files.join(', ')} — 옆 보고서(-근거.md 등)면 그 md도 렌더하기`);

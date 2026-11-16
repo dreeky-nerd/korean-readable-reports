@@ -622,7 +622,8 @@ const between = (s, a, b) => { const x = s.indexOf(a), y = s.indexOf(b, x); retu
 }
 // 치환값에 $& 같은 패턴이 있어도 그대로 들어가게 함수 replacer 사용
 html = html
-  .replace('data-theme-default="light"', () => `data-theme-default="${theme}"`)
+  // data-audience: qa가 리더 보고의 인쇄 쪽 수를 따로 본다
+  .replace('data-theme-default="light"', () => `data-theme-default="${theme}"${meta.audience ? ` data-audience="${esc(String(meta.audience).trim())}"` : ''}`)
   .split('{{TITLE}}').join(esc(title))
   .split('{{작업일}}').join(esc(date))
   .replace('{{문서 종류 — 예: 작업기록 · 이슈정리 · 핸드오프}}', () => esc(kind))

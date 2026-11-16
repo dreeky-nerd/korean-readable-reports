@@ -1346,6 +1346,22 @@ test('qa: 렌더한 보고서는 세 폭 모두 넘침 없음', () => {
   assert.equal(q.status, 0, q.stdout + q.stderr);
   assert.equal((q.stdout.match(/넘침 0곳/g) || []).length, 3, q.stdout);
 });
+// 2026-11-16 실측: 리더 보고 10건이 모두 A4 3~4쪽. 사용자가 정한 2쪽을 넘으면 qa가 알린다(어림이라 문제 수에는 안 넣음)
+test('qa: 인쇄 쪽 수 어림 — 리더 보고가 A4 2쪽을 넘으면 경고(exit 0), 짧은 리더 보고·긴 팀 문서는 조용', () => {
+  if (!require('./qa.js').findBrowser()) skip('Chrome·Edge 없음');
+  const lead = fm.replace('audience: team', 'audience: leadership');
+  const long = '# 제목\n\n> 요약입니다.\n\n' + Array.from({length: 6}, (_, s) => `## 절 ${s + 1}\n\n` + Array.from({length: 14}, (_, k) => `분관 ${k + 1}의 반납 처리 현황을 설명하는 문장입니다.`).join('\n') + '\n').join('\n');
+  const short = '# 제목\n\n> 요약입니다.\n\n## 결정 요청\n\n2안을 승인해 주세요.\n';
+  const page = r => { assert.equal(r.status, 0, r.stdout + r.stderr); return runQa(r.output); };
+  let q = page(render(long, ['--no-lint'], lead));
+  assert.equal(q.status, 0, q.stdout + q.stderr);
+  assert.ok(/인쇄 A4 약 \d+\.\d쪽/.test(q.stdout), q.stdout);
+  assert.ok(/리더 보고가 A4 약 \d+\.\d쪽 — 2쪽 안으로/.test(q.stdout), q.stdout);
+  q = page(render(short, ['--no-lint'], lead));
+  assert.ok(!/리더 보고가/.test(q.stdout), q.stdout);
+  q = page(render(long, ['--no-lint']));
+  assert.ok(/인쇄 A4 약/.test(q.stdout) && !/리더 보고가/.test(q.stdout), q.stdout);
+});
 // 2026-10-23 사용자가 고른 보고서(손그림 흐름도·기준선 막대·전후 말풍선)를 따라 그림 블록을 넣었다
 const svgFig = t => '```svg\n<svg viewBox="0 0 600 200" aria-label="시험 흐름">\n<rect class="node" x="10" y="10" width="160" height="80" rx="12"/>\n' + t
   + '\n<rect class="node" x="300" y="10" width="160" height="80" rx="12"/>\n<text class="t1" x="380" y="55" text-anchor="middle">둘째</text>\n<path class="ln" d="M170 50 H298"/>\n</svg>\n```\n';

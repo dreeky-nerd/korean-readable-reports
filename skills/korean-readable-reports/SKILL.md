@@ -110,6 +110,9 @@ to keep is quoted as is, even inside a report.
      (rule 15, text mass; a procedure the reader performs stays a numbered
      list), then fold the rest into `<details>`. Folding doesn't shorten the
      document: past about 6,000 readable characters, cut repeats or split it.
+     A leadership report fits in two A4 pages (qa prints the estimate):
+     the decision, the options, and the risks stay; the rest goes to the
+     companion file below.
    - **Not every fact belongs here.** The report holds what the reader needs
      to decide or act. Research detail that doesn't change that (per-item
      tables, every policy clause, side cases) goes to a companion
@@ -313,6 +316,9 @@ to keep is quoted as is, even inside a report.
    - Exit 2 → no browser; say so instead of claiming the check passed.
    - Connector warnings don't change the exit code; fix them anyway in a
      figure you just drew.
+   - "리더 보고가 A4 약 N쪽" doesn't change the exit code either, and is not
+     optional: keep the decision, the options, and the risks, move the rest
+     to the companion `-근거.md`, and re-render.
    - "Mermaid 미검사" means the diagram check did not run; open the HTML and
      look at the diagrams yourself.
    Documents from other skills that don't follow these writing rules (plans,
