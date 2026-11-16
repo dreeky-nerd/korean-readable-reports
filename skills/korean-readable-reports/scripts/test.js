@@ -783,6 +783,19 @@ test('flow·stats·cards를 의미 있는 HTML로 렌더', () => {
   assert.ok(r.html.includes('class="stat s-done"'));
   assert.ok(/class="card is-recommended"/.test(r.html));
 });
+// 2026-11-06 시험: 숫자 카드에 "미확인"을 쓰면 lint가 막아 뜻이 다른 "주의"로 바꿨다. 배지 목록(규칙 8)과 같은 이름을 받는다
+test('숫자 카드 상태: 미확인·추정도 배지와 같은 색, 모르는 이름은 여전히 경고, 상태 없으면 배지 없음', () => {
+  const stats = s => '# 제목\n\n```stats\n' + s + '\n```\n';
+  const r = plain(stats('자동 반납률 | 98.1% | 시범 분관 2곳 | 미확인\n반납 처리 | 약 10초 | 운영팀 추산 | 추정\n총비용 | 3.65억 | 3년 합계'), ['--strict']);
+  assert.equal(r.status, 0, r.stdout + r.stderr);
+  assert.ok(/class="stat s-unverified"><span class="stat-head"><span class="stat-label">자동 반납률<\/span><span class="tag tag-unverified">미확인<\/span>/.test(r.html), r.html.match(/<div class="stat [\s\S]*?<\/div>/g));
+  assert.ok(/class="stat s-neutral"><span class="stat-head"><span class="stat-label">반납 처리<\/span><span class="tag tag-preexisting">추정<\/span>/.test(r.html));
+  assert.ok(/class="stat s-info"><span class="stat-head"><span class="stat-label">총비용<\/span><\/span>/.test(r.html), '상태 칸이 없으면 배지 없음');
+  const warns = s => lint(fm + stats(s)).filter(f => /상태 "/.test(f.msg)).map(f => f.msg);
+  assert.deepEqual(warns('가 | 1건 | | 미확인\n나 | 2건 | | 추정'), []);
+  assert.equal(warns('가 | 1건 | | 검토중').length, 1);
+  assert.ok(/미확인·추정/.test(warns('가 | 1건 | | 검토중')[0]));
+});
 test('시각 블록도 HTML을 이스케이프', () => {
   const r = plain('# 제목\n\n```flow\n<img src=x onerror=alert(1)> | 설명 | unknown\n```');
   assert.ok(r.html.includes('&lt;img src=x onerror=alert(1)&gt;')); assert.ok(!r.html.includes('<img src=x onerror=alert(1)>'));

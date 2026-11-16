@@ -212,7 +212,7 @@ to keep is quoted as is, even inside a report.
     | parts that add up to a total, or values against a limit | ` ```bars ` with a `기준선` |
     | a number over 3+ points or across 3+ items | ` ```bars ` above the table when the difference is the message; a table alone when the reader only looks values up |
     | what a user receives or sees, before vs after | ` ```cards compare ` |
-    | 2–4 key numbers that *are* the finding | ` ```stats ` cards, right after the summary or at the top of the section |
+    | 2–4 key numbers that *are* the finding | ` ```stats ` cards, right after the summary or at the top of the section. The status column takes a rule-8 badge name only when the number itself has that status — 실패 for a rate below its target, 완료 for a finished count, 미검증 for an untested rate, 미확인 for a count nobody confirmed; a plain fact such as a cost or a date leaves it empty |
     | 2+ parallel items that each need a sentence (modules, findings, options) | ` ```cards `, short titles; mark the chosen option `[추천]` |
     | 3+ items compared on the same short attributes | table (an impact/effort scale reads well as `●○○`) |
     | the same bold labels repeated under 3+ subjects | subject × label table at the top; the sentences under it in `<details>` |

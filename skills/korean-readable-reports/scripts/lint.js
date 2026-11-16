@@ -276,7 +276,7 @@ function splitCells(l) {
 }
 const READABLE_BLOCK = /^(cards|browser|flow|stats)$/;
 const FLOW_ROLE = /^(ext|entry|logic|data|done|fail|caution|info|neutral)$/;
-const BLOCK_STATE = /^(done|완료|fail|실패|블로커|caution|주의|unverified|미검증|info|정보|neutral|중립|선재)$/i;
+const BLOCK_STATE = /^(done|완료|fail|실패|블로커|caution|주의|unverified|미검증|미확인|info|정보|neutral|중립|선재|추정)$/i;   // 미확인·추정: 배지 목록(규칙 8)과 같게
 const HTML_BLOCK = /^<(div|figure|figcaption|img|p|ul|ol|table|pre|blockquote|section|br|hr)(\s|>|\/)/i;
 // 읽기량·태그·표 칸이 같은 제외 결과를 쓴다. flow·stats는 HTML도 주석도 글자로 표시한다.
 function readingLines(lines, at) {
@@ -564,7 +564,7 @@ function lint(src, opts = {}) {
       if (fb.kind === 'cards') continue;
       const flow = fb.kind === 'flow', fixed = flow ? 3 : 4, ok = flow ? ROLE : STATE;
       const name = flow ? '역할' : '상태';
-      const allowed = flow ? 'ext·entry·logic·data (또는 done·fail·caution·info·neutral)' : '완료·실패·주의·미검증·정보·중립 (또는 영문)';
+      const allowed = flow ? 'ext·entry·logic·data (또는 done·fail·caution·info·neutral)' : '완료·실패·주의·미검증·미확인·추정·정보·중립 (또는 영문). 상태가 없는 숫자면 칸을 비우기';
       for (const [ln, l] of filled) {
         const f = split(l);
         if (f.length > fixed) warn(ln, '구조', `${fb.kind} 칸 ${f.length}개 — 최대 ${fixed}개. 남는 칸은 설명 뒤에 " | "로 붙어 표시됨 (글자 | 를 쓰려면 \\|)`);

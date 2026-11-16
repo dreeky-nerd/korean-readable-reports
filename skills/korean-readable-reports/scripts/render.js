@@ -33,7 +33,7 @@
  *   ```mermaid    <pre class="mermaid">
  *   ```flow       가지 없는 순서 흐름 카드(폭에 맞춰 줄바꿈 + 곡선 화살표). 한 줄 = "제목 | 설명 | 역할"
  *                 역할: ext 외부 · entry 진입점 · logic 처리 · data 데이터 (또는 done/fail/caution/info/neutral)
- *   ```stats      핵심 수치 카드 격자. 한 줄 = "라벨 | 값 | 보조 설명 | 상태"(완료·실패·주의·미검증·중립 또는 영문)
+ *   ```stats      핵심 수치 카드 격자. 한 줄 = "라벨 | 값 | 보조 설명 | 상태"(완료·실패·주의·미검증·미확인·추정·중립 또는 영문, 상태 없는 숫자는 비움)
  *                 flow·stats 칸 안의 글자 | 는 \| . 칸이 많거나 모르는 역할·상태 이름은 설명 뒤에 붙여 보여 줌(버리지 않음)
  *   ```cards      항목 카드 격자(같은 높이). 빈 줄로 카드 구분, 첫 줄 제목([완료]·[추천] 태그 가능), 나머지 본문(불릿·근거: 가능)
  *   ```cards compare  같은 형식을 말풍선으로 나란히(받는 문구·화면의 전후). [실패]·[블로커] 빨강, [추천]·[완료] 주황
@@ -227,8 +227,9 @@ function renderFlow(lines) {
 
 // ```stats 블록: 핵심 수치 카드. 한 줄 = "라벨 | 값 | 보조 설명 | 상태"(보조 설명·상태 생략 가능)
 // 상태는 왼쪽 색 띠 + 글자 배지(색만으로 상태를 구분하지 않는다 — design-guide §1·§5, 흑백 인쇄·색각 이상 대비)
+// 미확인·추정은 본문 배지와 같은 색(노랑·회색) — "미확인"이 lint에 막혀 뜻이 다른 "주의"로 바뀌었다(2026-11-06)
 const STAT_STATE = { done: 'done', '완료': 'done', fail: 'fail', '실패': 'fail', '블로커': 'fail', caution: 'caution', '주의': 'caution',
-  unverified: 'unverified', '미검증': 'unverified', info: 'info', '정보': 'info', neutral: 'neutral', '중립': 'neutral', '선재': 'neutral' };
+  unverified: 'unverified', '미검증': 'unverified', '미확인': 'unverified', info: 'info', '정보': 'info', neutral: 'neutral', '중립': 'neutral', '선재': 'neutral', '추정': 'neutral' };
 const STAT_LABEL = { done: '완료', fail: '실패', caution: '주의', unverified: '미검증', info: '정보', neutral: '중립' };
 const STAT_TAG = { done: 'tag-done', fail: 'tag-fail', caution: 'tag-caution', unverified: 'tag-unverified', info: 'tag-info', neutral: 'tag-preexisting' };
 const statKey = s => STAT_STATE[(s || '').toLowerCase()] || STAT_STATE[s || ''];
