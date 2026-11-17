@@ -168,11 +168,27 @@ function scanFences(lines, start) {
 
 // 읽을 글만 센다: 표·접힌 글·요약·렌더용 블록 포함, 일반 코드·출처 제외.
 const SOURCES_LINE = /^\s*(?:>\s*)?(?:[-*+]\s*)?(?:\*\*)?(근거|출처|basis|sources)(?:\*\*)?\s*[:：]/i;
-// 근거 묶음: "근거:" 줄 뒤에 빈 줄 없이 이어 쓴 글 줄(한 줄 한 문장으로 쓴 근거). render.js도 이 기준으로 한 상자에 넣는다
+// 근거 묶음: "근거:" 줄 뒤에 빈 줄 없이 이어 쓴 글 줄(한 줄 한 문장으로 쓴 근거). render.js도 basisFollows로 같은 줄을 한 상자에 넣는다
+// 코드 경계는 줄 모양으로 끊긴다: 펜스 줄(FENCE_RE)과 <pre>처럼 <로 시작하는 줄
 const basisContinues = l => !!l.trim() && !/^\s*(#{1,6}\s|>|\||([-*+]|\d+\.)\s|---+\s*$|<)/.test(l) && !FENCE_RE.test(l) && !SOURCES_RE.test(l);
-function basisFollows(lines) {
+// 여러 줄에 걸친 실제 HTML 주석의 줄(펜스·코드 span 안 <!-- 는 주석 아님 — htmlTokens 기준). 닫힘 없는 <!-- 는 끝까지.
+// start: 본문 시작 줄(parseFrontmatter) — frontmatter title의 <!-- 를 주석으로 읽어 본문 근거 묶음이 끊겼다(2026-11-18 재검수)
+function commentLines(lines, start = 0) {
+  const {at} = scanFences(lines, start), text = lines.map((l, i) => i < start || at[i] ? '' : l).join('\n');
+  const span = new Array(lines.length).fill(false);
+  for (const t of htmlTokens(text, [], true)) {
+    if (!t.comment) continue;
+    const end = t.line + (text.slice(t.start, t.end).match(/\n/g) || []).length;
+    if (end > t.line) span.fill(true, t.line, end + 1);
+  }
+  return span;
+}
+// 근거 줄·이어 쓴 줄이 여러 줄 주석에 걸치거나 HTML 블록 원문 줄(raw)이면 묶지 않는다. 줄 글자(<!--·-->)로 끊었더니 코드 span·
+// "client --> server" 화살표에서 상자가 끊기고, 근거 줄과 같은 줄의 --> 는 놓쳤다(2026-11-17 최종 검수) — 주석 "상태"로 본다
+function basisFollows(lines, raw = [], start = 0) {
+  const cut = commentLines(lines, start), stop = i => cut[i] || raw[i];
   const r = new Array(lines.length).fill(false);
-  for (let i = 1; i < lines.length; i++) r[i] = (SOURCES_RE.test(lines[i - 1]) || r[i - 1]) && basisContinues(lines[i]);
+  for (let i = start + 1; i < lines.length; i++) r[i] = ((SOURCES_RE.test(lines[i - 1]) && !stop(i - 1)) || r[i - 1]) && !stop(i) && basisContinues(lines[i]);
   return r;
 }
 // HTML 후보는 한 번만 훑는다. 닫히지 않은 태그·따옴표는 뒤의 <마다 다시 검색하지 않는다.
@@ -274,13 +290,16 @@ const isSep = l => /^\s*\|?(\s*:?-+:?\s*\|)+\s*:?-*:?\s*\|?\s*$/.test(l) && /-/.
 function splitCells(l) {
   return l.trim().replace(/^\|/, '').replace(/(?<!\\)\|$/, '').split(/(?<!\\)\|/).map(t => visibleText(t, true));
 }
+// audience 비교는 이것 하나로: 대소문자·앞뒤 공백 무시(lint는 Leadership도 받는데 qa가 소문자만 봐서 쪽 수 경고를 놓쳤다, 2026-11-17 검수)
+const audienceOf = meta => String(meta.audience || '').trim().toLowerCase();
 const READABLE_BLOCK = /^(cards|browser|flow|stats)$/;
 const FLOW_ROLE = /^(ext|entry|logic|data|done|fail|caution|info|neutral)$/;
 const BLOCK_STATE = /^(done|완료|fail|실패|블로커|caution|주의|unverified|미검증|미확인|info|정보|neutral|중립|선재|추정)$/i;   // 미확인·추정: 배지 목록(규칙 8)과 같게
 const HTML_BLOCK = /^<(div|figure|figcaption|img|p|ul|ol|table|pre|blockquote|section|br|hr)(\s|>|\/)/i;
 // 읽기량·태그·표 칸이 같은 제외 결과를 쓴다. flow·stats는 HTML도 주석도 글자로 표시한다.
-function readingLines(lines, at) {
-  const masked = lines.map((l, i) => at[i] && (!READABLE_BLOCK.test(at[i].kind) || at[i].open === i || at[i].close === i) ? '' : l);
+// start: 본문 시작 줄 — frontmatter 글자(title의 <!-- 등)가 본문 주석·태그 해석에 섞이지 않게 지운다(2026-11-18 재검수)
+function readingLines(lines, at, start = 0) {
+  const masked = lines.map((l, i) => i < start ? '' : at[i] && (!READABLE_BLOCK.test(at[i].kind) || at[i].open === i || at[i].close === i) ? '' : l);
   const text = masked.join('\n'), raw = new Array(lines.length).fill(false);
   const detailsAt = Array.from({length: lines.length}, () => []), inline = [];
   let card = null, title = true;
@@ -344,9 +363,9 @@ function sourceLines(lines, at, readable) {
 function measureReading(src) {
   const lines = src.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n').split('\n');
   const {meta, start, unclosed} = parseFrontmatter(lines);
-  const {at} = scanFences(lines, start), readable = readingLines(lines, at);
+  const {at} = scanFences(lines, start), readable = readingLines(lines, at, start);
   const chunks = [], cells = [], excluded = {sourceLines: 0, codeLines: 0, evidenceLines: 0};
-  const sources = sourceLines(lines, at, readable), follows = basisFollows(lines);
+  const sources = sourceLines(lines, at, readable), follows = basisFollows(lines, readable.raw, start);
   let table = false;
   if (meta.summary) chunks.push(visibleText(meta.summary, true));
   for (let i = start; i < lines.length; i++) {
@@ -394,7 +413,7 @@ function lint(src, opts = {}) {
   const warn = (line, rule, msg, hint) => F.push({ line: line + 1, rule, msg: mask(msg), hint: !!hint });
 
   const { meta, start, has, unclosed } = parseFrontmatter(lines);
-  const sharing = /^external$/i.test((meta.audience || '').trim()) || !!opts.external;
+  const sharing = audienceOf(meta) === 'external' || !!opts.external;
   if (sharing) {
     // 긴 것부터 — "SECRET"이 먼저 가려지면 "SECRET-TOKEN"의 나머지가 남는다
     const extra = (meta.redact || '').split(/[,\n]/).map(s => s.trim()).filter(Boolean).sort((a, b) => b.length - a.length);
@@ -418,13 +437,12 @@ function lint(src, opts = {}) {
     if (!meta.date) warn(0, 'fm', `frontmatter date 없음 — ${plain ? '문서 기준일(YYYY-MM-DD)' : '없으면 렌더 당일이 작업일로 찍힘'}`);
     if (!meta.audience) warn(0, 'fm', 'frontmatter audience 없음 (team | cross-team | leadership | external) — 없으면 외부 공유 검사가 꺼짐');
   }
-  if (meta.audience && !/^(team|cross-team|leadership|external)$/i.test(meta.audience.trim())) warn(0, 'fm', `audience "${meta.audience}" — team | cross-team | leadership | external 중 하나`);
+  if (meta.audience && !/^(team|cross-team|leadership|external)$/.test(audienceOf(meta))) warn(0, 'fm', `audience "${meta.audience}" — team | cross-team | leadership | external 중 하나`);
   if (meta.date && (!/^\d{4}-\d{2}-\d{2}$/.test(meta.date) || Number.isNaN(Date.parse(meta.date)) || new Date(meta.date).toISOString().slice(0, 10) !== meta.date)) warn(0, 'fm', `date "${meta.date}" — 실제 있는 날짜 YYYY-MM-DD로`);
   if (meta.theme && !/^(light|dark|auto)$/i.test(meta.theme.trim())) warn(0, 'fm', `theme "${meta.theme}" — light | dark | auto 중 하나 (아니면 light로 렌더됨)`);
 
   const { at: fenceAt, blocks } = scanFences(lines, start);
   const inCode = i => !!fenceAt[i];
-  const basisCont = basisFollows(lines).map((v, i) => v && !fenceAt[i]);   // 근거 줄에 이어 쓴 줄 — 근거 줄처럼 본문 검사에서 뺀다
   for (const b of blocks) if (b.close < 0) warn(b.open, '구조', `코드펜스(${b.char.repeat(3)})가 닫히지 않음 — 이 뒤 내용이 전부 코드 패널로 들어감`);
 
   // 보이지 않는 문자(유니코드 서식 문자 Cf): 폭 없는 공백, 글 중간 BOM, 방향 제어, 태그 문자. AI 출력·복사로 섞여 화면엔 안 보이지만
@@ -440,7 +458,8 @@ function lint(src, opts = {}) {
     }
   }
 
-  const readable = readingLines(lines, fenceAt);
+  const readable = readingLines(lines, fenceAt, start);
+  const basisCont = basisFollows(lines, readable.raw, start).map((v, i) => v && !fenceAt[i]);   // 근거 줄에 이어 쓴 줄 — 근거 줄처럼 본문 검사에서 뺀다
   const checkCell = (i, raw, column = 0, literalHtml = false) => {
     const c = raw.trim(), text = visibleText(c, literalHtml), n = [...text].length, sentences = countSentences(text);
     if (/^`[^`]+`$/.test(c) && column > 0) warn(i, 7, `표 셀이 코드만 있음 "${c}" — 구절로 (예: "가장 오래 안 쓴 것부터 지운다")`);
@@ -448,7 +467,7 @@ function lint(src, opts = {}) {
   };
   // raw HTML도 허용하므로 td는 같은 기준으로 본다(th는 머리글). 코드·주석의 가짜 td는 제외.
   if (!plain) {
-    const input = lines.map((l, i) => fenceAt[i] && (fenceAt[i].open === i || fenceAt[i].close === i || !/^(cards|browser)$/.test(fenceAt[i].kind)) ? '' : l).join('\n');
+    const input = lines.map((l, i) => i < start || fenceAt[i] && (fenceAt[i].open === i || fenceAt[i].close === i || !/^(cards|browser)$/.test(fenceAt[i].kind)) ? '' : l).join('\n');
     const html = maskHtml(input, {tokens: htmlTokens(input, readable.inline), hide: t => /^(pre|code|thead)$/.test(t.name), strip: () => false})
       .split('\n').map((l, i) => readable.raw[i] ? l : '').join('\n').replace(CODE_SPAN, '');
     let open = null, cursor = 0, line = 0;
@@ -777,10 +796,13 @@ function lint(src, opts = {}) {
   // 규칙 2(힌트): 결론이 있어야 할 섹션의 제목이 라벨뿐("원인", "수정 방안", "결론") — 제목만 훑는 독자는 결론을 못 본다.
   // 실측(2026-11-16): 시험 문서 27건 중 10건, 실제 보고서 15건 중 4건("## 결론"). "시스템 구조"·"절차" 같은 설명 섹션은 대상 아님
   {
-    const LABEL_ONLY = /^(?:\d+\.\s*)?(?:\d+개\s*)?(?:안\s*)?(원인|결과|결론|분석|평가|검토|진단|현황|영향|영향 범위|문제|문제점|수정 방안|수정안|해결 방안|해결책|대안|방안|선택지|안 비교|비교|추천|권고|위험|리스크)(?:\s*(?:과|와|및|·|,)\s*(원인|결과|결론|분석|평가|검토|현황|영향|영향 범위|문제|문제점|수정|수정 방안|해결 방안|대안|방안|선택지|비교|추천|권고|위험|리스크|복구|대책))*$/;
+    // 앞 낱말·뒤 낱말을 한 목록으로 본다 — 목록이 둘이면 "진단 및 평가"는 잡고 "평가 및 진단"은 놓쳤다(2026-11-17 검수)
+    const LABEL = '(?:원인|결과|결론|분석|평가|검토|진단|현황|영향 범위|영향|문제점|문제|수정 방안|수정안|수정|해결 방안|해결책|대안|방안|선택지|안 비교|비교|추천|권고|위험|리스크|복구|대책)';
+    const LABEL_ONLY = new RegExp(`^(?:\\d+\\.\\s*)?(?:\\d+개\\s*)?(?:안\\s*)?${LABEL}(?:\\s*(?:과|와|및|·|,)\\s*${LABEL})*$`);
     const labels = [];
     for (let i = start; i < lines.length; i++) {
-      const m = !inCode(i) && lines[i].match(/^##\s+(.+?)\s*#*\s*$/);
+      // readable: 주석·HTML <pre>/<code> 안을 지운 줄. raw: <div> 같은 HTML 블록 안 줄 — render가 글자로 낸다(제목 아님)
+      const m = !inCode(i) && !readable.raw[i] && readable[i].match(/^##\s+(.+?)\s*#*\s*$/);
       if (m && LABEL_ONLY.test(m[1].replace(/\*\*/g, '').trim())) labels.push([i, m[1].trim()]);
     }
     if (labels.length) warn(labels[0][0], 2, `결론을 숨기는 라벨 제목 ${labels.length}개(${labels.slice(0, 3).map(l => `"${l[1]}"`).join('·')}) — 제목만 읽어도 결론이 보이게: "원인: 반납 기록을 분관마다 따로 저장함"`, true);
@@ -905,7 +927,7 @@ function lint(src, opts = {}) {
     if (firstH2 >= 0 && !hasBg) warn(firstH2, 13, '"## 배경" 섹션 없음 — 결정·할 일 다음에 요청 분석(요청·현상…) 섹션 두기');
     else if (h2s > 1 && /^(배경|background)/i.test(firstH2Text)) warn(firstH2, 13, `첫 섹션이 "${firstH2Text}" — 결정할 일·할 일·결론을 먼저 쓰고 배경은 그 뒤로`);
     // 여러 팀 문서: 첫 섹션에 팀·담당 열 있는 표가 없으면 힌트(할 일이 절마다 흩어져 팀이 자기 몫을 못 찾았다, 2026-11-10)
-    if (/^cross-team$/i.test((meta.audience || '').trim()) && firstH2 >= 0) {
+    if (audienceOf(meta) === 'cross-team' && firstH2 >= 0) {
       let end = lines.length, teamTable = false;
       for (let i = firstH2 + 1; i < lines.length; i++) if (!inCode(i) && /^##\s/.test(lines[i])) { end = i; break; }
       for (let i = firstH2 + 1; i < end - 1; i++) {
@@ -1463,7 +1485,7 @@ function readerCheckNeed(src) {
   const why = [];
   const h2 = lines.filter((l, i) => i >= start && !at[i] && /^##\s/.test(l)).length;
   if (h2 >= 4) why.push(`H2 ${h2}개`);
-  if (/^(leadership|external)$/i.test((meta.audience || '').trim())) why.push(`audience ${meta.audience.trim()}`);
+  if (/^(leadership|external)$/.test(audienceOf(meta))) why.push(`audience ${audienceOf(meta)}`);
   // 결정 요청: 요약 상자(frontmatter 또는 첫 H2 앞 인용문)가 결정·승인을 청하거나, 본문에 [추천]이 있음
   const h2At = lines.findIndex((l, i) => i >= start && !at[i] && /^##\s/.test(l));
   const quote = lines.filter((l, i) => i >= start && (h2At < 0 || i < h2At) && !at[i] && /^>/.test(l)).join(' ');
@@ -1494,7 +1516,7 @@ const openItemsLine = src => {
   return total ? `열린 항목 ${total}개(${parts.join(' · ')}) — 요청자가 답할 수 있는 것은 문서에 남기지 말고 대화로 한 번에 묻고 답만 넣기. 외부 답을 기다리는 것만 "누가 언제까지"로 쓰기` : '';
 };
 
-module.exports = { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, FENCE_RE, STATUS_TAGS, basisContinues, measureReading, readerCheckNeed, readerCheckLine, openItems, openItemsLine, stripComments, decodeEnt, CODE_SPAN, maskCode };
+module.exports = { lint, report, audienceOf, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, FENCE_RE, STATUS_TAGS, basisFollows, measureReading, readerCheckNeed, readerCheckLine, openItems, openItemsLine, stripComments, decodeEnt, CODE_SPAN, maskCode };
 
 if (require.main === module) {
   const args = process.argv.slice(2);

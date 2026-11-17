@@ -254,6 +254,14 @@
   .flow-step.role-neutral { background: var(--gray-1); border-color: var(--fig-edge); }
   .flow-lines { position: absolute; left: 0; top: 0; overflow: visible; pointer-events: none; z-index: 0; }
   @media (max-width: 640px) { .flow-step { flex-basis: 100%; } }
+  /* 줄 나눔: 짧은 줄이 둘 이상인 단계 수(10→4+3+3)에만 render.js가 넣는다. 4개(180px×4 + 56px×3 = 888px)가 다 들어가는 폭에서만 켠다 —
+     좁은 폭에서 켜면 폭 줄바꿈과 겹쳐 한 장짜리 줄이 생긴다. 나눔 줄이 줄 간격(48px)을 맡아 간격이 두 번 들어가지 않게 row-gap은 0 */
+  .flow { container-type: inline-size; }
+  .flow-break { display: none; }
+  @container (min-width: 888px) {
+    .flow-list:has(> .flow-break) { row-gap: 0; }
+    .flow-break { display: block; flex-basis: 100%; height: 48px; }
+  }
 
   /* ```svg · ```bars — 직접 그린 그림(2026-10-23, 사용자가 고른 보고서의 손그림 흐름도·기준선 막대 참고).
      색은 class로만 준다(render.js가 fill·stroke·style 속성을 지운다) — 다크 모드에서 변수로 같이 바뀐다.

@@ -56,7 +56,7 @@
  */
 const fs = require('fs');
 const path = require('path');
-const { lint, report, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, stripComments, decodeEnt, FENCE_RE, STATUS_TAGS, readerCheckLine, openItemsLine, CODE_SPAN, maskCode, basisContinues } = require('./lint.js');
+const { lint, report, audienceOf, parseFrontmatter, safeUrl, HTML_TAGS, SVG_TAGS, SVG_ATTRS, parseBars, stripComments, decodeEnt, FENCE_RE, STATUS_TAGS, readerCheckLine, openItemsLine, CODE_SPAN, maskCode, basisFollows } = require('./lint.js');
 
 const args = process.argv.slice(2);
 if (!args.length || args.includes('-h') || args.includes('--help')) {
@@ -223,7 +223,14 @@ function renderFlow(lines) {
       + `<strong>${inline(title || '')}</strong>${d ? `<span class="flow-desc">${inline(d)}</span>` : ''}</li>`;
   });
   // 넓은 화면은 한 줄에 4개까지 들어가 5단계가 4+1로 갈라졌다(2026-11-06). 줄 수는 그대로, 한 줄 개수를 고르게(5→3+2, 6→3+3, 7→4+3)
-  const rows = Math.ceil(cards.length / 4), cols = Math.ceil(cards.length / rows);
+  const n = cards.length, rows = Math.ceil(n / 4), cols = Math.ceil(n / rows), long = n % rows;   // 앞 long줄이 cols개, 나머지는 cols-1개
+  // 브라우저는 한 줄에 cols개씩 채우고 남은 것을 마지막 줄에 둔다 — 짧은 줄이 둘 이상이면(10→4+4+2, 13→4+4+4+1) 열 수만으로는 못 고른다.
+  // 줄 수를 늘리면(10→3+3+2+2) 세로로 길어지므로 줄 수는 그대로 두고 줄 사이에 나눔(flow-break)을 넣어 4+3+3으로 끊는다.
+  // 나눔은 cols개가 다 들어가는 넓은 폭에서만 보인다(template.html 컨테이너 조건) — 좁은 폭·인쇄는 폭에 맞춘 줄바꿈 그대로(2026-11-17 검수)
+  if (long && rows - long > 1) {
+    let at = 0;
+    for (let r = 0; r < rows - 1; r++) { at += r < long ? cols : cols - 1; cards[at - 1] += '\n<li class="flow-break" aria-hidden="true"></li>'; }
+  }
   return `<div class="flow"><ol class="flow-list" style="--flow-cols:${cols}" aria-label="처리 순서">\n${cards.join('\n')}\n</ol></div>`;
 }
 
@@ -492,7 +499,7 @@ let seenH1 = false, seenH2 = false, summary = meta.summary || '', title = meta.t
 let blockNo = 0;
 
 function renderBlocks(lines, nested) {
-  const out = [];
+  const out = [], follows = basisFollows(lines);   // 근거 상자에 이어 붙일 줄
   let i = 0, secOpen = false, blockOpen = false;
   const closeBlock = () => { if (blockOpen) { out.push('</div>'); blockOpen = false; } };
   const closeSec = () => { closeBlock(); if (secOpen) { out.push('</section>'); secOpen = false; } };
@@ -566,9 +573,9 @@ function renderBlocks(lines, nested) {
     }
 
     if (SOURCES_RE.test(line)) {
-      // 빈 줄 없이 이어 쓴 줄도 같은 상자에(한 줄 한 문장으로 쓴 근거의 둘째 줄부터 본문으로 나갔다, 2026-11-06). 기준은 lint.js와 공유
+      // 빈 줄 없이 이어 쓴 줄도 같은 상자에(한 줄 한 문장으로 쓴 근거의 둘째 줄부터 본문으로 나갔다, 2026-11-06). 기준은 lint.js basisFollows와 공유(주석에 걸친 줄에서 끊음)
       const buf = [lines[i++].trim()];
-      while (i < lines.length && basisContinues(lines[i])) buf.push(lines[i++].trim());
+      while (i < lines.length && follows[i]) buf.push(lines[i++].trim());
       out.push(`<div class="sources">${buf.map(inline).join(hardBreaks ? '<br>' : ' ')}</div>`); continue;
     }
 
@@ -625,7 +632,7 @@ const between = (s, a, b) => { const x = s.indexOf(a), y = s.indexOf(b, x); retu
 // 치환값에 $& 같은 패턴이 있어도 그대로 들어가게 함수 replacer 사용
 html = html
   // data-audience: qa가 리더 보고의 인쇄 쪽 수를 따로 본다
-  .replace('data-theme-default="light"', () => `data-theme-default="${theme}"${meta.audience ? ` data-audience="${esc(String(meta.audience).trim())}"` : ''}`)
+  .replace('data-theme-default="light"', () => `data-theme-default="${theme}"${audienceOf(meta) ? ` data-audience="${esc(audienceOf(meta))}"` : ''}`)
   .split('{{TITLE}}').join(esc(title))
   .split('{{작업일}}').join(esc(date))
   .replace('{{문서 종류 — 예: 작업기록 · 이슈정리 · 핸드오프}}', () => esc(kind))

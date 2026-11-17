@@ -208,6 +208,13 @@ test('규칙 2(힌트): 결론 자리의 라벨 제목 — 문서당 한 번, �
   for (const h of ['결론', '4개 안 비교', '원인과 수정 방안', '영향 범위']) assert.equal(hit([h]).length, 1, h);
   for (const h of ['원인: 반납 기록을 분관마다 따로 저장함', '시스템 구조', '재처리 절차', '배경', '복구와 재발 방지', '2안을 추천합니다']) assert.equal(hit([h]).length, 0, h);
   assert.equal(lint(fm + '# 제목\n\n```md\n## 원인\n```\n').filter(x => /라벨 제목/.test(x.msg)).length, 0, '코드 안');
+  // 2026-11-17 검수: 주석·HTML 코드 안의 제목도 잡았고, "진단 및 평가"는 잡는데 "평가 및 진단"은 놓쳤다(앞뒤 낱말 목록이 달랐음)
+  for (const inner of ['<!--\n## 원인\n-->\n', '<pre><code>\n## 원인\n</code></pre>\n'])
+    assert.equal(lint(fm + '# 제목\n\n' + inner).filter(x => /라벨 제목/.test(x.msg)).length, 0, inner);
+  // HTML 블록 안 줄은 render가 글자로 낸다(제목 아님)
+  assert.equal(lint(fm + '# 제목\n\n<div>\n## 원인\n</div>\n').filter(x => /라벨 제목/.test(x.msg)).length, 0, 'div 안');
+  assert.ok(!/<h2>원인<\/h2>/.test(render('# 제목\n\n<div>\n## 원인\n</div>\n', ['--no-lint']).html), 'render도 div 안은 제목 아님');
+  for (const h of ['진단 및 평가', '평가 및 진단', '해결책과 대안', '대안과 해결책']) assert.equal(hit([h]).length, 1, h);
   assert.equal(hit(['원인'], {plain: true}).length, 0, 'plain');
 });
 test('규칙 2: 제목 반복은 H2 첫 문장만, 새 정보·다른 구조 제외', () => {
@@ -782,6 +789,44 @@ test('근거 묶음: 빈 줄 없이 이어 쓴 줄은 같은 상자, 목록·다
   assert.equal(loc(body + '\n위치는 src/loan.js:12입니다.\n'), 1, '빈 줄 뒤는 본문');
   const {measureReading} = require('./lint.js');
   assert.equal(measureReading(fm + body + '이어 쓴 근거 문장이 꽤 깁니다.\n').chars, measureReading(fm + body).chars, '읽을 글 분량에서 뺌');
+  // 2026-11-17 검수: 주석 안 근거 줄이 주석 끝(-->) 너머 본문까지 근거로 묶어 규칙 14·6이 꺼졌다 — 주석 경계에서 끊는다
+  const hidden = '# 제목\n\n> 요약입니다.\n\n## 할 일\n\n<!--\n근거: 비공개 메모\n-->\n딱 이것을 진행합니다.\n위치는 src/loan.js:12입니다.\n';
+  const rs = rules(fm + hidden);
+  assert.ok(rs.includes(14) && rs.includes(6), rs.join(','));
+  assert.ok(measureReading(fm + hidden).chars > 20, '주석 뒤 본문은 읽을 글');
+  const h = render(hidden, ['--no-lint']).html;
+  // 상자 안 줄은 <br>로 이어지므로 </div> 전까지 본다(HEAD render는 "근거: 비공개 메모<br>--&gt;<br>딱 이것…"으로 실패)
+  const box = /<div class="sources">(?:(?!<\/div>)[\s\S])*딱 이것/;
+  assert.ok(!box.test(h), h.match(/<div class="sources">[\s\S]*?<\/div>/g));
+  // 2026-11-17 최종 검수: 줄 글자(<!--·-->)로 끊자 코드 span·화살표·한 줄 주석에서 근거 상자가 끊기고, 근거 줄과 같은 줄의 --> 는 놓쳤다.
+  // 주석 "상태"로 판정한다 — 여러 줄 주석에 걸친 줄에서만 끊는다
+  const head = '# 제목\n\n> 요약입니다.\n\n## 할 일\n\n';
+  for (const tail of ['<!--\n근거: 비공개 메모 -->\n', '<!--\n출처: 내부 위키 -->\n', '<pre>\n근거: x\nfoo</pre>\n']) {
+    const d = head + tail + '딱 이것을 진행합니다.\n위치는 src/loan.js:12입니다.\n', r2 = rules(fm + d);
+    assert.ok(r2.includes(14) && r2.includes(6), tail + ' → ' + r2.join(','));
+    assert.ok(!box.test(render(d, ['--no-lint']).html), tail);
+  }
+  for (const kept of [
+    '근거: 첫째 자료입니다.\n둘째 자료는 `<!--` 토큰을 설명하는 src/check.js:12입니다.\n셋째 자료입니다.\n',
+    '근거: 호출 순서\nclient --> server --> db (src/a.js:3)\n셋째 줄 src/c.js:3.\n',
+    '근거: 메모\n이어 쓴 근거 <!-- 메모 --> 문장입니다 src/loan.js:12.\n',
+    '근거: 메모\n이어 쓴 근거 `<!-- TODO -->` 문장입니다 src/loan.js:12.\n',
+  ]) {
+    assert.ok(!rules(fm + head + kept).includes(6), kept);
+    const last = kept.trim().split('\n').pop();
+    const boxes = render(head + kept, ['--no-lint']).html.match(/<div class="sources">[\s\S]*?<\/div>/g) || [];
+    assert.equal(boxes.length, 1, kept + JSON.stringify(boxes));
+    assert.ok(boxes[0].includes(last.slice(-8)), kept + boxes[0]);   // 마지막 줄까지 한 상자
+  }
+  // 2026-11-18 재검수: frontmatter title의 <!-- 를 주석 시작으로 읽어 뒤 근거 묶음이 끊겼다(규칙 6 오탐). 같은 원인으로 읽기량이 0,
+  // 주석·코드를 지운 줄(readable)이 본문 전체를 지워 라벨 제목 힌트도 꺼졌다 — 주석은 본문 시작부터만 본다
+  const mkFm = t => fm.replace('title: 시험 문서', 'title: ' + t);
+  const doc = '# 제목\n\n> 요약입니다.\n\n## 원인\n\n근거: 첫 자료입니다.\n위치는 src/a.js:12입니다.\n\n본문 문장입니다.\n';
+  const same = d => lint(d).map(f => f.rule + ':' + f.line + ':' + f.msg);
+  assert.deepEqual(same(mkFm('HTML 주석 <!-- 시작점') + doc), same(mkFm('HTML 주석 시작점') + doc));
+  assert.equal(measureReading(mkFm('HTML 주석 <!-- 시작점') + doc).chars, measureReading(mkFm('HTML 주석 시작점') + doc).chars);
+  const td = '<table><tr><td>' + '긴 칸 설명 문장입니다. 또 하나의 문장입니다.' + '</td></tr></table>\n';   // raw HTML td 검사(규칙 7)도 같은 입력을 본다
+  assert.deepEqual(same(mkFm('HTML 주석 <!-- 시작점') + doc + td), same(mkFm('HTML 주석 시작점') + doc + td));
 });
 test('browser 블록은 주소창 있는 창 안에 원문 표시', () => {
   const r = render('# 제목\n\n```browser https://example.com/terms\n#### 이용 약관\n- 원문 한 줄\n```', ['--no-lint']);
@@ -800,6 +845,18 @@ test('flow: 한 줄 최대 개수를 고르게(5→3, 6→3, 7→4, 9→3), 4개
   const cols = n => +(plain('# 제목\n\n```flow\n' + Array.from({length: n}, (_, i) => `단계 ${i + 1} | 설명`).join('\n') + '\n```\n').html.match(/class="flow-list" style="--flow-cols:(\d+)"/) || [])[1];
   assert.deepEqual([2, 4, 5, 6, 7, 8, 9].map(cols), [2, 4, 3, 3, 4, 4, 3]);
 });
+// 2026-11-17 검수: 10단계가 4+4+2. 열 수만으로는 4+3+3을 못 만들어 줄 나눔(flow-break)을 넣는다 — 넓은 화면에서 줄별 개수 차이 1 이하
+test('flow: 1~16단계 모두 넓은 화면 줄별 개수 차이 1 이하, 한 줄 최대 4, 줄 수는 ceil(n/4)', () => {
+  for (let n = 1; n <= 16; n++) {
+    const html = plain('# 제목\n\n```flow\n' + Array.from({length: n}, (_, i) => `단계 ${i + 1} | 설명`).join('\n') + '\n```\n').html;
+    const list = html.match(/<ol class="flow-list[^"]*" style="--flow-cols:(\d+)"[^>]*>([\s\S]*?)<\/ol>/);
+    const cols = +list[1], parts = list[2].split('class="flow-break"');
+    // 줄 나눔이 없으면 브라우저가 한 줄에 cols개씩 채운다
+    let rows = parts.map(p => (p.match(/class="flow-step/g) || []).length);
+    if (rows.length === 1) rows = Array.from({length: Math.ceil(n / cols)}, (_, r) => Math.min(cols, n - r * cols));
+    assert.ok(Math.max(...rows) <= 4 && Math.max(...rows) - Math.min(...rows) <= 1 && rows.length === Math.ceil(n / 4), `${n}단계: ${rows.join('+')}`);
+  }
+});
 // 2026-11-06 시험: 숫자 카드에 "미확인"을 쓰면 lint가 막아 뜻이 다른 "주의"로 바꿨다. 배지 목록(규칙 8)과 같은 이름을 받는다
 test('숫자 카드 상태: 미확인·추정도 배지와 같은 색, 모르는 이름은 여전히 경고, 상태 없으면 배지 없음', () => {
   const stats = s => '# 제목\n\n```stats\n' + s + '\n```\n';
@@ -812,6 +869,13 @@ test('숫자 카드 상태: 미확인·추정도 배지와 같은 색, 모르는
   assert.deepEqual(warns('가 | 1건 | | 미확인\n나 | 2건 | | 추정'), []);
   assert.equal(warns('가 | 1건 | | 검토중').length, 1);
   assert.ok(/미확인·추정/.test(warns('가 | 1건 | | 검토중')[0]));
+});
+// 2026-11-17 검수: 가이드가 render가 받는 미확인·추정을 상태 칸에 쓰지 말라고 남아 있었다 — 가이드의 상태 설명이 코드 목록과 같아야 한다
+test('design-guide 숫자 카드 상태 설명이 lint·render 상태 목록의 한글 이름을 모두 담고, 받는 이름을 금지하지 않음', () => {
+  const guide = fs.readFileSync(path.join(__dirname, '..', 'references', 'design-guide.md'), 'utf8').split('\n').find(l => l.startsWith('**숫자 카드 ```stats**'));
+  for (const name of ['완료', '실패', '블로커', '주의', '미검증', '미확인', '정보', '중립', '선재', '추정']) assert.ok(guide.includes(name), name);
+  const banned = (guide.match(/`([^`]+)`은 상태 칸에 쓰지 않는다/) || [])[1] || '';
+  for (const name of ['미확인', '추정']) assert.ok(!banned.includes(name), banned);
 });
 test('시각 블록도 HTML을 이스케이프', () => {
   const r = plain('# 제목\n\n```flow\n<img src=x onerror=alert(1)> | 설명 | unknown\n```');
@@ -1362,6 +1426,14 @@ test('qa: 렌더한 보고서는 세 폭 모두 넘침 없음', () => {
   const q = runQa(r.output);
   assert.equal(q.status, 0, q.stdout + q.stderr);
   assert.equal((q.stdout.match(/넘침 0곳/g) || []).length, 3, q.stdout);
+});
+// 2026-11-17 검수: lint는 audience를 대소문자 없이 받는데 qa는 data-audience="leadership"만 봐서 Leadership의 2쪽 초과를 놓쳤다
+test('audience는 대소문자·앞뒤 공백 없이 한 값으로 — 렌더 data-audience는 소문자', () => {
+  for (const v of ['Leadership', 'LEADERSHIP', ' leadership ']) {
+    const r = render('# 제목\n\n본문입니다.\n', ['--no-lint'], fm.replace('audience: team', 'audience: ' + v));
+    assert.ok(r.html.includes('data-audience="leadership"'), v);
+  }
+  assert.ok(lint(fm.replace('audience: team', 'audience: External') + '# 제목\n\n경로는 feature/x 입니다.\n').some(f => f.rule === 1));
 });
 // 2026-11-16 실측: 리더 보고 10건이 모두 A4 3~4쪽. 사용자가 정한 2쪽을 넘으면 qa가 알린다(어림이라 문제 수에는 안 넣음)
 test('qa: 인쇄 쪽 수 어림 — 리더 보고가 A4 2쪽을 넘으면 경고(exit 0), 짧은 리더 보고·긴 팀 문서는 조용', () => {
