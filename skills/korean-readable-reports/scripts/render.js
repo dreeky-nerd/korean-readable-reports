@@ -222,7 +222,9 @@ function renderFlow(lines) {
     return `<li class="flow-step${role ? ` role-${role}` : ''}"><span class="flow-no">${String(i + 1).padStart(2, '0')}</span>`
       + `<strong>${inline(title || '')}</strong>${d ? `<span class="flow-desc">${inline(d)}</span>` : ''}</li>`;
   });
-  return `<div class="flow"><ol class="flow-list" aria-label="처리 순서">\n${cards.join('\n')}\n</ol></div>`;
+  // 넓은 화면은 한 줄에 4개까지 들어가 5단계가 4+1로 갈라졌다(2026-11-06). 줄 수는 그대로, 한 줄 개수를 고르게(5→3+2, 6→3+3, 7→4+3)
+  const rows = Math.ceil(cards.length / 4), cols = Math.ceil(cards.length / rows);
+  return `<div class="flow"><ol class="flow-list" style="--flow-cols:${cols}" aria-label="처리 순서">\n${cards.join('\n')}\n</ol></div>`;
 }
 
 // ```stats 블록: 핵심 수치 카드. 한 줄 = "라벨 | 값 | 보조 설명 | 상태"(보조 설명·상태 생략 가능)

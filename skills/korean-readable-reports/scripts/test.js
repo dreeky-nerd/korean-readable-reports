@@ -795,6 +795,11 @@ test('flow·stats·cards를 의미 있는 HTML로 렌더', () => {
   assert.ok(r.html.includes('class="stat s-done"'));
   assert.ok(/class="card is-recommended"/.test(r.html));
 });
+// 2026-11-06 인수인계: 5단계 flow가 넓은 화면에서 4개 + 1개로 갈라졌다 — 줄 수는 그대로 두고 한 줄 개수를 고르게
+test('flow: 한 줄 최대 개수를 고르게(5→3, 6→3, 7→4, 9→3), 4개 이하는 한 줄', () => {
+  const cols = n => +(plain('# 제목\n\n```flow\n' + Array.from({length: n}, (_, i) => `단계 ${i + 1} | 설명`).join('\n') + '\n```\n').html.match(/class="flow-list" style="--flow-cols:(\d+)"/) || [])[1];
+  assert.deepEqual([2, 4, 5, 6, 7, 8, 9].map(cols), [2, 4, 3, 3, 4, 4, 3]);
+});
 // 2026-11-06 시험: 숫자 카드에 "미확인"을 쓰면 lint가 막아 뜻이 다른 "주의"로 바꿨다. 배지 목록(규칙 8)과 같은 이름을 받는다
 test('숫자 카드 상태: 미확인·추정도 배지와 같은 색, 모르는 이름은 여전히 경고, 상태 없으면 배지 없음', () => {
   const stats = s => '# 제목\n\n```stats\n' + s + '\n```\n';
