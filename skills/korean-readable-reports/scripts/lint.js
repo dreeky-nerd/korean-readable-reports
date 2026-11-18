@@ -46,6 +46,7 @@
  *       frontmatter summary(요약 상자)도 본문과 같이 본다. 따옴표 안은 인용이라 건너뜀. 기준은 references/ko-terms.md
  *   구조 코드펜스(``` ~~~) 안 닫힘 / 표 구분 행 없음·칸 수가 헤더와 다름(접힌 상세 안 포함) / 허용 안 되는 링크 주소
  *        각주·참조형 링크(미지원) / (힌트) 렌더러가 글자로 보여 주는 태그, (--plain만) 4칸 들여쓴 줄
+ *        본문 HTML 주석(<!-- -->, 렌더러가 숨기지 않고 글자로 표시) — 펜스·코드 span·<pre>/<code> 안은 제외
  *        flow·stats 칸이 정해진 수보다 많음 / 모르는 역할·상태 이름 / 빈 flow·stats·cards·svg·bars 블록
  *        svg: <svg> 루트·viewBox·aria-label 없음, 렌더러가 지우는 태그·속성(fill·style·marker 등), 스타일 없는 class
  *        bars: 숫자 없는 막대 값, 모르는 색(:bad·:chg·:mute 외), 칸 5개 이상
@@ -482,6 +483,18 @@ function lint(src, opts = {}) {
   }
 
   // ── 구조 검사(두 모드 공통): 표·링크·태그·details 짝 — 접힌 상세 안도 본다 ──
+  // HTML 주석: render는 숨기지 않고 글자로 보여 준다(숨기려던 시도 세 번이 모두 정상 글자를 지웠다, 2026-11-18). 펜스·코드 span·<pre>/<code> 안은 코드라 제외
+  // 코드 span은 render가 Markdown으로 읽는 줄에서만 코드다 — raw HTML 블록(readable.raw)과 열 0의 <details> 여는 줄(render HTML_ALLOW, sanitizeHtml로 냄)의 백틱은 글자.
+  // 알려진 한계: readable.raw는 백틱 안 <div>·</div>를 태그로 안 세지만 render collectHtml은 센다 — 그런 줄이 있으면 블록 경계가 어긋나 주석을 놓치거나 오탐한다.
+  // 알려진 한계: 코드 span은 줄 단위로 찾는다 — render가 목록 이어 줄을 합쳐 만드는 줄 걸친 코드 span(`<!-- 줄바꿈 -->`) 안 주석은 오탐한다.
+  // <pre>/<code> 경계는 주석 표기를 지운 태그로 먼저 정한다 — 닫히지 않은 주석이 </pre>를 삼키면 코드 안 주석을 경고했다(2026-11-18 검수)
+  {
+    const text = lines.map((l, i) => i < start || fenceAt[i] ? '' : readable.raw[i] || /^<details(\s|>|\/)/i.test(l) ? l : maskCode(l)).join('\n');
+    // 주석 속 <pre> 는 짝 없는 여는 태그라 가릴 범위를 만들지 않는다. 주석 안에 <pre>와 </pre>를 둘 다 쓰면 그 사이를 코드로 본다(경고 누락 쪽)
+    const body = maskHtml(text, {tokens: htmlTokens(text.replace(/<!--/g, '    ')), hide: t => /^(pre|code)$/.test(t.name), strip: () => false});
+    for (const ln of new Set(htmlTokens(body).filter(t => t.comment).map(t => t.line)))
+      warn(ln, '구조', 'HTML 주석(<!-- -->)은 숨겨지지 않고 보고서에 글자로 표시됨 — 지우거나 본문 문장으로');
+  }
   {
     let tableHead = -1, tableStartLine = -1, depth = 0, lastOpen = -1, h1 = 0;
     // 첫 열도 검사: 2026-10-21 실측 첫 열 27110칸 중 135칸이 긴 설명·복수 문장.

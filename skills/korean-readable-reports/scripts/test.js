@@ -1856,5 +1856,38 @@ test('svg 뼈대 8종: lint 구조 경고 0, qa 문제·연결선 경고 0', () 
   assert.equal(q.status, 0, q.stdout + q.stderr);
   assert.ok(!/그림 연결선|미검사/.test(q.stdout), q.stdout);
 });
+// 2026-11-18: render에서 주석을 숨기려던 시도 세 번이 모두 정상 글자를 지웠다 — 숨기지 않고 lint가 경고한다(render는 글자로 보여 줌)
+test('lint: 본문 HTML 주석은 경고(힌트 아님), 코드·pre·frontmatter 안은 제외, 줄마다 1건', () => {
+  const doc = '---\ntitle: 제목 <!-- 메모\ndate: 2026-09-22\naudience: team\n---\n# 시험\n\n'
+    + '한 줄 <!-- 숨김 --> 끝.\n\n'          // 8
+    + '<!-- 여러 줄\n주석 안 줄\n-->\n\n'       // 10~12
+    + '문장 중간 <!-- a --> 와 <!-- b --> 둘.\n\n'   // 14
+    + '```\n<!-- 펜스 -->\n```\n\n'             // 16~18
+    + '코드 span `<!-- x -->` 은 글자.\n\n'      // 20
+    + '<pre>\n<!-- pre 안 -->\n</pre>\n\n'      // 22~24
+    + '<code><!-- code 안 --></code> 끝.\n\n'   // 26
+    + '닫히지 않은 <!-- 주석\n뒤 줄\n';          // 28
+  const hits = lint(doc).filter(f => /HTML 주석/.test(f.msg));
+  assert.deepEqual(hits.map(f => f.line), [8, 10, 14, 28], JSON.stringify(hits));
+  assert.ok(hits.every(f => f.rule === '구조' && !f.hint));
+  assert.ok(!lint(doc, {polish: true}).some(f => /HTML 주석/.test(f.msg)));
+  assert.ok(lint(doc, {plain: true}).some(f => /HTML 주석/.test(f.msg)));
+});
+// 2026-11-18 검수: 닫히지 않은 주석이 </pre>·</code>를 삼켜 코드 안인데 경고했고, raw HTML(div·한 줄 details) 안 백틱을 코드 span으로 읽어 놓쳤다
+test('lint: HTML 주석 — 코드 요소 안 미닫힘은 제외, raw HTML 안 백틱은 코드 아님', () => {
+  const hits = (b, o) => lint(fm + '# 시험\n\n' + b, o).filter(f => /HTML 주석/.test(f.msg)).map(f => f.line);
+  for (const o of [{}, {plain: true}]) {
+    assert.deepEqual(hits('<pre><!-- unclosed\n</pre>\n', o), []);
+    assert.deepEqual(hits('<code><!-- unclosed</code> 끝.\n', o), []);
+    assert.deepEqual(hits('<pre><!-- a\n</pre>\n\n본문 <!-- b --> 끝.\n', o), [11]);
+    assert.deepEqual(hits('본문 <!-- <pre> --> 와 <!-- c --> 끝.\n\n<!-- d -->\n', o), [8, 10]);
+    assert.deepEqual(hits('<div>`<!-- memo -->`</div>\n', o), [8]);
+    assert.deepEqual(hits('<details><summary>제목</summary>`<!-- memo -->`</details>\n', o), [8]);
+    assert.deepEqual(hits('<details>\n<summary>제목</summary>\n\n안쪽 `<!-- 코드 -->` 끝.\n</details>\n', o), []);
+    // 들여쓴 details는 render HTML_ALLOW(열 0)에 안 걸려 문단·목록 글로 읽힌다 — 백틱은 코드 span
+    assert.deepEqual(hits('  <details>`<!-- memo -->`</details>\n', o), []);
+    assert.deepEqual(hits('- item\n  <details>`<!-- memo -->`</details>\n', o), []);
+  }
+});
 console.log(`${passed} passed, ${failed} failed${skipped ? `, ${skipped} skipped` : ''}; artifacts: ${dir}`);
 process.exit(failed ? 1 : 0);
