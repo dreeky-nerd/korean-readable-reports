@@ -1109,6 +1109,14 @@ test('규칙 15: 한 그림에 역할 색과 상태 색을 섞으면 경고(flow
   assert.equal(mixed('```mermaid\nflowchart LR\nA --> B\nclass A ext\nB:::fail\n```'), 1);
   assert.equal(mixed('```mermaid\nflowchart LR\nA --> B\nclassDef x fill:#fff\nclass A,B ext\n```'), 0);
 });
+// 2026-11-06 본부장 보고: 날짜 단계(결정 → 공지)에 entry·logic 색이 붙었다. 날짜에는 역할이 없다
+test('규칙 15: 날짜 flow 단계에 역할을 붙이면 힌트', () => {
+  const dated = body => lint(fm + '# 제목\n\n## 일정\n\n' + body).filter(f => f.hint && f.rule === 15 && /날짜 단계에 역할/.test(f.msg)).length;
+  assert.equal(dated('```flow\n9/9 | 결정 | entry\n9/16 | 공지 | LOGIC\n9/30 | 적용\n```\n'), 1);
+  assert.equal(dated('```flow\n9/9 | 결정\n9/16 | 공지\n9/30 | 적용\n```\n'), 0);
+  assert.equal(dated('```flow\n9/9 | 결정 | done\n9/16 | 공지 | caution\n```\n'), 0);
+  assert.equal(dated('```flow\n이용자 | 신청 | ext\n대출 화면 | 확인 | entry\n```\n'), 0);
+});
 // 2026-10-29 "머메이드 다이어그램이 너무 못생겼다" — diagram-design(MIT)의 그림 예산·강조·직각 연결선을 힌트로
 test('규칙 15 힌트: 흐름도 노드·연결 예산, 강조(chg) 수, svg 사선 연결선 — 못 읽는 그림은 세지 않음', () => {
   const hints = body => lint(fm + '# 제목\n\n## 그림\n\n' + body).filter(f => f.rule === 15).map(f => f.msg.split(' — ')[0]);
@@ -1152,8 +1160,10 @@ test('템플릿: Mermaid는 고유 id로 하나씩 그리고 ELK 실패·문법 
   assert.ok(/if \(useElk\) \{ useElk = false; continue; \}/.test(html) && html.includes("p.classList.add('fallback', 'mermaid-error')"), '복구');
   assert.ok(html.includes("keys = ['bad', 'fail', 'chg'"), 'class 우선순위');
   assert.ok(!/drop-shadow\(4px|flow-shadow|stroke-width: 2\.5px/.test(html), '브루탈리스트 그림자·굵은 테두리 없음');
-  assert.ok(/\.flow-step \{[^}]*border: 1\.25px solid var\(--ink\); border-radius: 6px;/.test(html) && !/\.flow-step \{[^}]*box-shadow/.test(html), html.match(/\.flow-step \{[^}]*\}/)[0]);
-  assert.ok(/\.flow-step\.role-ext \{ background: var\(--role-ext\); border-style: dashed; \}/.test(html));
+  // flow 카드는 svg 노드와 같은 회색, 역할 색은 ext(흰 바탕 점선)·data만(2026-11-18 사용자 결정)
+  assert.ok(/\.flow-step \{[^}]*background: var\(--fig-node\); border: 1\.25px solid var\(--fig-edge\); border-radius: 6px;/.test(html) && !/\.flow-step \{[^}]*box-shadow/.test(html), html.match(/\.flow-step \{[^}]*\}/)[0]);
+  assert.ok(/\.flow-step\.role-ext \{ background: var\(--surface\); border-style: dashed; \}/.test(html));
+  assert.ok(!/\.flow-step\.role-(entry|logic)|--role-(ext|entry|logic):/.test(html), 'entry·logic 색 없음');
   // --offline은 Mermaid·ELK 모듈을 모두 뺀다
   assert.ok(!r.html.includes('layout-elk') && r.html.includes('class="mermaid fallback"'));
 });

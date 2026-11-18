@@ -32,6 +32,7 @@
  *       (힌트) 그림이 나을 내용을 글로만 씀 — 주어 있는 처리 단계 3개 이상 나열, 화살표 3단계 이상. --strict 실패 사유 아님
  *       (힌트) flow 단계에 실패 조건("실패하면") — 갈라지는 흐름은 Mermaid
  *       (힌트) svg 두 장이 글 없이 이어지는데 제목이 없음 — 전후를 구분하게 여는 줄에 제목
+ *       (힌트) 날짜 flow 단계에 역할 색(entry 등) → 셋째 칸 비우기
  *       (힌트) 날짜만 이어지는 flow·표 → svg 타임라인 / 받는 문구 인용 → cards compare / [추천]이 있는 표의 숫자 열 → bars
  *       (힌트) 흐름 그림 + 고치는 이야기인데 svg 없음 → 전후 그림 / 기준값 줄("기준은 30,000원입니다")과 같은 단위 숫자 2개 이상,
  *              또는 같은 단위 숫자를 나란히 놓은 표(3~8행)인데 bars 없음 → 막대
@@ -295,6 +296,7 @@ function splitCells(l) {
 const audienceOf = meta => String(meta.audience || '').trim().toLowerCase();
 const READABLE_BLOCK = /^(cards|browser|flow|stats)$/;
 const FLOW_ROLE = /^(ext|entry|logic|data|done|fail|caution|info|neutral)$/;
+const DATE = /^\d{1,2}\/\d{1,2}(?:\s+\d{1,2}:\d{2})?$|^\d{1,2}월\s*\d{1,2}일$/;   // 날짜 표·flow 첫 칸
 const BLOCK_STATE = /^(done|완료|fail|실패|블로커|caution|주의|unverified|미검증|미확인|info|정보|neutral|중립|선재|추정)$/i;   // 미확인·추정: 배지 목록(규칙 8)과 같게
 const HTML_BLOCK = /^<(div|figure|figcaption|img|p|ul|ol|table|pre|blockquote|section|br|hr)(\s|>|\/)/i;
 // 읽기량·태그·표 칸이 같은 제외 결과를 쓴다. flow·stats는 HTML도 주석도 글자로 표시한다.
@@ -564,6 +566,10 @@ function lint(src, opts = {}) {
         ? fb.body.map(([, l]) => (split(l)[2] || '').toLowerCase())
         : fb.body.flatMap(([, l]) => [...(l.match(/^\s*class\s+\S+\s+([\w-]+)/) || []).slice(1), ...[...l.matchAll(/:::([\w-]+)/g)].map(m => m[1])]);
       if (used.some(t => ROLES.test(t)) && used.some(t => STATUSES.test(t))) warn(fb.open, 15, `${fb.kind}에 역할 색(ext·entry·logic·data)과 상태 색(done·fail·caution·info·neutral)이 섞임 — 한 그림에는 한 종류만`);
+      // 날짜에는 "누가 하나"가 없다 — 2026-11-06 본부장 보고가 날짜 단계(결정 → 공지)에 entry·logic 색을 붙였다
+      const steps = fb.kind === 'flow' ? fb.body.filter(([, l]) => l.trim()) : [];
+      if (steps.length >= 2 && steps.every(([, l]) => DATE.test(split(l)[0])) && used.some(t => ROLES.test(t)))
+        warn(fb.open, 15, '날짜 단계에 역할 색(ext·entry·logic·data) — 날짜에는 역할이 없으니 셋째 칸을 비우기', true);
     }
     const FIG_HINT = 'node·ln·lbl·t1·t2·tag·zone·hair·dot + ext·data·bad·chg·mute·bare';
     for (const fb of blocks) {
@@ -1452,7 +1458,6 @@ function lint(src, opts = {}) {
       }
     }
     // 날짜 간격은 표·flow로는 안 보인다 — 2026-11-06 시험 3건이 모두 날짜 표나 날짜 flow로 썼다
-    const DATE = /^\d{1,2}\/\d{1,2}(?:\s+\d{1,2}:\d{2})?$|^\d{1,2}월\s*\d{1,2}일$/;
     if (!blocks.some(b => b.kind === 'svg' && b.body.some(([, l]) => /class="dot/.test(l)))) {
       const dated = blocks.find(b => { const t = b.kind === 'flow' ? b.body.filter(([, l]) => l.trim()) : []; return t.length >= 3 && t.every(([, l]) => DATE.test(l.split('|')[0].trim())); });
       let at = dated ? dated.open : -1;
