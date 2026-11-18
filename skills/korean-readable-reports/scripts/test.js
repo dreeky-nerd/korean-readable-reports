@@ -1473,9 +1473,12 @@ test('svg 블록 lint: viewBox·aria-label 없음, 지우는 태그·속성, 모
 });
 test('bars 블록: 누적 막대 길이·기준선·결과 색, 좁은 조각은 값을 title로, 설명(aria-label)', () => {
   const r = render('# 제목\n\n```bars\n기준선 80 | 기준 80일\n지금 | 대출 70 + 연장 30:chg | 연장함 | 100일:chg\n바꾸면 | 대출 100:bad | | 연체:bad\n작은 값 | 큰 조각 99 + 작은 조각 1\n```\n');
-  const fig = r.html.match(/<div class="fig"><svg[\s\S]*?<\/svg><\/div>/)[0];
+  const fig = r.html.match(/<div class="fig"><svg[\s\S]*?<\/svg>(?:<div class="fig-note">[\s\S]*?<\/div>)?<\/div>/)[0];
   const w = [...fig.matchAll(/<rect class="seg[^"]*" x="[\d.]+" y="\d+" width="([\d.]+)"/g)].map(m => +m[1]);
   assert.equal(w.length, 5);
+  // 2026-11-06: 좁은 조각 값은 툴팁뿐이라 인쇄·터치 화면에서 안 보였다 — 그림 아래 한 줄로 글자로도 보인다
+  assert.ok(fig.includes('<div class="fig-note">막대 안에 못 쓴 값 — 작은 값: 작은 조각 1</div>'), fig);
+  assert.ok(!render('# 제목\n\n```bars\n가 | 큰 조각 60 + 작은 조각 40\n```\n').html.includes('class="fig-note"'), '다 들어가면 줄 없음');
   assert.ok(Math.abs(w[0] / (w[0] + w[1]) - 0.7) < 0.01 && Math.abs(w[2] - w[0] - w[1]) < 0.2, JSON.stringify(w));
   assert.ok(/<line class="thr"/.test(fig) && fig.includes('>기준 80일</text>'), fig);
   assert.ok(fig.includes('class="b-res chg"') && fig.includes('class="b-res bad"'), fig);

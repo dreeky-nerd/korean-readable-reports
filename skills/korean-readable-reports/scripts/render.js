@@ -406,8 +406,8 @@ function renderSvg(lines, info) {
   return `<div class="fig">\n${figTitle(info)}${s}${'</svg>'.repeat(Math.max(0, open))}\n</div>`;
 }
 
-// ```bars 블록 → 가로 막대 SVG. 라벨 칸·결과 칸 폭은 글자 수로 어림하고, 조각 안 값은 들어갈 때만 쓴다(안 들어가면 숫자만, 그것도 안 되면 생략 —
-// 마우스를 올리면 <title>로 보임). 막대는 항상 0에서 시작(design-guide §4)
+// ```bars 블록 → 가로 막대 SVG. 라벨 칸·결과 칸 폭은 글자 수로 어림하고, 조각 안 값은 들어갈 때만 쓴다(안 들어가면 숫자만, 그것도 안 되면
+// 그림 아래 "막대 안에 못 쓴 값" 줄과 <title>로). 막대는 항상 0에서 시작(design-guide §4)
 // ponytail: 글자 폭은 어림(한글 1em·영숫자 0.6em) — 실제와 다르면 qa.js가 넘침·겹침으로 알린다
 const textEm = s => [...s].reduce((a, c) => a + (/[가-힣ㄱ-ㅎ一-鿿]/.test(c) ? 1 : /[A-Z0-9%]/.test(c) ? 0.66 : /\s/.test(c) ? 0.3 : 0.58), 0);
 function renderBars(lines, info) {
@@ -419,7 +419,7 @@ function renderBars(lines, info) {
   const bw = W - labelW - resW - 8, max = Math.max(threshold ? threshold.value : 0, ...rows.map(r => r.total)) || 1;
   const top = threshold ? 34 : 8, H = top + rows.length * ROW;
   const X = v => labelW + bw * v / max, n = v => +v.toFixed(1);
-  const out = [];
+  const out = [], hidden = [];
   // 기준선은 막대보다 먼저 그려 막대 뒤로 숨긴다 — 위에 그리면 조각 안 값 글자를 가로지른다
   if (threshold) {
     const x = X(threshold.value), half = textEm(threshold.label) * 14 / 2;
@@ -437,6 +437,7 @@ function renderBars(lines, info) {
       out.push(`<rect class="seg${s.cls ? ' ' + s.cls : ''}" x="${n(x)}" y="${y + 8}" width="${n(w)}" height="${BAR}"><title>${esc(s.text)}</title></rect>`);
       const label = textEm(s.text) * 14 + 12 <= w ? s.text : textEm(s.num) * 14 + 8 <= w ? s.num : '';
       if (label) out.push(`<text class="sv${s.cls ? ' ' + s.cls : ''}" x="${n(x + w / 2)}" y="${y + 33}" text-anchor="middle">${esc(label)}</text>`);
+      else if (r.total) { const h = hidden.find(g => g.row === r); if (h) h.vals.push(s.text); else hidden.push({ row: r, vals: [s.text] }); }
     }
     // 합이 0인 줄은 막대가 없어 값이 사라진다("새 그림 0개") — 막대 자리 맨 앞에 값 글자를 쓰고 결과는 그 뒤에
     let rx = X(r.total) + 12;
@@ -451,7 +452,9 @@ function renderBars(lines, info) {
   });
   const desc = rows.map(r => `${r.title}${r.sub ? `(${r.sub})` : ''} ${r.segs.map(s => s.text).join(' + ')}${r.result ? ` → ${r.result}` : ''}`).join('; ')
     + (threshold ? `; 기준선 ${threshold.label}` : '');
-  return `<div class="fig">${figTitle(info)}<svg viewBox="0 0 ${W} ${H + 4}" role="img" aria-label="${esc('막대그래프: ' + desc)}">\n${out.join('\n')}\n</svg></div>`;
+  // 조각 안에 못 쓴 값은 툴팁뿐이라 인쇄·터치 화면에서 안 보였다(2026-11-06) — 그림 아래 한 줄로 글자로도 쓴다
+  const note = hidden.length ? `<div class="fig-note">막대 안에 못 쓴 값 — ${esc(hidden.map(g => `${g.row.title}: ${g.vals.join(', ')}`).join(' / '))}</div>` : '';
+  return `<div class="fig">${figTitle(info)}<svg viewBox="0 0 ${W} ${H + 4}" role="img" aria-label="${esc('막대그래프: ' + desc)}">\n${out.join('\n')}\n</svg>${note}</div>`;
 }
 
 // 짝 맞추기용: 코드 span과 한 줄 주석 속 태그는 태그가 아니다(lint의 details 판정과 같은 기준). 위치는 원문 그대로
