@@ -274,18 +274,18 @@ test('규칙 14: 37개 패턴별 최소쌍', () => {
     ['B9 이중 피동', /이중 피동/, '설정이 변경되어집니다.', '설정이 변경됩니다.'],
     ['B10 위해서는', /번역투 —/, '갱신하기 위해서는 인증해야 합니다.', '갱신하려면 인증해야 합니다.'],
     ['B11 선택적', /번역투\(optional\)/, '선택적 파라미터를 생략합니다.', '선택 파라미터를 생략합니다.'],
-    ['B12 가지다', /번역투\(have\)/, '권한을 가진 사용자가 호출합니다.', '테스트 서버를 가지고 재현했습니다.'],
+    ['B12 가지다', /번역투\(have\)/, '권한을 가진 사용자가 호출합니다.', '테스트 서버를 가지고 재현했습니다.', true],
     ['B13 자동 조사', /자동 조사/, '파일을(를) 선택합니다.', '파일을 선택합니다.'],
     ['B14 바랍니다', /업무 관용투\(20% \/ 4%\)/, '설정을 확인하시기 바랍니다.', '설정을 확인해 주세요.'],
     ['B15 것이 가능', /업무 관용투 —/, '조회하는 것이 가능합니다.', '조회할 수 있습니다.'],
     ['B16 하도록', /업무 관용투 —/, '확인하도록 하겠습니다.', '확인하겠습니다.'],
-    ['B17 진행 수행', /명사를 동사로/, '검증을 진행합니다.', '검증합니다.'],
+    ['B17 진행 수행', /명사를 동사로/, '검증을 진행합니다.', '검증합니다.', true],
     ['B18 파라메터', /표기 —/, '파라메터를 전달합니다.', '파라미터를 전달합니다.'],
     ['B19 어플리케이션', /표기 —/, '어플리케이션을 배포합니다.', '애플리케이션을 배포합니다.'],
     ['S1 사물 주어', /사물 주어/, '이 API는 인증을 요구합니다.', '이 API를 호출하려면 인증해야 합니다.', true],
     ['S2 영어 하다', /영어 낱말/, '파일을 Open 하시면 됩니다.', '파일을 열면 됩니다.', true],
     ['C1 해당', /"해당" 4회/, '해당 오류를 확인합니다.\n'.repeat(4), '해당 오류를 확인합니다.\n'.repeat(3), true],
-    ['C2 에 대한', /"에 대한" 4회/, '오류에 대한 설명입니다.\n'.repeat(4), '오류에 대한 설명입니다.\n'.repeat(3), true],
+    ['C2 에 대한', /"에 대한" 6회 — 5회 이하로/, '오류에 대한 설명입니다.\n'.repeat(6), '오류에 대한 설명입니다.\n'.repeat(5), true],
     ['C3 를 통해', /"를 통해" 4회/, 'API를 통해 조회합니다.\n'.repeat(4), 'API를 통해 조회합니다.\n'.repeat(3), true],
     ['C4 로 인해', /"로 인해" 4회/, '지연으로 인해 실패했습니다.\n'.repeat(4), '지연으로 인해 실패했습니다.\n'.repeat(3), true],
     ['M1 오류 에러', /용어 섞임/, '오류를 기록합니다.\n에러를 집계합니다.', '오류를 기록합니다.\n오류를 집계합니다.'],
@@ -335,7 +335,7 @@ test('규칙 14: 추가 오탐 반례와 문맥 유지', () => {
 
 test('규칙 14: COUNTED 단어 경계와 MIX 각 표기', () => {
   for (const sentence of ['비해당 항목은 제외합니다.', '이 업체에 대한항공 운항 자료를 전달합니다.', '해당 없음', '해당 사항 없음']) {
-    assert.deepEqual(lint(fm + (sentence + '\n').repeat(4)).filter(f => f.rule === 14), [], sentence);
+    assert.deepEqual(lint(fm + (sentence + '\n').repeat(6)).filter(f => f.rule === 14), [], sentence);   // "에 대한"은 6회부터라 6번
   }
   for (const sentence of ['오류를 기록합니다.', '에러를 기록합니다.', '응답을 반환합니다.', '응답을 리턴합니다.', '파라미터를 전달합니다.', '매개변수를 전달합니다.', '매개 변수를 전달합니다.']) {
     assert.deepEqual(lint(fm + sentence).filter(f => f.rule === 14), [], sentence);
@@ -357,11 +357,11 @@ test('규칙 14: 인용·코드·링크 주소 제외, 글 블록·링크 표시
 
 test('규칙 14: 측정된 한국어 AI 문형 4종은 힌트(경고 아님)', () => {
   const hint = (doc, re) => lint(fm + doc).filter(f => f.rule === 14 && re.test(f.msg));
-  // 부정 대구 "A가 아니라 B": 2회부터 힌트, 1회는 정당한 정정일 수 있어 통과. "뿐만 아니라"는 다른 구문
-  assert.equal(hint('원인은 캐시가 아니라 DB입니다.', /부정 대구/).length, 0);
-  const pair = hint('원인은 캐시가 아니라 DB입니다.\n\n문제는 코드가 아니라 설정이었습니다.', /부정 대구/);
+  // 부정 대구 "A가 아니라 B": 3회부터 힌트(2026-11-19 신문 기사·칼럼 90건에서 2회 기준 6%, 3회 기준 1%). "뿐만 아니라"는 다른 구문
+  assert.equal(hint('원인은 캐시가 아니라 DB입니다.\n\n문제는 코드가 아니라 설정이었습니다.', /부정 대구/).length, 0, '2회는 통과');
+  const pair = hint('원인은 캐시가 아니라 DB입니다.\n\n문제는 코드가 아니라 설정이었습니다.\n\n대상은 서버가 아니라 화면입니다.', /부정 대구/);
   assert.equal(pair.length, 1); assert.ok(pair[0].hint);
-  assert.equal(hint('인증뿐만 아니라 권한도 봅니다.\n\n로그뿐 아니라 지표도 봅니다.', /부정 대구/).length, 0);
+  assert.equal(hint('인증뿐만 아니라 권한도 봅니다.\n\n로그뿐 아니라 지표도 봅니다.\n\n화면뿐만 아니라 서버도 봅니다.', /부정 대구/).length, 0);
   // 역방향 결산 "~하는 이유다": 1회부터 힌트
   for (const s of ['설정을 바꿔도 반영이 안 되는 이유가 이것입니다.', '이것이 재시도가 늘어난 이유다.', '그게 캐시를 끈 이유입니다.']) assert.equal(hint(s, /이유/).length, 1, s);
   for (const s of ['실패 이유는 세 가지입니다.', '이유를 로그에서 확인했습니다.']) assert.equal(hint(s, /이유/).length, 0, s);
@@ -373,15 +373,15 @@ test('규칙 14: 측정된 한국어 AI 문형 4종은 힌트(경고 아님)', (
   assert.equal(hint('단순한 목록을 넘어 대출 기록 저장소로 씁니다.', /범위 상승/).length, 1);
   assert.equal(hint('요청 수가 한도를 넘어 실패했습니다.', /범위 상승/).length, 0);
   // 코드·따옴표 안은 남의 말 — 여러 줄 인용과 「」도
-  assert.equal(hint('"캐시가 아니라 DB" 라는 제목\n\n`A가 아니라 B`', /부정 대구/).length, 0);
-  assert.equal(hint('“원인은 캐시가 아니라 DB입니다.\n문제는 코드가 아니라 설정입니다.”라고 설명했습니다.', /부정 대구/).length, 0);
-  assert.equal(hint('담당자는 「원인은 캐시가 아니라 DB입니다. 문제는 코드가 아니라 설정입니다」라고 답했습니다.', /부정 대구/).length, 0);
+  assert.equal(hint('"캐시가 아니라 DB" 라는 제목\n\n`A가 아니라 B`\n\n`C가 아니라 D`', /부정 대구/).length, 0);
+  assert.equal(hint('“원인은 캐시가 아니라 DB입니다.\n문제는 코드가 아니라 설정입니다.\n대상은 서버가 아니라 화면입니다.”라고 설명했습니다.', /부정 대구/).length, 0);
+  assert.equal(hint('담당자는 「원인은 캐시가 아니라 DB입니다. 문제는 코드가 아니라 설정입니다. 대상은 서버가 아니라 화면입니다」라고 답했습니다.', /부정 대구/).length, 0);
   // codex 검수(2026-10-17)에서 나온 오탐·미검출
   for (const s of ['실패 이유가 바로 로그에 기록됩니다.', '실패 이유가 여기저기 흩어져 있어 로그를 모았습니다.', '이 필드는 사용자가 선택한 이유입니다.']) assert.equal(hint(s, /이유/).length, 0, s);
   for (const s of ['이것이 캐시를 유지하는 이유였다.', '캐시를 유지하는 이유가 바로 여기에 있다.', '그래서 재시도가 필요한 이유입니다.']) assert.equal(hint(s, /이유/).length, 1, s);
   for (const s of ['단순한 계산으로 구한 값을 넘어선 측정치는 제외했습니다.', '단순히 요청 수가 한도를 넘어서면 연결을 닫습니다.']) assert.equal(hint(s, /범위 상승/).length, 0, s);
-  assert.equal(hint('로그뿐  아니라 지표도 확인했습니다.\n\n설정뿐  아니라 환경 변수도 확인했습니다.', /부정 대구/).length, 0);
-  assert.equal(hint('원인은 캐시가 아니라\nDB입니다.\n\n문제는 코드가 아니라 설정입니다.', /부정 대구/).length, 1);
+  assert.equal(hint('로그뿐  아니라 지표도 확인했습니다.\n\n설정뿐  아니라 환경 변수도 확인했습니다.\n\n화면뿐  아니라 서버도 확인했습니다.', /부정 대구/).length, 0);
+  assert.equal(hint('원인은 캐시가 아니라\nDB입니다.\n\n문제는 코드가 아니라 설정입니다.\n\n대상은 서버가 아니라 화면입니다.', /부정 대구/).length, 1);
   assert.equal(hint('중요한 점은 장애 격리이다.\n\n핵심은 속도다.', /분열문/).length, 1);
   assert.equal(hint('필요한 것은 없는 레코드를 추가하는 일입니다.\n\n핵심은 속도입니다.', /분열문/).length, 1);
 });
@@ -416,18 +416,19 @@ test('규칙 14: 마무리 틀(1회)과 번역투·보고서 말투(4회부터)�
 });
 
 // ── 2026-10-21 추가: "글이 많고 AI가 쓴 느낌" 평을 받은 보고서 한 건에서 잰 네 가지 ──
-test('규칙 14: 강조용 따옴표 5곳부터 힌트, 인용 표지·전후 예문·완결 문장은 인용', () => {
+// 2026-11-19 신문 기사·칼럼 90건: 5곳 기준 6%, 6곳 기준 3% → 6곳부터
+test('규칙 14: 강조용 따옴표 6곳부터 힌트, 인용 표지·전후 예문·완결 문장은 인용', () => {
   const hint = doc => lint(fm + doc).filter(f => f.rule === 14 && /따옴표/.test(f.msg));
-  const scare = ['"가장 큰 영향"을 보장하지는 않습니다.', '"자료를 읽고 추리하는" 게임입니다.', '"PC에서 바로 실행"과 거리가 있습니다.', '"Boxleiter 방식" 배수는 다릅니다.', '"한국어 리뷰"는 작성 언어입니다.'];
+  const scare = ['"가장 큰 영향"을 보장하지는 않습니다.', '"자료를 읽고 추리하는" 게임입니다.', '"PC에서 바로 실행"과 거리가 있습니다.', '"Boxleiter 방식" 배수는 다릅니다.', '"한국어 리뷰"는 작성 언어입니다.', '"무인 반납"은 따로 셉니다.'];
   const f = hint(scare.join('\n'));
-  assert.equal(f.length, 1); assert.ok(f[0].hint); assert.match(f[0].msg, /5곳/); assert.match(f[0].msg, /가장 큰 영향/);
-  assert.equal(hint(scare.slice(0, 4).join('\n')).length, 0, '4곳까지는 통과');
+  assert.equal(f.length, 1); assert.ok(f[0].hint); assert.match(f[0].msg, /6곳/); assert.match(f[0].msg, /가장 큰 영향/);
+  assert.equal(hint(scare.slice(0, 5).join('\n')).length, 0, '5곳까지는 통과');
   const quoted = ['회사는 "한 자릿수"라고 밝혔습니다.', '티켓 "로그인 오류"라는 제목입니다.', '담당자는 "내일 배포합니다."라고 했습니다.', '"해당 API" → "주문 조회 API"로 고칩니다.', '> "원문 인용"을 그대로 둡니다.', '화면에 "저장됨"이 뜹니다.'];
   assert.equal(hint([...quoted, ...quoted].join('\n')).length, 0, '인용 표지가 있으면 강조가 아님');
   // 페르소나·사용자 발화는 말끝으로 끝난다(표본 677건 중 걸린 169건의 표본 10건 중 7건)
   const speech = ['페르소나는 "이미 확인했어요" 하고 넘어갔습니다.', '반응은 "어디로 좁혀야 하는지 모르겠다"였습니다.', '"네, 맞아요" 뒤에 멈췄습니다.', '상태는 "확인 안 됨"으로 남았습니다.', '"다음엔 뭘 하죠?" 질문이 나왔습니다.', '"무엇이 무너졌나" 질문입니다.', '라이선스는 "All rights reserved" 표기입니다.'];
   assert.equal(hint(speech.join('\n')).length, 0, '발화 인용');
-  assert.equal(hint(Array(5).fill('| 김 대리 | "로그 위치" |').join('\n')).length, 0, '표 칸 전체가 인용');
+  assert.equal(hint(Array(6).fill('| 김 대리 | "로그 위치" |').join('\n')).length, 0, '표 칸 전체가 인용');
   assert.equal(hint(scare.map(s => '`' + s + '`').join('\n')).length, 0, '코드 안');
 });
 test('규칙 8: 괄호 단서가 많으면 힌트 — 조건은 근거 줄로', () => {
@@ -449,29 +450,30 @@ test('규칙 8: 유보가 두 겹이면 힌트 — 동사와 태그 중 하나�
     { const f = hint(s); assert.equal(f.length, 1, s); assert.ok(f[0].hint); }
   for (const s of ['가장 싸고 빨리 모을 수 있습니다 [추정].', '원인은 캐시로 봅니다.', '재시작하면 복구할 수 있습니다.', '배포를 마쳤습니다 [완료].']) assert.equal(hint(s).length, 0, s);
 });
-test('규칙 14: 한 섹션의 문두 접속어 3개부터 힌트', () => {
+// 2026-11-19 신문 기사·칼럼 90건: 3개 기준 21%, 5개 기준 3% → 5개부터
+test('규칙 14: 한 섹션의 문두 접속어 5개부터 힌트', () => {
   const hint = doc => lint(fm + doc).filter(f => f.rule === 14 && /접속어/.test(f.msg));
-  const chain = '## 추천\n\nA안을 추천합니다.\n다만 영향은 보장하지 않습니다.\n그러나 수요는 B안에 있습니다.\n그래서 순서를 둡니다.';
-  const f = hint(chain); assert.equal(f.length, 1); assert.ok(f[0].hint); assert.match(f[0].msg, /다만·그러나·그래서/);
-  assert.equal(hint(chain.replace('그래서 순서를 둡니다.', '순서를 둡니다.')).length, 0, '두 개까지는 통과');
-  assert.equal(hint('## 가\n\n다만 하나.\n그러나 둘.\n\n## 나\n\n그래서 셋.\n또한 넷.').length, 0, '섹션마다 따로 센다');
-  assert.equal(hint('## 가\n\n다만화 제작사입니다.\n그래서울 지점입니다.\n또한국어 판입니다.').length, 0, '낱말 일부');
+  const chain = '## 추천\n\nA안을 추천합니다.\n다만 영향은 보장하지 않습니다.\n그러나 수요는 B안에 있습니다.\n또한 비용도 낮습니다.\n하지만 일정이 깁니다.\n그래서 순서를 둡니다.';
+  const f = hint(chain); assert.equal(f.length, 1); assert.ok(f[0].hint); assert.match(f[0].msg, /다만·그러나·또한·하지만·그래서/);
+  assert.equal(hint(chain.replace('그래서 순서를 둡니다.', '순서를 둡니다.')).length, 0, '네 개까지는 통과');
+  assert.equal(hint('## 가\n\n다만 하나.\n그러나 둘.\n또한 셋.\n\n## 나\n\n그래서 넷.\n또한 다섯.\n하지만 여섯.').length, 0, '섹션마다 따로 센다');
+  assert.equal(hint('## 가\n\n다만화 제작사입니다.\n그래서울 지점입니다.\n또한국어 판입니다.\n그러나무 그늘입니다.\n하지만두 가게입니다.').length, 0, '낱말 일부');
 });
 
 test('새 문체 힌트 4종: 인용·코드·주석 안은 세지 않고, summary는 셈 (검수 2026-10-21)', () => {
   const rule = (doc, re, f = fm) => lint(f + doc).filter(x => re.test(x.msg));
   assert.equal(rule('담당자는 "원인은 캐시로 보입니다 [추정]"이라고 말했습니다.', /두 겹/).length, 0, '인용 안 유보');
   assert.equal(rule('<code>원인은 캐시로 보입니다 [추정]</code>', /두 겹/).length, 0, 'HTML code 안');
-  assert.equal(rule('담당자는 "첫 결과입니다. 다만 적습니다. 그러나 납니다. 그래서 유지합니다."라고 말했습니다.', /접속어/).length, 0, '인용 안 접속어');
-  assert.equal(rule('<!--\n다만 하나.\n그러나 둘.\n그래서 셋.\n-->', /접속어/).length, 0, 'HTML 주석');
+  assert.equal(rule('담당자는 "첫 결과입니다. 다만 적습니다. 그러나 납니다. 또한 큽니다. 하지만 늦습니다. 그래서 유지합니다."라고 말했습니다.', /접속어/).length, 0, '인용 안 접속어');
+  assert.equal(rule('<!--\n다만 하나.\n그러나 둘.\n또한 셋.\n하지만 넷.\n그래서 다섯.\n-->', /접속어/).length, 0, 'HTML 주석');
   const f = rule('', /두 겹/, fm.replace('title: 시험 문서', 'summary: 원인은 캐시로 보입니다 [추정]\ntitle: 시험 문서'));
   assert.equal(f.length, 1, 'frontmatter summary'); assert.equal(f[0].line, 2);
 });
 test('강조용 따옴표: 명사 말끝은 강조, "~이라 답했다"는 인용', () => {
   const hint = doc => lint(fm + doc).filter(x => /강조용 따옴표/.test(x.msg));
-  assert.equal(hint(Array(5).fill('"이미지"를 강조합니다.').join('\n')).length, 1, '이미지');
-  assert.equal(hint(Array(5).fill('"데이터"를 봅니다.').join('\n')).length, 1, '데이터');
-  assert.equal(hint(Array(5).fill('담당자는 "배포 일정"이라 답했습니다.').join('\n')).length, 0, '이라 답했다');
+  assert.equal(hint(Array(6).fill('"이미지"를 강조합니다.').join('\n')).length, 1, '이미지');   // 6곳부터 힌트
+  assert.equal(hint(Array(6).fill('"데이터"를 봅니다.').join('\n')).length, 1, '데이터');
+  assert.equal(hint(Array(6).fill('담당자는 "배포 일정"이라 답했습니다.').join('\n')).length, 0, '이라 답했다');
 });
 test('괄호 단서: 근거 줄·접힌 칸·출처 절은 조건을 두는 곳이라 세지 않음', () => {
   const hint = doc => lint(fm + doc).filter(x => /괄호 단서/.test(x.msg));
