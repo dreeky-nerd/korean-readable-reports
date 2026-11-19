@@ -765,6 +765,17 @@ test('표 칸: 한국어 문장 끝과 <br>에서 줄바꿈', () => {
   const r = render('# 제목\n\n| 항목 | 설명 |\n| --- | --- |\n| A | 먼저 확인합니다. 그다음 저장합니다. |\n| B | 첫 줄<br>둘째 줄 |', ['--no-lint']);
   assert.ok(r.html.includes('확인합니다.<br>그다음')); assert.ok(r.html.includes('첫 줄<br>둘째 줄'));
 });
+// 2026-11-19 사용자: 목록 항목에서 마침표 뒤 문장이 이어 붙어 읽기 어렵다. 기술 블로그 목록 항목도 31%가 2문장 이상이라 lint 기준은 두고 줄만 바꾼다
+test('목록 항목: 한글 문장 끝(. ? !, 닫는 괄호·따옴표 포함) 뒤에서 줄바꿈, 코드·영문 약어·plain은 그대로', () => {
+  const body = '# 제목\n\n- 반납함: 무인 반납 장소입니다. 하루 두 번 비워요.\n- 대출 기록은 하루 한 번 저장. 연체 알림은 다음 날 보냄\n- 어디에 두나요? 1층에 둡니다(2곳). 끝\n'
+    + '- `a. b` 값입니다. A vs. B를 봅니다. e.g. 이렇게\n  이어 쓴 줄입니다.\n';
+  const li = render(body, ['--no-lint']).html.match(/<ul>[\s\S]*?<\/ul>/)[0];
+  assert.ok(li.includes('<li>반납함: 무인 반납 장소입니다.<br>하루 두 번 비워요.</li>'), li);
+  assert.ok(li.includes('<li>대출 기록은 하루 한 번 저장.<br>연체 알림은 다음 날 보냄</li>'), li);
+  assert.ok(li.includes('두나요?<br>1층에 둡니다(2곳).<br>끝</li>'), li);
+  assert.ok(li.includes('<code>a. b</code> 값입니다.<br>A vs. B를 봅니다.<br>e.g. 이렇게 이어 쓴 줄입니다.</li>'), li);
+  assert.ok(plain(body, ['--no-lint']).html.includes('<li>반납함: 무인 반납 장소입니다. 하루 두 번 비워요.</li>'), 'plain은 그대로');
+});
 test('직접 쓴 <br>: 인용문·문단·목록·요약에서 줄바꿈, 줄 끝 것은 겹치지 않음, 코드 안은 글자', () => {
   const r = render('# 제목\n\n> 요약 첫 줄<br>\n> 요약 둘째 줄\n\n## 절\n\n> 안내 첫 줄<br>\n> 안내 둘째 줄<br>\n\n문단 앞<br>문단 뒤\n\n- 항목 앞<br>항목 뒤\n\n`a<br>b`', ['--no-lint']);
   assert.ok(r.html.includes('<div class="callout"><p>요약 첫 줄<br>\n요약 둘째 줄</p></div>'));

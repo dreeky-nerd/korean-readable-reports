@@ -135,8 +135,9 @@ to keep is quoted as is, even inside a report.
     register.
 11. **One sentence per line.** Break the line after every sentence-ending
     period — body prose, callouts, `<details>`; not table cells or code. A
-    list item is one point: an item (with its indented follow-on lines) of
-    three or more sentences becomes sub-bullets. A line per sentence is not a
+    list item is one point, and the renderer starts each of its sentences on
+    a new line; an item (with its indented follow-on lines) of three or more
+    sentences becomes sub-bullets. A line per sentence is not a
     short sentence per line: don't stack three or more short facts about one
     subject with no connecting word. Split where the judgment changes, and
     when joining two sentences add no cause (그래서·때문에) the source doesn't

@@ -163,10 +163,13 @@ const PIPE = NUL + 'P' + NUL;
 // 표 칸 가독성: 직접 쓴 <br>과 한국어 문장 끝("~다. ", "~요. ")에서만 줄을 바꾼다. 코드·태그 안은 건드리지 않는다.
 // 쉼표로 목록을 자동으로 만들지 않는다 — 표 칸은 마침표 없는 구절이 많아서("없거나, 만료됐거나, 틀리면 401")
 // 구절이 목록으로 쪼개지고, 백틱 안 쉼표에서 코드가 깨졌다(2026-10-14 시험). "vs. ", "e.g. " 뒤에서도 줄이 바뀌던 것을 막는다
+const outsideTags = (html, f) => html.split(/(<code>[\s\S]*?<\/code>|<[^>]+>)/).map((part, i) => i % 2 ? part : f(part)).join('');
 function cellHtml(raw) {
-  return inline(raw).split(/(<code>[\s\S]*?<\/code>|<[^>]+>)/).map((part, i) => i % 2 ? part
-    : part.replace(/([다요죠음함됨임]\.)\s+(?=\S)/g, '$1<br>')).join('');
+  return outsideTags(inline(raw), p => p.replace(/([다요죠음함됨임]\.)\s+(?=\S)/g, '$1<br>'));
 }
+// 목록 항목: 한글 뒤 . ? !(닫는 괄호·따옴표 포함)에서 줄을 바꾼다 — 기술 블로그 목록 항목도 31%가 2문장 이상이라 lint는 두고 줄만 나눈다(2026-11-19).
+// "저장. Claude"처럼 명사로 끝난 문장도 나누고, 영문 약어("vs. ", "e.g. ")·코드 안은 그대로. --plain은 손대지 않는다
+const itemHtml = text => hardBreaks ? outsideTags(inline(text), p => p.replace(/([가-힣][)\]"'’”」』]*[.?!])\s+(?=\S)/g, '$1<br>')) : inline(text);
 function renderTable(rows) {
   const cells = r => r.trim().replace(/\\\|/g, PIPE).replace(/^\||\|$/g, '').split('|').map(c => c.trim().split(PIPE).join('|'));
   const head = cells(rows[0]);
@@ -345,7 +348,7 @@ function renderList(items) {
       // 번호 목록은 적은 번호를 그대로(3. 으로 시작하면 3부터, 건너뛴 번호도 유지)
       html += ordered ? `<ol start="${items[k].number}">` : '<ul>';
       while (k < items.length && items[k].indent === indent && items[k].ordered === ordered) {
-        html += (ordered ? `<li value="${items[k].number}">` : '<li>') + inline(items[k].text);
+        html += (ordered ? `<li value="${items[k].number}">` : '<li>') + itemHtml(items[k].text);
         k++;
         if (k < items.length && items[k].indent > indent) html += level(items[k].indent);
         html += '</li>';
